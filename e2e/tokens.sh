@@ -94,7 +94,7 @@ N=$("$LK" token list --json | tail -1 | python3 -c "import sys,json; print(len([
 check "token list holdings" "$N" 6
 
 STATUS=$("$LK" program token --json | field "['status']")
-[[ "$STATUS" == verified_local || "$STATUS" == claimed ]] || { echo "FAIL token program status $STATUS" >&2; exit 1; }
+[[ "$STATUS" == verified_local ]] || { echo "FAIL token program status $STATUS" >&2; exit 1; }
 echo "ok   builtin token program header = $STATUS"
 
 "$LK" backup export "$RESTORED/backup.json"
