@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S5 is done locally on `stage/05-testimonial` (not merged). Two things are waiting on you: (1) go-ahead to push the repo, so the testimonial build commit is public; (2) on the 0.3 testnet launch (target 2026-09-30), run `just fingerprint`, then do the staging and production testimonial deploys plus the faucet decision. Meanwhile, start S6 (TS codec + client + theme + QML bundle; include a `postTestimonial` helper). Storybook run stays queued before S7.
+**Next action:** S5 merged to main and pushed (public repo https://github.com/logos-kit/logos-kit, 2026-09-27; the maintainer approved pushing and deploying). Testnet fingerprint 2026-09-27: still `0.2.x` (block 26478), so the testimonial deploy waits for the 0.3 launch (target 2026-09-30). On launch: `just fingerprint`, then deploy a staging copy under a test submission id, then production `testimonial deploy` (immutable), add the registry entry and decide the faucet. Meanwhile: S6 (TS codec + client + theme + QML bundle, with a `postTestimonial` helper). Storybook run stays queued before S7.
 
 ---
 
@@ -241,6 +241,7 @@ The single place to resume from after a context clear.
   - **high (code):** `testimonial build` records the public repo URL but builds the local commit → warns when the commit is on no remote branch (push before publishing build.json)
   - evidence counted a repeat author in the month of the first *listed* program → earliest post; repeat authors deduped; `immutable` per program and in `target.met`
   - sheet: text with newlines could fake sheet lines → quoted, newlines shown as ⏎; more invisible characters refused; `list` escapes control characters
+  - public reproducibility: `cargo risczero build` of `bb7764a` fetched from **github.com/logos-kit/logos-kit** in docker `r0.1.91.1` → image `8308e67d…337e`, binary sha256 `aca042ea…62f6`, identical to the committed artifact (2026-09-27)
   - tracked: evidence reads are sequential (fine at 150 authors; parallelise if it grows); a failed deploy leaves its uploaded segments orphaned (LEZ loader has no resume, upstream FIXME); `otherTxs` counts only txs the author signed (a rough activity signal)
 - [ ] Staging deploy on the 0.3 testnet under a test submission id, then production `testimonial deploy` (immutable) + registry entry `{name: testimonial, chain: lez:testnet, account, imageId, source}`; `verify-program` from the public repo once pushed. **Blocked on the 0.3 testnet launch** (target 2026-09-30) and the maintainer's go-ahead to deploy and push
 
