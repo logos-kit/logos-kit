@@ -51,7 +51,7 @@ The single place to resume from after a context clear.
 - [x] Brand assets: official marks and lockups from guide.logos.co → `assets/logos/logos/`, recorded in `docs/design/brand.md`
 - [x] Drafts of `docs/design/parity-ledger.md` and `docs/design/ux-spec.md` (v0)
 - [x] `xtask fingerprint`. Proof (2026-09-26): testnet reports `"version": "0.2.x"`, lastBlockId 25947, programs [amm, authenticated_transfer, pinata, privacy_preserving_circuit, token], `getFeeState` → -32601
-- [ ] Background proving benchmarks E1–E4 and `RISC0_KECCAK_PO2`, recorded in `pins.md`
+- [x] Proving benchmarks E1–E4 + `RISC0_KECCAK_PO2`, in `pins.md` ("Proving benchmarks"). M1 Pro 10-core/16 GB, CPU prover (risc0 3.0.5 has Metal commented out), load 8–58 so times are upper bounds. Fully private 469 s / 9.9 GB footprint; shield-like 337 s; 4 threads 692 s; 2 threads 1600 s; dev-mode executor 0.09 s. **KECCAK_PO2 does not cut memory** (worse at 14). **Segment po2 18: footprint 5.1 GB (from 9.9) for ~1.6× time**; po2 16 barely lower and 6.7× slower.
 
 ### Adoption
 - [x] A-track drafts in `adoption/drafts/` (01 forum intro, 02 Discord, 03 signature-authorized private spends, 04 compact notes feed) plus `adoption/tracker.md`: **awaiting user approval to post**
@@ -67,6 +67,7 @@ The single place to resume from after a context clear.
 - 2026-09-26: the brand is Logos Kit (D12). The repo-local git identity is `Blockchain-Oracle <blockchainoracle.dev@gmail.com>`.
 - 2026-09-26: **pnpm 12.6 and TypeScript 7.0.2** (the latest majors, verified in Context7). pnpm 11+ settings live in `pnpm-workspace.yaml`, and `allowBuilds` replaces `onlyBuiltDependencies`. tsdown uses tsgo/oxc for `.d.ts`. The docs app may need TS 6 for twoslash; check in S8.
 - 2026-09-26: `minimumReleaseAge` blocked `@types/node@26.6.3` (under 24h old), so the range was widened to `^26.0.0` rather than weakening the guard.
+- 2026-09-26: Proof UX numbers from the benchmarks: desktop ETA shield ≈5–6 min, fully private ≈6–8 min (elapsed timer + background proving; run the <0.1 s executor dry-run first to validate inputs and count cycles). Phones/paired provers: a LEZ patch **0006 (segment po2 via config)** is the memory lever; add it when S15 needs it. Real wallet txs pad inputs, so expect more cycles than the benchmark tests.
 - 2026-09-26: **Design direction locked: Tray, light + dark (D14).** Tokens in `docs/design/brand.md`; reference implementation `apps/design-lab`. PLAN.md updated (rule 6, QML design system, S6 theme, S7 UI, S11 presets).
 - 2026-09-26: Intent `params` types accepted by the shell are exactly `string | number | bool | object | array` (`IntentBroker.cpp:470-485`). Note it's **`bool`, not `boolean`**.
 
@@ -110,8 +111,10 @@ The single place to resume from after a context clear.
 - [x] `cargo xtask vectors` → `protocol/vectors/{public_tx,keys}.json`: LEZ's 4 pinned message layouts, a signed native transfer (fixed aux rand, verified by LEZ's public verifier) incl. the `sendTransaction` base64 param and tx hash, public nodes `/`, `/0`, `/1`, `/0/0` (the wallet's layered order) and private nodes `/0`, `/1`
 - [x] Integration test #1 (Rust side): `crates/wallet-engine/tests/vectors.rs` decodes the committed bytes with LEZ and re-verifies. Proof: `cargo test -p wallet-engine` → `vectors_*` 4 passed
 - [ ] LEZ fork patches in `vendor/lez-patches/` (StorageBackend, SyncObserver, prepare/sign split, prove split, keycard feature)
-- [ ] typify → `crates/lwsp-types` (+ CI diff)
-- [ ] Nix build `.#logos_kit_wallet-lgx` with the engine (external-staticlib pattern; 2-day timebox, fallback C++ over wallet-ffi)
+- [x] typify → `crates/lwsp-types`: `cargo xtask types` (typify lib + pinned rustfmt). Emit now writes `$ref`s for named schemas (55), so types are named once (2.2k lines, was 7.6k). Proof: `cargo clippy -p lwsp-types -- -D warnings` clean (`17303d9`). CI diff lands with S9 workflows
+- [x] Engine C ABI for the module: `lk_engine_info` / `lk_engine_call` / `lk_engine_free` (`include/wallet_engine.h`), JSON dispatch with `info` and `derivePublicAccounts`. Proof: exported symbols in `libwallet_engine.dylib`; dispatch test matches vectors (`b3e1ff8`)
+- [ ] Nix build of the module with the engine. **Design (2026-09-26):** the root `flake.nix` builds `wallet-engine` as a C-ABI dylib with crane using LEZ's own recipe (circuits flake 2846ee7 ↔ lockfile v0.5.7, rapidsnark e91187f8, pre-fetched risc0 recursion zkr, Metal xcrun stub, `artifacts/` copied into the vendored `lee` and `lez/programs` checkouts). The module consumes it via `externalLibInputs` (builder approach 3, the same shape as LEZ's own module over wallet-ffi); the Rust shim calls it through `extern "C"` (`engineInfo`). A dylib, not a second Rust staticlib, so the two Rust std copies never collide. Status: engine derivation building.
+- [ ] LEZ patch series (agent drafting in a scratch clone → `vendor/lez-patches/`). **Mechanism decided:** `vendor/lez/` = LEZ at the pinned rev + patches, generated by `cargo xtask lez-vendor`, and every LEZ crate comes from that path (never mixed git/path copies).
 
 - [x] Linux builds (agari-box, `nixos/nix` container, 4 GB/3 CPU cap): all three modules `lgx-portable` for `linux-amd64` (variant name plain `linux-amd64`; plugin `logos_kit_wallet_plugin.so`). sha256 wallet `768a1a54…f0b2`, ui `f5c3f5a7…052a`, probe `f24b8590…7be2`. Note: UI flakes' `path:../logos_kit_wallet` needs a git checkout (a `git archive` copy fails in pure eval). Wallet cold build 420 s.
 - [x] Code review (S0+S1) → 11 findings fixed in `4fa7cac` (QML gate `check:qml`, generated `provides`, vector coverage, rev/prefix self-checks, payload caps).
