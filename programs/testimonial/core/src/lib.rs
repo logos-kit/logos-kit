@@ -6,13 +6,18 @@
 //! Layout, per submission id `sub` and program account `P` (all on `P`'s
 //! own shard, which only `P` can write):
 //!
-//! - `stats(sub)`: [`Stats`], every author in posting order plus monthly
-//!   tallies. Reading it is enough to enumerate a submission.
+//! - `stats(sub, page)`: a [`Stats`] page, up to [`PAGE_SIZE`] authors in
+//!   posting order plus that page's monthly tallies. Page `p > 0` opens only
+//!   once page `p - 1` is full, so reading pages until an empty one
+//!   enumerates a submission, with no cap on its size.
 //! - `record(sub, author)`: one [`Testimonial`]. It must be empty to post, so
 //!   an account posts at most once per submission (distinct accounts).
 //!
-//! A post names both accounts up front, so posts never race on an index:
-//! public transactions apply in order against current state.
+//! A post names its accounts up front and the page only changes every
+//! [`PAGE_SIZE`] posts, so posts race only at a page boundary (the wallet
+//! re-reads and retries). Posts must be top-level: a signer's authorization
+//! reaches every program in a chained call, so another program the user
+//! signs for could otherwise post in their name.
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest as _, Sha256};
@@ -21,8 +26,8 @@ use sha2::{Digest as _, Sha256};
 pub const MAX_SUBMISSION: usize = 32;
 pub const MAX_USERNAME: usize = 32;
 pub const MAX_TEXT: usize = 280;
-/// Authors per submission. Keeps `stats` under the 100 KiB shard cap.
-pub const MAX_AUTHORS: usize = 3000;
+/// Authors per stats page (32 KB of ids, well under the 100 KiB shard cap).
+pub const PAGE_SIZE: usize = 1000;
 /// The block may be at most this much *before* the claimed time (clock skew).
 pub const EARLY_MS: u64 = 120_000;
 /// The block may be at most this much *after* the claimed time: the user reads
@@ -39,10 +44,13 @@ const SEED_DOMAIN: &[u8] = b"logos-kit/testimonial/v1/";
 /// Append-only: borsh encodes the variant index.
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum Instruction {
-    /// Accounts, all selecting this program's shard: `[author (signs), stats(sub),
-    /// record(sub, author)]`.
+    /// Accounts, all selecting this program's shard: `[author (signs),
+    /// stats(sub, page), record(sub, author)]`, plus `stats(sub, page - 1)`
+    /// when `page > 0`.
     Post {
         submission: String,
+        /// The first page that isn't full.
+        page: u32,
         username: Option<String>,
         text: String,
         /// Unix ms. The chain checks it against the block time (see [`window`]).
@@ -53,12 +61,15 @@ pub enum Instruction {
 /// What `plan` asks `apply` to do to one shard.
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum Effect {
-    /// On `stats`: append the author (never twice) and count the month.
+    /// On `stats(sub, page)`: append the author (never twice) and count the month.
     Count {
         submission: String,
+        page: u32,
         author: [u8; 32],
         timestamp_ms: u64,
     },
+    /// On `stats(sub, page)`: read only; the page must be full.
+    Full { submission: String, page: u32 },
     /// On `record`: write a borsh [`Testimonial`] into an empty shard.
     Create(Vec<u8>),
 }
@@ -84,11 +95,12 @@ pub struct Month {
 pub struct Stats {
     pub version: u8,
     pub submission: String,
+    pub page: u32,
     pub first_ms: u64,
     pub last_ms: u64,
     /// Ascending by month.
     pub monthly: Vec<Month>,
-    /// Posting order; an author's index is its position.
+    /// Posting order; an author's index is `page * PAGE_SIZE + position`.
     pub authors: Vec<[u8; 32]>,
 }
 
@@ -107,6 +119,7 @@ pub enum Error {
     Text,
     AlreadyPosted,
     Full,
+    NotFull,
     Timestamp,
     Decode,
 }
@@ -122,7 +135,8 @@ impl core::fmt::Display for Error {
                 "text must be 1-280 bytes, not blank, without control (except newline) or direction characters"
             }
             Self::AlreadyPosted => "this account already posted a testimonial for this submission",
-            Self::Full => "this submission has reached its testimonial limit",
+            Self::Full => "this stats page is full; post to the next page",
+            Self::NotFull => "the previous stats page is not full yet",
             Self::Timestamp => "timestamp is out of range",
             Self::Decode => "stored data does not decode",
         })
@@ -131,9 +145,19 @@ impl core::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Bidi controls reorder what an explorer shows; a testimonial has no use for them.
-const fn is_direction_control(c: char) -> bool {
-    matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+/// Direction controls reorder what an explorer shows, and invisible or
+/// line-separator characters hide or fake text; a testimonial needs none.
+const fn is_hidden(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{061C}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{2028}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
 }
 
 pub fn check_submission(s: &str) -> Result<(), Error> {
@@ -144,7 +168,7 @@ pub fn check_submission(s: &str) -> Result<(), Error> {
 pub fn check_username(s: &str) -> Result<(), Error> {
     let ok = (1..=MAX_USERNAME).contains(&s.len())
         && s.trim() == s
-        && !s.chars().any(|c| c.is_control() || is_direction_control(c));
+        && !s.chars().any(|c| c.is_control() || is_hidden(c));
     ok.then_some(()).ok_or(Error::Username)
 }
 
@@ -153,7 +177,7 @@ pub fn check_text(s: &str) -> Result<(), Error> {
         && !s.trim().is_empty()
         && !s
             .chars()
-            .any(|c| (c.is_control() && c != '\n') || is_direction_control(c));
+            .any(|c| (c.is_control() && c != '\n') || is_hidden(c));
     ok.then_some(()).ok_or(Error::Text)
 }
 
@@ -181,8 +205,8 @@ fn seed(tag: &[u8], submission: &str, extra: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
-pub fn stats_seed(submission: &str) -> [u8; 32] {
-    seed(b"stats", submission, &[])
+pub fn stats_seed(submission: &str, page: u32) -> [u8; 32] {
+    seed(b"stats", submission, &page.to_le_bytes())
 }
 
 pub fn record_seed(submission: &str, author: &[u8; 32]) -> [u8; 32] {
@@ -198,8 +222,8 @@ pub fn pda(program: &[u8; 32], seed: &[u8; 32]) -> [u8; 32] {
     h.finalize().into()
 }
 
-pub fn stats_account(program: &[u8; 32], submission: &str) -> [u8; 32] {
-    pda(program, &stats_seed(submission))
+pub fn stats_account(program: &[u8; 32], submission: &str, page: u32) -> [u8; 32] {
+    pda(program, &stats_seed(submission, page))
 }
 
 pub fn record_account(program: &[u8; 32], submission: &str, author: &[u8; 32]) -> [u8; 32] {
@@ -214,17 +238,34 @@ pub fn posted_selector() -> [u8; 8] {
     s
 }
 
-/// UTC `yyyymm` of a Unix-ms time (Hinnant's `civil_from_days`).
-pub fn yyyymm(timestamp_ms: u64) -> u32 {
+/// UTC `(year, month, day)` of a Unix-ms time (Hinnant's `civil_from_days`).
+pub fn civil(timestamp_ms: u64) -> (u32, u32, u32) {
     let z = i64::try_from(timestamp_ms / 86_400_000).expect("days fit i64") + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
-    u32::try_from(y * 100 + m).expect("a Unix-ms year fits u32")
+    let n = |v: i64| u32::try_from(v).expect("a Unix-ms date fits u32");
+    (n(y), n(m), n(d))
+}
+
+/// UTC `yyyymm` of a Unix-ms time.
+pub fn yyyymm(timestamp_ms: u64) -> u32 {
+    let (y, m, _) = civil(timestamp_ms);
+    y * 100 + m
+}
+
+/// The month after `yyyymm`.
+pub const fn next_month(yyyymm: u32) -> u32 {
+    if yyyymm % 100 == 12 {
+        (yyyymm / 100 + 1) * 100 + 1
+    } else {
+        yyyymm + 1
+    }
 }
 
 impl Testimonial {
@@ -255,10 +296,11 @@ impl Testimonial {
 }
 
 impl Stats {
-    pub const fn new(submission: String) -> Self {
+    pub const fn new(submission: String, page: u32) -> Self {
         Self {
             version: STATS_VERSION,
             submission,
+            page,
             first_ms: 0,
             last_ms: 0,
             monthly: Vec::new(),
@@ -266,13 +308,13 @@ impl Stats {
         }
     }
 
-    /// An empty shard is a submission nobody posted to yet.
-    pub fn load(submission: &str, bytes: &[u8]) -> Result<Self, Error> {
+    /// An empty shard is a page nobody posted to yet.
+    pub fn load(submission: &str, page: u32, bytes: &[u8]) -> Result<Self, Error> {
         if bytes.is_empty() {
-            return Ok(Self::new(submission.to_owned()));
+            return Ok(Self::new(submission.to_owned(), page));
         }
         let stats: Self = borsh::from_slice(bytes).map_err(|_| Error::Decode)?;
-        if stats.submission != submission {
+        if stats.submission != submission || stats.page != page {
             return Err(Error::Decode);
         }
         Ok(stats)
@@ -286,11 +328,15 @@ impl Stats {
         self.authors.len()
     }
 
+    pub fn is_full(&self) -> bool {
+        self.authors.len() >= PAGE_SIZE
+    }
+
     pub fn add(&mut self, author: [u8; 32], timestamp_ms: u64) -> Result<(), Error> {
         if self.authors.contains(&author) {
             return Err(Error::AlreadyPosted);
         }
-        if self.authors.len() >= MAX_AUTHORS {
+        if self.is_full() {
             return Err(Error::Full);
         }
         self.authors.push(author);
@@ -330,7 +376,7 @@ mod tests {
 
     #[test]
     fn stats_count_each_author_once_and_tally_months() {
-        let mut s = Stats::new("LP-0021/logos-kit".into());
+        let mut s = Stats::new("LP-0021/logos-kit".into(), 0);
         s.add([1; 32], 1_798_761_599_999).unwrap();
         s.add([2; 32], 1_798_761_600_000).unwrap();
         assert_eq!(s.add([1; 32], 1_798_761_600_001), Err(Error::AlreadyPosted));
@@ -338,24 +384,52 @@ mod tests {
         assert_eq!(
             s.monthly,
             [
-                Month { yyyymm: 202_612, count: 1 },
-                Month { yyyymm: 202_701, count: 1 }
+                Month {
+                    yyyymm: 202_612,
+                    count: 1
+                },
+                Month {
+                    yyyymm: 202_701,
+                    count: 1
+                }
             ]
         );
-        let full = Stats {
-            authors: vec![[9; 32]; MAX_AUTHORS],
-            ..Stats::new("x".into())
+        let mut full = Stats {
+            authors: (0..PAGE_SIZE as u32 - 1)
+                .map(|i| {
+                    let mut a = [0; 32];
+                    a[..4].copy_from_slice(&i.to_le_bytes());
+                    a
+                })
+                .collect(),
+            ..Stats::new("x".into(), 3)
         };
+        full.add([0xFF; 32], 0).unwrap();
+        assert!(full.is_full());
+        assert_eq!(full.add([0xFE; 32], 0), Err(Error::Full));
         assert!(full.to_bytes().len() < 100 * 1024);
+        assert_eq!(Stats::load("x", 2, &full.to_bytes()), Err(Error::Decode));
+        assert_ne!(stats_seed("x", 0), stats_seed("x", 1));
     }
 
     #[test]
     fn input_rules() {
-        assert!(check_post("LP-0021/logos-kit", Some("abu"), "I use Logos Kit\nfor LEZ.").is_ok());
+        assert!(
+            check_post(
+                "LP-0021/logos-kit",
+                Some("abu"),
+                "I use Logos Kit\nfor LEZ."
+            )
+            .is_ok()
+        );
         assert_eq!(check_submission("has space"), Err(Error::Submission));
         assert_eq!(check_username(" abu"), Err(Error::Username));
         assert_eq!(check_text("   "), Err(Error::Text));
         assert_eq!(check_text("evil\u{202E}txt"), Err(Error::Text));
+        assert_eq!(check_text("zero\u{200B}width"), Err(Error::Text));
+        assert_eq!(check_text("line\u{2028}sep"), Err(Error::Text));
+        assert_eq!(civil(1_709_251_199_999), (2024, 2, 29));
+        assert_eq!(next_month(202_612), 202_701);
         assert_eq!(check_text(&"a".repeat(281)), Err(Error::Text));
         assert_eq!(window(60_000), Err(Error::Timestamp));
     }
