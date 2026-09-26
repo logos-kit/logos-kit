@@ -1,0 +1,62 @@
+// @logos-kit/protocol: runtime entry (QML-safe) + types.
+
+// biome-ignore lint/performance/noBarrelFile: entrypoint module
+export {
+  isAccountId,
+  isLezChain,
+  isPrivateHandle,
+  type ParsedChainId,
+  parseChainId,
+  toCaip10,
+} from '../caip.ts'
+export {
+  CHAINS,
+  INTENTS,
+  LWS_VERSION,
+  METHODS,
+  NOTIFICATIONS,
+  SIGNING_TAGS,
+  WALLET_CORE_MODULE,
+} from '../constants.ts'
+export {
+  ErrorCode,
+  type ErrorCodeValue,
+  fromIntentError,
+  isLezError,
+  isUserRejection,
+  LezError,
+  type LezErrorJson,
+} from '../errors.ts'
+export type {
+  AccountId,
+  AccountKind,
+  BalanceParams,
+  BalanceResult,
+  Capabilities,
+  Capability,
+  ChainId,
+  ConnectParams,
+  Effect,
+  FeeInfo,
+  Instruction,
+  Lifecycle,
+  LwsNotificationSchema,
+  LwsRpcSchema,
+  MethodName,
+  NotificationName,
+  Outcome,
+  OutcomeSource,
+  PrivateHandle,
+  RequestFundsParams,
+  RequestFundsResult,
+  Session,
+  SignInRequest,
+  SignInResult,
+  SignMessageParams,
+  SignMessageResult,
+  SubmitResult,
+  TransactionProposal,
+  TransactionStatus,
+  U128,
+  WalletAccount,
+} from '../types.ts'
