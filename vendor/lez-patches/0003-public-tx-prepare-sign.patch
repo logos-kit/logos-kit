@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:24:59 +0100
-Subject: [PATCH 3/6] wallet: split public transaction sending into prepare and
+Subject: [PATCH] wallet: split public transaction sending into prepare and
  sign+submit
 
 `send_pub_tx_with_pre_check` resolves accounts, builds the message, signs

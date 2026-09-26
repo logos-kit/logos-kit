@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:24:01 +0100
-Subject: [PATCH 2/6] wallet: report sync progress through a SyncObserver
+Subject: [PATCH] wallet: report sync progress through a SyncObserver
 
 `WalletCore::sync_to_block` prints straight to stdout and drives an
 indicatif progress bar, so a GUI or an embedded module cannot show sync

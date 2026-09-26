@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S3 on `stage/03-policy`: policy authority, approvals, tx prepare/prove/sign, preflight, `logos-kit` CLI. Storybook run stays queued before S7.
+**Next action:** S4 on `stage/04-decoders`: decoders, tokens, source verification, faucet. Storybook run stays queued before S7.
 
 ---
 
@@ -163,3 +163,29 @@ The single place to resume from after a context clear.
 - 2026-09-26: **Key hierarchy instead of one password per vault.** With password-sealed zone vaults a password change had to rewrite every vault (a crash mid-way splits them across two passwords) and each unlock ran Argon2 up to 3×. Zone vaults now use random keys held in the keys vault. Nothing is released, so there is no migration.
 - 2026-09-26: `xtask lez-export` keeps patch file names and uses `--zero-commit`, so exports are deterministic (the 0001–0005 diffs in `29fb76e` are header-only).
 - 2026-09-26: The engine now depends on LEZ's `sequencer_service_rpc` (client) for discovery's account lookups; the Nix engine build picks it up from the same vendored tree (re-verify with the next lgx build).
+
+---
+
+## Stage S3 · Policy authority, approvals, tx build/prove/sign, preflight, CLI, branch `stage/03-policy`
+
+**Status:** done (2026-09-26)
+
+- [x] `policy.rs`: `Caller = WalletUi | LocalOwner | Module(name) | Host | Bridge | Unknown` (the last three fail closed); grants `(zone, requester, account, capability)` stored in the **encrypted keys vault**; LWS-0 error codes (`code_of`)
+- [x] `tx.rs`: native public transfer + shield via LEZ patches 0003/0004. Request hash = SHA-256(domain, chain|zone, requester, intent, message hash or signer nonce). Sign-time nonce re-fetch → `StaleApproval`; a proved private tx must touch exactly the approved public account + nonce. Review carries sender balance, fee cap/payer and the `getFeeState` base fee. Preflight: balance ≥ amount (+ max_fee when the sender pays; payer balance otherwise)
+- [x] `engine.rs`: one pending request; echoed hash (mismatch cancels); atomic take; re-auth for private spends, amounts ≥ threshold, and connects; deadline 5 min; expiry on lock/zone switch/restart via an **epoch + zone** bound into each request; owner requests replace an app's; 30 s app cooldown; statuses readable by requester + owner only (apps get `errorCode`, not text); cancel during proving; proving on a blocking worker **outside** the wallet lock, prover slot RAII-guarded, no auto-lock mid-proof; shield outcome from the own-account invariant
+- [x] `logos-kit` CLI (`crates/logos-kit-cli`, `LocalOwner`): init, restore (`--from-date`/`--from-genesis`), account list/new/label/import, balance, sync, send, shield, status, zones, reveal, password, auto-lock. The TTY review shows the decoded request, fee cap and request hash; `--yes` only with `LOGOS_KIT_PASSWORD`; `--json` needs `--yes`
+- [x] LEZ patch **0007**: no plaintext private note on stdout (it went to module logs), no `unwrap` on note decode. LEZ wallet tests on the patched tree: 69 passed
+- [x] Integration-confidence #3 `tests/authz.rs`: 7 passed, incl. the chain-backed `e2e_status_is_private_and_stale_approvals_are_refused` (wallet B's send moves the nonce; A's approval → 6106 `StaleApproval`, status `dropped`)
+- [x] Exit proof, dev-mode proofs: `just e2e-cli` (`e2e/cli.sh`) → public send (block 44, recipient 500000) and shield with progress (`proving → signing → submitted → included`, block 48, outcome **Success** via own-account invariant, private balance 1234). `OK: public send + shield (debug, dev-mode proofs)`
+- [x] Exit proof, **real proofs**: `LK_REAL_PROOF=1 e2e/cli.sh` (release, real RISC Zero proof on this Mac): shield `proving` 0 s → `signing` **267 s** → `included` 279 s (block 96), outcome **Success**; `OK: public send + shield (release, proofs)`; whole script 297 s, max RSS 4.27 GB
+- [x] Code review + security review: 15 findings, fixed in `b43ad96` (details in the commit): zone-switch/lock races (epoch), app slot hogging (owner priority, cooldown, status cap), prover slot leak, auto-lock killing a proof, inclusion vs bookkeeping errors, sponsor fee check, zone id in hashes, error text to apps, CLI `--json` blind approve, date validation
+- [ ] Deferred to S4 by scope: token send/balance, deshield/private send, faucet, verify-program, backup/restore commands, program-header re-check at sign time (S4 source verification); `testimonial` to S5
+
+### Exit criteria
+- [x] A public send and a shield (with progress) via `logos-kit` on standalone (dev-mode and real proofs, above). **S3 complete (2026-09-26).**
+
+### Decisions and deviations
+- 2026-09-26: **Private approval binds to accounts + nonces, not decoded effects.** A shield's proved message is checked to touch exactly the approved public account with the approved nonce. Full `expectedEffects` equality needs effect decoders (S4); for engine-built native transfers the circuit input is ours, so the binding holds.
+- 2026-09-26: Approvals run the pipeline inline in `approve()` (progress via a callback) with proving outside the wallet lock. S7's module shim calls it from a worker thread and serves status reads meanwhile.
+- 2026-09-26: LEZ still prints a few connect notices ("Statistics not found…") on stdout; JSON consumers read the last line. To silence at the source before S7 (another small LEZ patch).
+- 2026-09-26: Imported public keys live in one zone's storage (not derived from the phrase, so not replayed on new zones).

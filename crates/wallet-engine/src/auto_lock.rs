@@ -88,6 +88,13 @@ impl AutoLock {
         }
     }
 
+    /// Count now as use (e.g. the user just sat through a proof).
+    pub fn touch(&mut self) {
+        if let Some((_, last_used)) = &mut self.unlocked {
+            *last_used = Used::now();
+        }
+    }
+
     /// Time left before auto-lock, if unlocked.
     pub fn remaining(&self) -> Option<Duration> {
         self.unlocked

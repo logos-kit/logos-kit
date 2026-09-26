@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:25:42 +0100
-Subject: [PATCH 4/6] wallet: split privacy-preserving sending into prepare,
- prove and submit
+Subject: [PATCH] wallet: split privacy-preserving sending into prepare, prove
+ and submit
 
 `send_privacy_preserving_tx_with_pre_check` gathers inputs, proves on a
 tokio blocking thread, signs and submits in one call. Callers cannot

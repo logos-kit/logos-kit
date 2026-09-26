@@ -1,0 +1,23 @@
+[package]
+name = "logos-kit-cli"
+description = "logos-kit: the Logos Kit wallet on the command line (same engine and policy as the Basecamp wallet)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "logos-kit"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+wallet.workspace = true
+wallet-engine = { path = "../wallet-engine" }
+# Both already in the lockfile via LEZ's wallet CLI (same majors).
+clap = { version = "4.6", features = ["derive", "env"] }
+rpassword = "7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

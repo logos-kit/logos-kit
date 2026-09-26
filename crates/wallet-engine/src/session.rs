@@ -249,6 +249,9 @@ struct Meta {
     /// The authoritative zone list.
     zones: Vec<Zone>,
     auto_lock_secs: u32,
+    /// What connected apps may do (see `policy`).
+    #[serde(default)]
+    grants: Vec<crate::policy::Grant>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -398,6 +401,12 @@ pub struct ZoneStatus {
     pub auto_lock_secs: u32,
 }
 
+pub(crate) type PendingNote = (
+    common::HashType,
+    Vec<lee_core::SharedSecretKey>,
+    lee::AccountId,
+);
+
 enum Failure {
     Network(anyhow::Error),
     Local(anyhow::Error),
@@ -524,6 +533,8 @@ pub struct Session {
     meta: Meta,
     net: Net,
     reveal: RevealThrottle,
+    /// Secrets of a private tx sent from here, to record its note on inclusion.
+    pub(crate) pending_note: Option<PendingNote>,
     // Declared last so it is released after everything above is flushed.
     _lock: SessionLock,
 }
@@ -704,6 +715,7 @@ impl Session {
             meta,
             net: Net::Idle,
             reveal: RevealThrottle::default(),
+            pending_note: None,
             _lock: lock,
         })
     }
@@ -875,6 +887,27 @@ impl Session {
             account_id: id.to_string(),
             kind,
             path: Some(path.to_string()),
+            label: None,
+        })
+    }
+
+    /// Import a public account by its private key (hex), e.g. a key from
+    /// the official wallet or a test genesis account. Imported keys live in
+    /// this zone only; they are not derived from the phrase.
+    pub fn import_public_key(&mut self, private_key_hex: &str) -> Result<AccountInfo> {
+        let key: lee::PrivateKey = private_key_hex
+            .trim()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("not a hex private key"))?;
+        let id = lee::AccountId::from(&lee::PublicKey::new_from_private_key(&key));
+        self.storage_mut()?
+            .key_chain_mut()
+            .add_imported_public_account(key);
+        self.persist_now()?;
+        Ok(AccountInfo {
+            account_id: id.to_string(),
+            kind: AccountKind::Public,
+            path: None,
             label: None,
         })
     }
@@ -1083,6 +1116,21 @@ impl Session {
         self.verify_current(current)?;
         let bytes = self.keys.read()?;
         self.keys.change_password(current, new, &bytes)
+    }
+
+    /// Re-auth for an approval (first connect, private spend, large amount).
+    /// Shares the throttle with phrase reveal and password change.
+    pub fn reauth(&mut self, password: &str) -> Result<()> {
+        self.verify_current(password)
+    }
+
+    pub fn grants(&self) -> &[crate::policy::Grant] {
+        &self.meta.grants
+    }
+
+    /// Replace the grant list (stored encrypted in the keys vault).
+    pub fn set_grants(&mut self, grants: Vec<crate::policy::Grant>) -> Result<()> {
+        self.update_meta(|meta| meta.grants = grants)
     }
 
     /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be

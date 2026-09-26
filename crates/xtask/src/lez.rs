@@ -112,6 +112,7 @@ pub fn export(repo_root: &Path) -> Result<()> {
             "-q",
             "--no-signature",
             "--zero-commit",
+            "--no-numbered",
             "-o",
             &out.display().to_string(),
             &range,
