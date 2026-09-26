@@ -138,6 +138,9 @@ pub struct Funds {
     /// For a private target: the shield waiting for approval.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shield: Option<Ticket>,
+    /// Funded, but the shield couldn't be queued (why).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shield_error: Option<String>,
 }
 
 /// What `request_*` hands the approving UI.
@@ -451,10 +454,35 @@ impl Engine {
             state.epoch
         };
         let prepared = session.prepare(requester.as_deref(), intent).await?;
+        // Every account that signs authorizes the program, not only `from`:
+        // an app needs a grant on each (a Call can name any of ours).
+        if let Caller::Module(name) = caller
+            && let Some(ungranted) = prepared.review.summary.signers.iter().find(|a| {
+                !policy::allows(
+                    session.grants(),
+                    &zone,
+                    requester.as_deref().unwrap_or(""),
+                    a,
+                    Capability::ProposeTx,
+                )
+            })
+        {
+            return Err(Denied::err(
+                Code::Unauthorized,
+                format!("{name} isn't connected to {ungranted}, which this would sign with"),
+            ));
+        }
         drop(wallet);
         let review = &prepared.review;
+        let token_out = review
+            .summary
+            .outflows
+            .iter()
+            .any(|f| f.asset != crate::decode::Asset::Native);
         let needs_password = review.route.is_some_and(tx::Route::is_private)
             || review.native_outflow() >= self.config.reauth_at
+            || token_out
+            || review.summary.unknown
             || !review.summary.authorities.is_empty();
         let needs_ack = review.summary.unknown;
 
@@ -550,14 +578,34 @@ impl Engine {
             } else {
                 None
             };
+            // An app may only have its own accounts funded or shielded from:
+            // `via` is revealed to it and linked to the target on chain.
+            if let (Caller::Module(name), Some(v)) = (caller, via.as_deref()) {
+                let app = requester.as_deref().unwrap_or("");
+                for cap in [Capability::Accounts, Capability::ProposeTx] {
+                    if !policy::allows(session.grants(), &zone, app, v, cap) {
+                        return Err(Denied::err(
+                            Code::Unauthorized,
+                            format!("{name} isn't connected to {v} to shield from"),
+                        ));
+                    }
+                }
+            }
             (private, via)
         };
+        if target_private {
+            // Don't take funds for a shield that couldn't be queued.
+            Self::check_free(&mut self.state(), requester.as_deref())?;
+        }
         let public = via.as_deref().unwrap_or(account);
         let id = crate::decode::account_id(public)?;
         let outcome = faucet.fund(id, request_key).await?;
-        let shield = match (&outcome, target_private) {
-            (FundOutcome::Funded { amount, .. }, true) => Some(
-                self.request_tx(
+        let (mut shield, mut shield_error) = (None, None);
+        if let (FundOutcome::Funded { amount, .. }, true) = (&outcome, target_private) {
+            // The funds arrived either way: report them even if the shield
+            // can't be queued now (the user can shield later).
+            match self
+                .request_tx(
                     caller,
                     relayed,
                     Intent::Transfer {
@@ -568,15 +616,18 @@ impl Engine {
                         to_keys: None,
                     },
                 )
-                .await?,
-            ),
-            _ => None,
-        };
+                .await
+            {
+                Ok(ticket) => shield = Some(ticket),
+                Err(e) => shield_error = Some(format!("{e:#}")),
+            }
+        }
         Ok(Funds {
             outcome,
             faucet: faucet.name().to_owned(),
             funded_account: public.to_owned(),
             shield,
+            shield_error,
         })
     }
 
@@ -902,7 +953,7 @@ impl Engine {
         // Own-account invariant: which of our private accounts must move, by how much.
         let watch = own_invariant(&prepared.review);
         let tx_hash = if prepared.needs_proof() {
-            let (job, _review, pins) = prepared.into_proving()?;
+            let (job, pins) = prepared.into_proving()?;
             let slot = {
                 let mut state = self.state();
                 if state.proving.is_some() {
@@ -1000,11 +1051,17 @@ impl Engine {
                     before.checked_sub(delta.unsigned_abs())
                 };
                 match after {
+                    // The note wasn't recorded locally: the balance proves nothing yet.
+                    _ if warning.is_some() => (Outcome::Unknown, OutcomeSource::None),
                     Some(after) if Some(after) == expected => {
                         (Outcome::Success, OutcomeSource::OwnAccountInvariant)
                     }
-                    Some(_) => (Outcome::Failure, OutcomeSource::OwnAccountInvariant),
-                    None => (Outcome::Unknown, OutcomeSource::None),
+                    // Included, note recorded, and our account didn't move.
+                    Some(after) if after == before => {
+                        (Outcome::Failure, OutcomeSource::OwnAccountInvariant)
+                    }
+                    // Moved by another amount (e.g. another note arrived).
+                    _ => (Outcome::Unknown, OutcomeSource::None),
                 }
             }
             _ => (Outcome::Unknown, OutcomeSource::None),

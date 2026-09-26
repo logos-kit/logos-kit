@@ -73,8 +73,20 @@ pub trait FaucetBackend: Send + Sync {
 
 struct Ledger {
     last: HashMap<AccountId, Instant>,
-    outcomes: HashMap<String, (AccountId, FundOutcome)>,
+    outcomes: HashMap<String, (AccountId, FundOutcome, Instant)>,
     busy: bool,
+}
+
+/// How long a request key's outcome is remembered.
+const KEY_TTL: Duration = Duration::from_secs(24 * 3600);
+
+/// Frees the one in-flight slot even if the caller drops the future.
+struct Busy<'a>(&'a KeyFaucet);
+
+impl Drop for Busy<'_> {
+    fn drop(&mut self) {
+        self.0.ledger().busy = false;
+    }
 }
 
 /// Funds from a key this process holds.
@@ -173,10 +185,20 @@ impl KeyFaucet {
         .map_err(|e| anyhow::anyhow!("{e}"))?;
         let witness = WitnessSet::for_message(&message, &[&self.key]);
         let tx = PublicTransaction::new(message, witness);
-        let hash = self
+        let hash = match self
             .client
             .send_transaction(common::transaction::LeeTransaction::Public(tx))
-            .await?;
+            .await
+        {
+            Ok(h) => h,
+            // The sequencer may have taken it anyway: never pay again blindly.
+            Err(e) => {
+                return Ok(FundOutcome::OutcomeUnknown {
+                    reason: format!("the sequencer didn't confirm the drop ({e})"),
+                    tx_hash: None,
+                });
+            }
+        };
         let tx_hash = hash.to_string();
 
         // Poll with backoff until included, then attribute by balance.
@@ -229,7 +251,12 @@ impl FaucetBackend for KeyFaucet {
         );
         {
             let mut ledger = self.ledger();
-            if let Some((to, outcome)) = ledger.outcomes.get(request_key) {
+            let every = self.every;
+            ledger.last.retain(|_, at| at.elapsed() < every);
+            ledger
+                .outcomes
+                .retain(|_, (_, _, at)| at.elapsed() < KEY_TTL);
+            if let Some((to, outcome, _)) = ledger.outcomes.get(request_key) {
                 return Ok(if *to == account {
                     outcome.clone()
                 } else {
@@ -259,25 +286,42 @@ impl FaucetBackend for KeyFaucet {
             ledger.busy = true;
             ledger.last.insert(account, Instant::now());
         }
+        let busy = Busy(self);
         let result = self.pay(account).await;
+        drop(busy);
         let mut ledger = self.ledger();
-        ledger.busy = false;
         match &result {
             Ok(outcome) => {
                 if matches!(outcome, FundOutcome::Rejected { .. }) {
                     ledger.last.remove(&account);
                 }
-                ledger
-                    .outcomes
-                    .insert(request_key.to_owned(), (account, outcome.clone()));
+                ledger.outcomes.insert(
+                    request_key.to_owned(),
+                    (account, outcome.clone(), Instant::now()),
+                );
             }
-            // Nothing was sent (the error came before or at submission).
+            // Errors come only before submission (an unconfirmed send is
+            // `OutcomeUnknown`), so nothing was paid.
             Err(_) => {
                 ledger.last.remove(&account);
             }
         }
         result
     }
+}
+
+fn allowed_url(base: &str) -> bool {
+    let authority = |rest: &str| rest.split('/').next().unwrap_or("").to_owned();
+    if let Some(rest) = base.strip_prefix("https://") {
+        let a = authority(rest);
+        return !a.is_empty() && !a.contains('@');
+    }
+    let Some(rest) = base.strip_prefix("http://") else {
+        return false;
+    };
+    let a = authority(rest);
+    let (host, port) = a.rsplit_once(':').unwrap_or((&a, ""));
+    matches!(host, "127.0.0.1" | "localhost" | "[::1]") && port.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// Client for the drip service: `POST {base}/fund {"account","requestKey"}`
@@ -290,8 +334,8 @@ pub struct HttpFaucet {
 impl HttpFaucet {
     pub fn new(name: &str, base: &str) -> Result<Self> {
         ensure!(
-            base.starts_with("https://") || base.starts_with("http://127.0.0.1"),
-            "the faucet must be https (or loopback for tests)"
+            allowed_url(base),
+            "the faucet must be https (or http on 127.0.0.1/localhost for tests)"
         );
         Ok(Self {
             name: name.to_owned(),
@@ -312,6 +356,7 @@ impl FaucetBackend for HttpFaucet {
             let agent = ureq::Agent::config_builder()
                 .timeout_global(Some(Duration::from_secs(180)))
                 .http_status_as_error(false)
+                .max_redirects(0)
                 .build()
                 .new_agent();
             let mut resp = agent.post(&url).send_json(body)?;
@@ -330,6 +375,15 @@ impl FaucetBackend for HttpFaucet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drip_urls_are_https_or_exact_loopback() {
+        assert!(allowed_url("https://drip.example.org"));
+        assert!(allowed_url("http://127.0.0.1:8080/api"));
+        assert!(!allowed_url("http://127.0.0.1.attacker.tld/"));
+        assert!(!allowed_url("http://example.org"));
+        assert!(!allowed_url("https://user@evil"));
+    }
 
     #[test]
     fn outcomes_match_the_protocol_shape() {

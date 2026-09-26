@@ -209,12 +209,9 @@ pub async fn read_header(core: &WalletCore, program: AccountId) -> Result<Option
         .context("the program header doesn't decode")
 }
 
-/// Status of `program` as it is on chain now. `cache` is this wallet's local rebuilds.
+/// Status of `program` as it is on chain now (no local rebuild cache).
 pub async fn check(core: &WalletCore, program: AccountId) -> Result<ProgramCheck> {
-    let header = read_header(core, program)
-        .await?
-        .with_context(|| format!("no program is deployed at {program}"))?;
-    Ok(classify(program, &header, &[], ""))
+    check_cached(core, program, "", &[]).await
 }
 
 /// [`check`], also consulting this wallet's cache of local rebuilds.
@@ -331,10 +328,42 @@ pub fn build(source: &Source, work: &Path) -> Result<PathBuf> {
         source.commit.len() == 40 && source.commit.chars().all(|c| c.is_ascii_hexdigit()),
         "the source commit must be a full 40-hex git hash"
     );
+    let guest = Path::new(&source.guest_path);
     ensure!(
-        !source.guest_path.contains("..") && !source.bin.contains('/'),
-        "guest path and bin must stay inside the checkout"
+        !source.guest_path.is_empty()
+            && guest
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_))),
+        "the guest path must be relative, inside the checkout"
     );
+    ensure!(
+        !source.bin.is_empty()
+            && source
+                .bin
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.')
+            && !source.bin.starts_with('.'),
+        "bin must be a plain file name"
+    );
+    ensure!(
+        !source.docker_tag.is_empty()
+            && source
+                .docker_tag
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-'),
+        "docker tag may only use letters, digits, '.', '_' and '-'"
+    );
+    ensure!(
+        source.repo.starts_with("https://")
+            || source.repo.starts_with("file://")
+            || Path::new(&source.repo).is_absolute(),
+        "repo must be an https:// or file:// URL, or an absolute local path"
+    );
+    std::fs::create_dir_all(work)?;
+    // cargo-risczero strips the docker context (the working directory) off
+    // the manifest path, so both must be spelled canonically (macOS: /var →
+    // /private/var).
+    let work = &work.canonicalize()?;
     let checkout = work.join("src");
     if !checkout.join(".git").exists() {
         std::fs::create_dir_all(&checkout)?;
@@ -343,7 +372,7 @@ pub fn build(source: &Source, work: &Path) -> Result<PathBuf> {
     run(Command::new("git")
         .arg("-C")
         .arg(&checkout)
-        .args(["fetch", "-q", "--depth", "1"])
+        .args(["fetch", "-q", "--depth", "1", "--"])
         .arg(&source.repo)
         .arg(&source.commit))?;
     run(Command::new("git").arg("-C").arg(&checkout).args([

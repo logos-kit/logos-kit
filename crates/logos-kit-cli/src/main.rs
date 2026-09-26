@@ -187,6 +187,8 @@ enum TokenCmd {
     List,
     /// Look for this token's associated token accounts too.
     Track { definition: String },
+    /// The associated token account address of `owner` for a token.
+    Ata { owner: String, definition: String },
     /// Create a fungible token; all supply goes to --holder (a public account
     /// whose token slot is empty). A new account becomes the definition.
     Create {
@@ -617,6 +619,16 @@ async fn token(cli: &Cli, cmd: &TokenCmd) -> Result<()> {
                 }
             });
             session.lock()
+        }
+        TokenCmd::Ata { owner, definition } => {
+            let ata = wallet_engine::tokens::ata_of(
+                wallet_engine::decode::account_id(owner)?,
+                wallet_engine::decode::account_id(definition)?,
+            );
+            print(cli, &serde_json::json!({ "ata": ata.to_string() }), || {
+                println!("{ata}");
+            });
+            Ok(())
         }
         TokenCmd::Track { definition } => {
             let (mut session, _) = open(cli).await?;
@@ -1061,7 +1073,7 @@ async fn run(cli: Cli) -> Result<()> {
             let data = data_dir(&cli)?;
             let zone = zone(&cli, &data)?;
             let bundle = std::fs::read(file).with_context(|| file.display().to_string())?;
-            data.import_backup(&bundle)?;
+            let written = data.import_backup(&bundle)?;
             let pw = password("Password of the backup: ")?;
             match Session::unlock(data.clone(), &pw, zone) {
                 Ok(s) => {
@@ -1070,11 +1082,8 @@ async fn run(cli: Cli) -> Result<()> {
                     Ok(())
                 }
                 Err(e) => {
-                    // Leave no half-restored wallet behind.
-                    for p in ["keys", "zones"] {
-                        let _ = std::fs::remove_dir_all(data.root().join(p));
-                    }
-                    let _ = std::fs::remove_file(data.root().join("zones.json"));
+                    // Leave no half-restored wallet behind (only what we wrote).
+                    wallet_engine::backup::remove_written(data.root(), &written);
                     Err(e.context("the backup didn't open with that password"))
                 }
             }

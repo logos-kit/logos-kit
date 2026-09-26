@@ -81,7 +81,7 @@ const fn is_fungible(nft: &Option<&'static str>) -> bool {
 }
 
 impl Asset {
-    fn token(d: &TokenDescriptor) -> Self {
+    pub(crate) fn token(d: &TokenDescriptor) -> Self {
         Self::Token {
             definition: d.definition_id.to_string(),
             nft: match d.kind {
@@ -115,6 +115,10 @@ pub struct Summary {
     pub inflows: Vec<Flow>,
     /// Uses or grants of a token authority. Shown prominently.
     pub authorities: Vec<String>,
+    /// This wallet's accounts that sign (and so authorize whatever the
+    /// program does with them). Shown on every sheet.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub signers: Vec<String>,
     /// No decoder for this program (or the data didn't decode): the user must
     /// acknowledge that the wallet can't say what it does.
     pub unknown: bool,
@@ -137,12 +141,29 @@ pub fn public(message: &PublicMessage, decoders: &Decoders) -> Summary {
         .iter()
         .map(|s| s.account_id)
         .collect();
+    let shards: Vec<AccountId> = message
+        .shard_selectors
+        .iter()
+        .map(|s| s.program_account_id)
+        .collect();
     let data = &message.instruction_data;
+    let token_program = programs::token_account_id();
+    // A decoder describes the bytes only when every row selects the shard it
+    // assumes; anything else is shown as unknown.
     let decoded = match decoders.get(program) {
-        Some(Decoder::Native) => native(data, &accounts),
-        Some(Decoder::Token) => token(data, &accounts, program),
-        Some(Decoder::AssociatedToken) => ata(data, &accounts),
-        None => None,
+        Some(Decoder::Native) if shards.iter().all(|s| *s == NATIVE_TOKEN_PROGRAM_ID) => {
+            native(data, &accounts)
+        }
+        Some(Decoder::Token) if shards.iter().all(|s| *s == program) => {
+            token(data, &accounts, program)
+        }
+        Some(Decoder::AssociatedToken)
+            if shards.first() == Some(&NATIVE_TOKEN_PROGRAM_ID)
+                && shards.iter().skip(1).all(|s| *s == token_program) =>
+        {
+            ata(data, &accounts)
+        }
+        _ => None,
     };
     let mut summary = decoded.unwrap_or_else(|| Summary {
         title: "Call a program the wallet can't read".to_owned(),
@@ -330,27 +351,29 @@ fn token(data: &[u8], accounts: &[AccountId], program: AccountId) -> Option<Summ
 fn ata(data: &[u8], accounts: &[AccountId]) -> Option<Summary> {
     use associated_token_account_core::Instruction as I;
     let instruction: I = borsh::from_slice(data).ok()?;
-    let other_program = |p: &AccountId| {
-        (*p != programs::token_account_id())
-            .then(|| format!("Uses a token program at {}, not the builtin one", short(p)))
-    };
+    // The ATA program hands its PDA authority to whatever token program the
+    // instruction names: only the builtin one's effects are known.
+    let (I::Create {
+        token_program_id, ..
+    }
+    | I::Transfer {
+        token_program_id, ..
+    }
+    | I::Burn {
+        token_program_id, ..
+    }) = &instruction;
+    if *token_program_id != programs::token_account_id() {
+        return None;
+    }
     let s = match (instruction, accounts) {
-        (
-            I::Create {
-                token_program_id, ..
-            },
-            [owner, definition, ata],
-        ) => Summary {
+        (I::Create { .. }, [owner, definition, ata]) => Summary {
             title: "Open a token account".to_owned(),
-            lines: [
-                Some(format!(
-                    "{} for token {} (owned by {})",
-                    short(ata),
-                    short(definition),
-                    short(owner)
-                )),
-                other_program(&token_program_id),
-            ]
+            lines: [Some(format!(
+                "{} for token {} (owned by {})",
+                short(ata),
+                short(definition),
+                short(owner)
+            ))]
             .into_iter()
             .flatten()
             .collect(),
@@ -358,21 +381,18 @@ fn ata(data: &[u8], accounts: &[AccountId]) -> Option<Summary> {
         },
         (
             I::Transfer {
-                token_program_id,
+                token_program_id: _,
                 descriptor,
                 amount,
             },
             [_owner, from_ata, to],
         ) => Summary {
             title: "Send tokens".to_owned(),
-            lines: [
-                Some(format!(
-                    "{amount} of token {} to {}",
-                    short(&descriptor.definition_id),
-                    short(to)
-                )),
-                other_program(&token_program_id),
-            ]
+            lines: [Some(format!(
+                "{amount} of token {} to {}",
+                short(&descriptor.definition_id),
+                short(to)
+            ))]
             .into_iter()
             .flatten()
             .collect(),
@@ -390,17 +410,17 @@ fn ata(data: &[u8], accounts: &[AccountId]) -> Option<Summary> {
         },
         (
             I::Burn {
-                token_program_id,
+                token_program_id: _,
                 kind,
                 amount,
             },
             [_owner, from_ata, definition],
         ) => Summary {
             title: "Burn tokens".to_owned(),
-            lines: [
-                Some(format!("Destroy {amount} of token {}", short(definition))),
-                other_program(&token_program_id),
-            ]
+            lines: [Some(format!(
+                "Destroy {amount} of token {}",
+                short(definition)
+            ))]
             .into_iter()
             .flatten()
             .collect(),
@@ -555,6 +575,45 @@ mod tests {
                 nft: None
             }
         );
+    }
+
+    #[test]
+    fn a_foreign_shard_or_token_program_makes_it_unknown() {
+        let (a, b) = (AccountId::new([1; 32]), AccountId::new([2; 32]));
+        let d = Decoders::default();
+        // A native transfer whose recipient row selects another program's shard.
+        let data =
+            Program::serialize_instruction(native_token::Instruction::Transfer { amount: 7 })
+                .unwrap();
+        let mut m = msg(NATIVE_TOKEN_PROGRAM_ID, &[a, b], data);
+        m.shard_selectors[1].program_account_id = AccountId::new([9; 32]);
+        assert!(public(&m, &d).unknown);
+
+        // An ATA transfer that hands the PDA authority to a non-builtin token program.
+        let ata = programs::ata_account_id();
+        let data =
+            Program::serialize_instruction(associated_token_account_core::Instruction::Transfer {
+                token_program_id: AccountId::new([7; 32]),
+                descriptor: TokenDescriptor {
+                    definition_id: AccountId::new([3; 32]),
+                    kind: TokenKind::Fungible,
+                },
+                amount: 1,
+            })
+            .unwrap();
+        let token = programs::token_account_id();
+        let m = PublicMessage::new_preserialized(
+            ata,
+            vec![
+                ProgramShardSelector::native_balance(a),
+                ProgramShardSelector::new(b, token),
+                ProgramShardSelector::new(AccountId::new([4; 32]), token),
+            ],
+            vec![],
+            data,
+            None,
+        );
+        assert!(public(&m, &d).unknown);
     }
 
     #[test]

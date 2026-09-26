@@ -110,7 +110,8 @@ impl Session {
                     .ok()
                     .and_then(|b| borsh::from_slice::<TokenHolding>(&b).ok())
             } else {
-                public_holding(core, id).await?
+                // One unreadable account doesn't hide the rest.
+                public_holding(core, id).await.ok().flatten()
             };
             if let Some(h) = own {
                 out.push((a.account_id.clone(), private, Via::Account, id, h));
@@ -120,20 +121,31 @@ impl Session {
             }
             for def in &tracked {
                 let ata = ata_of(id, *def);
-                if let Some(h) = public_holding(core, ata).await? {
+                if let Some(h) = public_holding(core, ata).await.ok().flatten() {
                     out.push((a.account_id.clone(), false, Via::Ata, ata, h));
                 }
             }
         }
+        let mut names: std::collections::HashMap<AccountId, Option<String>> =
+            std::collections::HashMap::new();
         let mut holdings = Vec::with_capacity(out.len());
         for (account, private, via, holder, h) in out {
+            let def = h.definition_id();
+            let name = match names.get(&def) {
+                Some(n) => n.clone(),
+                None => {
+                    let n = definition_name(core, def).await;
+                    names.insert(def, n.clone());
+                    n
+                }
+            };
             holdings.push(Holding {
                 account,
                 private,
                 via,
                 holder: holder.to_string(),
                 definition: h.definition_id().to_string(),
-                name: definition_name(core, h.definition_id()).await,
+                name,
                 kind: kind_name(h.kind()),
                 amount: holding_amount(&h),
             });

@@ -396,7 +396,9 @@ fn resolve(
 ) -> Result<Resolved> {
     let (from_ident, from_private) = if core.get_account_public_signing_key(from).is_some() {
         (AccountIdentity::Public(from), false)
-    } else if let Some(p) = core.resolve_private_account(from) {
+    } else if let Some(p @ AccountIdentity::PrivateOwned(_)) = core.resolve_private_account(from) {
+        // Shared (GMS) accounts aren't supported yet: their notes and
+        // balances live outside this wallet's key tree.
         (p, true)
     } else {
         bail!("{from} is not an account of this wallet");
@@ -433,7 +435,7 @@ fn resolve(
         (ident, id, true, false)
     } else {
         let (id, marked) = to.context("a recipient (`to` or `toKeys`) is required")?;
-        if let Some(p) = core.resolve_private_account(id) {
+        if let Some(p @ AccountIdentity::PrivateOwned(_)) = core.resolve_private_account(id) {
             (p, id, true, true)
         } else {
             // Someone else's private account can't be paid by id alone.
@@ -639,6 +641,15 @@ impl Session {
             ))
             .into());
         }
+        // A wallet-built transfer runs at most one program besides native.
+        if message.program_image_claims.len() > usize::from(proved.check.program.is_some()) {
+            return Err(Stale(format!(
+                "the proof claims {} program images; approved {}",
+                message.program_image_claims.len(),
+                usize::from(proved.check.program.is_some())
+            ))
+            .into());
+        }
         for claim in &message.program_image_claims {
             match (claim, proved.check.program) {
                 (
@@ -679,9 +690,22 @@ impl Session {
     /// (the transaction is included either way; the next sync repairs it).
     pub async fn wait_included(&mut self, tx_hash: &str) -> Result<(u64, Option<String>)> {
         let hash = tx_hash.parse().context("tx hash")?;
-        let pending = self.pending_note.take();
+        let pending = match self.pending_note.take() {
+            Some(p) if p.0 == hash => Some(p),
+            other => {
+                self.pending_note = other;
+                None
+            }
+        };
         let core = self.core_mut().context("not connected")?;
-        let (tx, block) = core.poll_transaction(hash).await?;
+        let (tx, block) = match core.poll_transaction(hash).await {
+            Ok(done) => done,
+            Err(e) => {
+                // Still in flight: keep the secrets for a later wait or sync.
+                self.pending_note = pending;
+                return Err(e);
+            }
+        };
         let mut warning = None;
         if let (common::transaction::LeeTransaction::PrivacyPreserving(tx), Some((h, notes))) =
             (&tx, pending)
@@ -734,11 +758,6 @@ impl Session {
                     .map_or(0, |h| holding_amount(&h)))
             }
         }
-    }
-
-    /// Native balance (kept for callers that don't deal in tokens).
-    pub async fn balance(&mut self, account_id: &str) -> Result<u128> {
-        self.balance_of(account_id, None).await
     }
 }
 
@@ -804,8 +823,23 @@ async fn prepare_transfer(
         Some(def) => {
             let def = decode::account_id(def)?;
             let token_program = programs::token_account_id();
-            let held = holding(&own_shard(core, from_id, from_private, token_program).await?)?
-                .with_context(|| format!("{from_id} holds no tokens"))?;
+            let held = holding(&own_shard(core, from_id, from_private, token_program).await?)?;
+            if !from_private && held.as_ref().is_none_or(|h| h.definition_id() != def) {
+                // Not in its own slot: maybe in its associated token account.
+                if r.route == Route::Public {
+                    let built =
+                        prepare_ata_transfer(core, decoders, from_id, r.to_id, def, amount).await?;
+                    let intent = Intent::Transfer {
+                        from,
+                        to,
+                        amount,
+                        token,
+                        to_keys,
+                    };
+                    return Ok((intent, built));
+                }
+            }
+            let held = held.with_context(|| format!("{from_id} holds no tokens"))?;
             ensure!(
                 held.definition_id() == def,
                 "{from_id} holds token {}, not {def}",
@@ -829,10 +863,7 @@ async fn prepare_transfer(
             )
         }
     };
-    let asset = descriptor.as_ref().map_or(Asset::Native, |d| Asset::Token {
-        definition: d.definition_id.to_string(),
-        nft: None,
-    });
+    let asset = descriptor.as_ref().map_or(Asset::Native, Asset::token);
     let from_balance = match &descriptor {
         None if !from_private => core.get_account_balance(from_id).await?,
         _ => {
@@ -876,10 +907,12 @@ async fn prepare_transfer(
             core.get_account_balance(from_id).await?
         };
         check_fee(core, message, from_id, sender_native, native_out).await?;
-        let nonces = signer_nonces(&tx);
+        let nonces = signer_nonces(&tx)?;
+        let mut summary = decode::public(message, decoders);
+        summary.signers = nonces.iter().map(|(id, _)| id.to_string()).collect();
         Built {
             route: Some(Route::Public),
-            summary: decode::public(message, decoders),
+            summary,
             program: check,
             expected_effects: vec![],
             recipient: Some(r.to_id.to_string()),
@@ -895,6 +928,13 @@ async fn prepare_transfer(
             chosen_identifier,
         }
     } else {
+        // The witness reads the sender's nonce inside prepare_private; the
+        // same value before and after means that is the one it used.
+        let nonce_before = if r.route == Route::Shield {
+            Some(nonce_of(core, from_id).await?)
+        } else {
+            None
+        };
         let tx = core
             .prepare_private(
                 mentions,
@@ -906,7 +946,14 @@ async fn prepare_transfer(
             .map_err(lez)?;
         let (nonces, effects) = match r.route {
             Route::Shield => (
-                vec![(from_id, nonce_of(core, from_id).await?)],
+                {
+                    let after = nonce_of(core, from_id).await?;
+                    ensure!(
+                        nonce_before == Some(after),
+                        "{from_id} changed while this was prepared; try again"
+                    );
+                    vec![(from_id, after)]
+                },
                 vec![PublicEffect::Debit {
                     account: from_id.to_string(),
                     asset: asset.clone(),
@@ -1053,7 +1100,9 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
         .filter(|f| f.asset == Asset::Native && f.account == from.to_string())
         .fold(0u128, |a, f| a.saturating_add(f.amount));
     check_fee(core, message, from, from_balance, native_out).await?;
-    let nonces = signer_nonces(&tx);
+    let nonces = signer_nonces(&tx)?;
+    let mut summary = summary;
+    summary.signers = nonces.iter().map(|(id, _)| id.to_string()).collect();
     let program_pin = check
         .as_ref()
         .and_then(|c| (!c.immutable).then_some((program, c.image_id_words)));
@@ -1075,24 +1124,105 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
     })
 }
 
+/// Send `def` out of `owner`'s associated token account (public route).
+async fn prepare_ata_transfer(
+    core: &WalletCore,
+    decoders: &Decoders,
+    owner: AccountId,
+    to: AccountId,
+    def: AccountId,
+    amount: u128,
+) -> Result<Built> {
+    let token_program = programs::token_account_id();
+    let ata_program = programs::ata_account_id();
+    let ata = crate::tokens::ata_of(owner, def);
+    let held = holding(&own_shard(core, ata, false, token_program).await?)?
+        .filter(|h| h.definition_id() == def)
+        .with_context(|| format!("{owner} holds no token {def}"))?;
+    let from_balance = holding_amount(&held);
+    ensure!(
+        from_balance >= amount,
+        "{owner} holds only {from_balance} of token {def}"
+    );
+    let recipient = holding(&own_shard(core, to, false, token_program).await?)?;
+    ensure!(
+        recipient.is_none_or(|h| h.definition_id() == def),
+        "{to} already holds another token in its token slot"
+    );
+    let check = verify::check(core, ata_program).await?;
+    let data =
+        Program::serialize_instruction(associated_token_account_core::Instruction::Transfer {
+            token_program_id: token_program,
+            descriptor: TokenDescriptor {
+                definition_id: def,
+                kind: held.kind(),
+            },
+            amount,
+        })
+        .map_err(|e| anyhow::anyhow!("encode ATA transfer: {e:?}"))?;
+    let tx = core
+        .prepare_public(
+            vec![
+                AccountIdentity::Public(owner).balance(),
+                AccountIdentity::PublicNoSign(ata).select_program_shard(token_program),
+                AccountIdentity::PublicNoSign(to).select_program_shard(token_program),
+            ],
+            data,
+            ata_program,
+            None,
+            |_| Ok(()),
+        )
+        .await
+        .map_err(lez)?;
+    let message = tx.message();
+    let owner_native = core.get_account_balance(owner).await?;
+    check_fee(core, message, owner, owner_native, 0).await?;
+    let nonces = signer_nonces(&tx)?;
+    let mut summary = decode::public(message, decoders);
+    summary.signers = nonces.iter().map(|(id, _)| id.to_string()).collect();
+    Ok(Built {
+        route: Some(Route::Public),
+        summary,
+        program: Some(check.clone()),
+        expected_effects: vec![],
+        recipient: Some(to.to_string()),
+        from_balance,
+        fee: fee_of(message),
+        pins: Pins {
+            nonces,
+            program: (!check.immutable).then_some((ata_program, check.image_id_words)),
+        },
+        bound: message.hash().to_vec(),
+        body: Body::Public(tx),
+        chosen_identifier: None,
+    })
+}
+
 /// Each signer with the nonce the message carries for it (same order:
 /// LEZ lists signers' nonces in signature order, a co-signing payer last).
-fn signer_nonces(tx: &PreparedPublicTx) -> Vec<(AccountId, u128)> {
-    tx.signers()
+fn signer_nonces(tx: &PreparedPublicTx) -> Result<Vec<(AccountId, u128)>> {
+    ensure!(
+        tx.signers().len() == tx.message().nonces.len(),
+        "the message carries {} nonces for {} signers",
+        tx.message().nonces.len(),
+        tx.signers().len()
+    );
+    Ok(tx
+        .signers()
         .iter()
         .map(|s| match s {
             TxSigner::Local(id) => *id,
             TxSigner::Keycard { account_id, .. } => *account_id,
         })
         .zip(tx.message().nonces.iter().map(|n| n.0))
-        .collect()
+        .collect())
 }
 
 impl Prepared {
     /// Split off the proving work (runs without the session: CPU only).
-    pub fn into_proving(self) -> Result<(ProvingJob, Review, Pins)> {
+    pub fn into_proving(self) -> Result<(ProvingJob, Pins)> {
         match self.body {
-            Body::Private { tx, check } => Ok((ProvingJob { tx, check }, self.review, self.pins)),
+            Body::Private { tx, check } => Ok((ProvingJob { tx, check }, self.pins)),
             Body::Public(_) => bail!("a public transaction has nothing to prove"),
         }
     }

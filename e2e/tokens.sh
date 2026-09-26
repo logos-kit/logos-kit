@@ -82,8 +82,16 @@ print(' '.join(a['accountId'] for a in json.load(sys.stdin) if a['kind']=='priva
 done
 check "B received privately" "$B_SUM" 700
 
+# Tokens in an associated token account are sent through the ATA program.
+PUB4=$("$LK" account new --json | field "['accountId']")
+"$LK" faucet "$PUB4" --key-env LK_GENESIS_KEY --drop 1000000000 --yes --json >/dev/null
+ATA4=$("$LK" token ata "$PUB4" "$DEF" --json | field "['ata']")
+"$LK" send --from "$PUB" --to "$ATA4" --token "$DEF" --amount 7 --yes --json >/dev/null
+"$LK" send --from "$PUB4" --to "$PUB2" --token "$DEF" --amount 3 --yes --json >/dev/null
+check "ATA token send" "$("$LK" balance "$PUB2" --token "$DEF" --json | field "['balance']")" 103
+
 N=$("$LK" token list --json | tail -1 | python3 -c "import sys,json; print(len([h for h in json.load(sys.stdin) if h['definition']=='$DEF']))")
-check "token list holdings" "$N" 5
+check "token list holdings" "$N" 6
 
 STATUS=$("$LK" program token --json | field "['status']")
 [[ "$STATUS" == verified_local || "$STATUS" == claimed ]] || { echo "FAIL token program status $STATUS" >&2; exit 1; }
@@ -91,6 +99,6 @@ echo "ok   builtin token program header = $STATUS"
 
 "$LK" backup export "$RESTORED/backup.json"
 LOGOS_KIT_HOME="$RESTORED/home" "$LK" backup import "$RESTORED/backup.json" >/dev/null
-check "restored PUB DEMO" "$(LOGOS_KIT_HOME="$RESTORED/home" "$LK" balance "$PUB" --token "$DEF" --json | field "['balance']")" 999850
+check "restored PUB DEMO" "$(LOGOS_KIT_HOME="$RESTORED/home" "$LK" balance "$PUB" --token "$DEF" --json | field "['balance']")" 999843
 
 echo "OK: S4 faucet + demo token on every route + backup (dev-mode proofs)"

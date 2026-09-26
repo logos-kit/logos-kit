@@ -66,13 +66,17 @@ impl DataDir {
         Ok(files)
     }
 
-    /// Write the files of `bundle` into this (empty) data dir.
-    pub fn import_backup(&self, bundle: &[u8]) -> Result<()> {
-        ensure!(
-            !self.is_initialized(),
-            "{} already holds a wallet",
-            self.root().display()
-        );
+    /// Write the files of `bundle` into this empty data dir. Everything is
+    /// validated before anything is written. Returns the files written, so a
+    /// caller can remove exactly those if the password then doesn't open it.
+    pub fn import_backup(&self, bundle: &[u8]) -> Result<Vec<std::path::PathBuf>> {
+        for existing in ["keys", "zones", "zones.json"] {
+            ensure!(
+                !self.root().join(existing).exists(),
+                "{} already holds wallet data ({existing}); import into an empty directory",
+                self.root().display()
+            );
+        }
         let bundle: Bundle = serde_json::from_slice(bundle).context("not a Logos Kit backup")?;
         ensure!(
             bundle.format == FORMAT,
@@ -83,6 +87,7 @@ impl DataDir {
             bundle.files.contains_key("keys/vault.json"),
             "the backup has no keys vault"
         );
+        let mut files = Vec::with_capacity(bundle.files.len());
         for (path, b64) in &bundle.files {
             if !allowed(path) {
                 bail!("the backup contains an unexpected file: {path}");
@@ -91,13 +96,35 @@ impl DataDir {
                 .decode(b64)
                 .with_context(|| format!("{path} is not base64"))?;
             ensure!(bytes.len() <= MAX_FILE, "{path} is too large");
-            let full = self.root().join(path);
+            files.push((self.root().join(path), bytes));
+        }
+        let mut written = Vec::with_capacity(files.len());
+        for (full, bytes) in files {
             let dir = full.parent().context("path has a parent")?;
             let name = full.file_name().context("path has a file name")?;
-            ensure_private_tree(self.root(), dir)?;
-            atomic_write(dir, &name.to_string_lossy(), &bytes)?;
+            let step = ensure_private_tree(self.root(), dir)
+                .and_then(|()| atomic_write(dir, &name.to_string_lossy(), &bytes));
+            if let Err(e) = step {
+                remove_written(self.root(), &written);
+                return Err(e);
+            }
+            written.push(full);
         }
-        Ok(())
+        Ok(written)
+    }
+}
+
+/// Remove files an import wrote, then any directories it left empty.
+pub fn remove_written(root: &Path, written: &[std::path::PathBuf]) {
+    for f in written {
+        let _ = std::fs::remove_file(f);
+        let mut dir = f.parent();
+        while let Some(d) = dir {
+            if d == root || std::fs::remove_dir(d).is_err() {
+                break;
+            }
+            dir = d.parent();
+        }
     }
 }
 
