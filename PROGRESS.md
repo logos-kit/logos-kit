@@ -140,7 +140,9 @@ The single place to resume from after a context clear.
 - [x] E2E harness `e2e/standalone.sh` (standalone `sequencer_service` from vendor/lez, `RISC0_DEV_MODE=1`, debug genesis, loopback :3040; needs `r0vm` 3.0.5 via rzup). `just e2e`. Fingerprint: version 0.3
 - [x] Integration-confidence #2 (network half): `tests/e2e_sync.rs` creates public + private accounts, connects, syncs (observer `start 1..=3`, `finish 3`), sync position survives lock/unlock (`9653513`)
 - [ ] Labels, import birthday, persisted indexes, auto-lock, mnemonic reveal with re-auth (engine API), network-drop backoff + offline banner state
-- [ ] Security review (running), code review
+- [x] Security review (S2 keystore): 12 findings, none critical. **Fixed:** one session per vault (exclusive `.session.lock`; blocks CLI/Basecamp lost updates and a password change being undone), pending saves kept until written + flush on drop + flush after a failed sync, all writes via random-name exclusive temp files (0600) + atomic rename, lock opened `O_NOFOLLOW`, data dirs 0700, zones/config written atomically, `Zeroizing` around serialized storage, `bip39`/`argon2` zeroize features, LEZ's plaintext `FileBackend` pointed at a never-read path, zone URL validated before any write + rollback of a failed create, KDF ceiling 256 MiB/t6/p4, phrase-taking FFI method test-only. Proof: engine tests 16 passed incl. 2 new regressions; E2E sync passes
+- [ ] Security follow-ups (tracked): file role + zone id + write counter in the AAD (rollback / cross-zone swap), authenticate `zones.json` (keys vault or MAC), derive once per unlock (3 Argon2 runs today), zeroize-on-drop for LEZ `Storage` (LEZ patch), Windows owner-only ACL + exclusive lock
+- [ ] Code review
 
 ### Exit criteria
 - [x] Logos Kit creates accounts and syncs against the standalone sequencer (proof above)

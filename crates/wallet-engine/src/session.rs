@@ -32,7 +32,7 @@ use wallet::{
 };
 use zeroize::Zeroizing;
 
-use crate::vault::{EncryptedBackend, KdfCost, Vault};
+use crate::vault::{EncryptedBackend, KdfCost, Vault, atomic_write, private_dir};
 
 /// How often LEZ's save-per-block may hit the disk (the rest is buffered).
 const SAVE_INTERVAL: Duration = Duration::from_secs(5);
@@ -77,6 +77,15 @@ impl Zone {
             self.chain.starts_with("lez:"),
             "zone chain must be a CAIP-2 lez:* id"
         );
+        ensure!(
+            self.sequencer.starts_with("https://") || self.sequencer.starts_with("http://"),
+            "sequencer must be an http(s) URL"
+        );
+        // Parse exactly as LEZ will, so a bad URL fails before anything is written.
+        serde_json::from_value::<SequencerConnectionData>(
+            serde_json::json!({ "sequencer_addr": self.sequencer }),
+        )
+        .context("sequencer URL")?;
         Ok(())
     }
 }
@@ -102,6 +111,12 @@ impl DataDir {
         self.0.join("zones").join(id)
     }
 
+    /// Undo a create/restore that failed after writing the keys vault, so no
+    /// wallet exists whose recovery phrase the user never saw.
+    fn forget_partial(&self) {
+        let _ = std::fs::remove_dir_all(self.keys());
+    }
+
     pub fn is_initialized(&self) -> bool {
         Vault::exists(&self.keys())
     }
@@ -118,17 +133,14 @@ impl DataDir {
         let mut zones = self.zones()?;
         zones.retain(|z| z.id != zone.id);
         zones.push(zone.clone());
-        std::fs::create_dir_all(&self.0)?;
-        std::fs::write(
-            self.0.join("zones.json"),
-            serde_json::to_vec_pretty(&zones)?,
-        )?;
+        private_dir(&self.0)?;
+        atomic_write(&self.0, "zones.json", &serde_json::to_vec_pretty(&zones)?)?;
         Ok(())
     }
 
     fn write_zone_config(&self, zone: &Zone) -> Result<PathBuf> {
         let dir = self.zone(&zone.id);
-        std::fs::create_dir_all(&dir)?;
+        private_dir(&dir)?;
         let config = WalletConfig {
             sequencers: vec![SequencerConnectionData {
                 sequencer_addr: zone.sequencer.parse()?,
@@ -136,9 +148,12 @@ impl DataDir {
             }],
             ..WalletConfig::default()
         };
-        let path = dir.join("wallet_config.json");
-        std::fs::write(&path, serde_json::to_vec_pretty(&config)?)?;
-        Ok(path)
+        atomic_write(
+            &dir,
+            "wallet_config.json",
+            &serde_json::to_vec_pretty(&config)?,
+        )?;
+        Ok(dir.join("wallet_config.json"))
     }
 }
 
@@ -208,7 +223,8 @@ impl Session {
         let (storage, mnemonic) = Storage::new("")?;
         let phrase = Zeroizing::new(mnemonic.to_string());
         Vault::create(data.keys(), password, phrase.as_bytes(), cost)?;
-        let session = Self::open_zone(data, zone, password, Some(storage), cost)?;
+        let session = Self::open_zone(data.clone(), zone, password, Some(storage), cost)
+            .inspect_err(|_| data.forget_partial())?;
         Ok((session, phrase))
     }
 
@@ -229,7 +245,8 @@ impl Session {
         let mnemonic = bip39::Mnemonic::parse(phrase).context("invalid recovery phrase")?;
         let phrase = Zeroizing::new(mnemonic.to_string());
         Vault::create(data.keys(), password, phrase.as_bytes(), cost)?;
-        Self::open_zone(data, zone, password, None, cost)
+        Self::open_zone(data.clone(), zone, password, None, cost)
+            .inspect_err(|_| data.forget_partial())
     }
 
     /// Unlock an existing wallet on one of its zones (added if new). Works offline.
@@ -268,12 +285,12 @@ impl Session {
                 }
             };
             (
-                Vault::create(&dir, password, &storage.to_bytes()?, cost)?,
+                Vault::create(&dir, password, &Zeroizing::new(storage.to_bytes()?), cost)?,
                 storage,
             )
         };
 
-        let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL));
+        let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL)?);
         Ok(Self {
             data,
             zone,
@@ -295,10 +312,12 @@ impl Session {
             }
         };
         // Keep a copy: WalletCore::new consumes the storage even when it fails.
-        let fallback = Storage::from_bytes(&storage.to_bytes()?)?;
+        let fallback = Storage::from_bytes(&Zeroizing::new(storage.to_bytes()?))?;
         match WalletCore::new_with_storage_backend(
             self.config_path.clone(),
-            self.dir.join("vault.json"),
+            // LEZ installs a plaintext FileBackend at this path before swapping
+            // in ours; point it somewhere nothing ever reads, never the vault.
+            self.dir.join(".lez-storage-unused"),
             self.dir.join("statistics.json"),
             None,
             storage,
@@ -401,9 +420,10 @@ impl Session {
     pub async fn sync(&mut self, observer: &mut dyn SyncObserver) -> Result<u64> {
         self.connect().await?;
         let core = self.core_mut().context("not connected")?;
-        let tip = core.sync_to_latest_block_with_observer(observer).await?;
+        let result = core.sync_to_latest_block_with_observer(observer).await;
+        // Persist whatever was synced, even if sync stopped part-way.
         self.backend.flush()?;
-        Ok(tip)
+        result
     }
 
     /// Write the current storage to the vault now (not debounced).

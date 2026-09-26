@@ -37,8 +37,9 @@ use zeroize::Zeroizing;
 pub const FORMAT: &str = "logos-kit.vault.v1";
 const CIPHER: &str = "xchacha20poly1305";
 const VAULT_FILE: &str = "vault.json";
-const STAGED_FILE: &str = ".vault.json.staged";
 const LOCK_FILE: &str = ".vault.lock";
+/// Held for a whole session, so two processes never own one vault at once.
+const SESSION_LOCK_FILE: &str = ".session.lock";
 const LOCK_WAIT: Duration = Duration::from_secs(2);
 
 /// Argon2id cost. Defaults: 64 MiB, 3 passes, 1 lane (RFC 9106 §4, second
@@ -63,11 +64,12 @@ impl KdfCost {
         t: 2,
         p: 1,
     };
-    /// Ceiling: refuse files that would allocate over 1 GiB or spin for ages.
+    /// Ceiling: a tampered header must not make unlock allocate or spin for
+    /// long on a phone before the tag check fails.
     const MAX: Self = Self {
-        m: 1024 * 1024,
-        t: 10,
-        p: 8,
+        m: 256 * 1024,
+        t: 6,
+        p: 4,
     };
 
     fn check(self) -> Result<Self> {
@@ -121,68 +123,82 @@ fn derive(password: &str, salt: &[u8], cost: KdfCost) -> Result<Zeroizing<[u8; 3
     Ok(key)
 }
 
-/// Held while reading or writing the vault, so the CLI and the Basecamp
-/// module (same data dir) never interleave writes. Released on drop.
-struct DirLock(File);
+/// An advisory lock on a file in the vault dir, released on drop. Opened
+/// without following symlinks, owner-only.
+struct FileLock(File);
 
-impl DirLock {
-    fn acquire(dir: &Path) -> Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(dir.join(LOCK_FILE))?;
+impl FileLock {
+    fn acquire(path: &Path, wait: Duration, busy: &str) -> Result<Self> {
+        let mut opts = OpenOptions::new();
+        opts.create(true).truncate(false).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            opts.mode(0o600).custom_flags(O_NOFOLLOW);
+        }
+        let file = opts
+            .open(path)
+            .with_context(|| format!("open lock {}", path.display()))?;
         let start = Instant::now();
         loop {
             match file.try_lock() {
                 Ok(()) => return Ok(Self(file)),
-                Err(fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
+                Err(fs::TryLockError::WouldBlock) if start.elapsed() < wait => {
                     std::thread::sleep(Duration::from_millis(25));
                 }
-                Err(fs::TryLockError::WouldBlock) => {
-                    bail!("another Logos Kit process is writing the vault")
-                }
+                Err(fs::TryLockError::WouldBlock) => bail!("{busy}"),
                 Err(fs::TryLockError::Error(e)) => return Err(e.into()),
             }
         }
     }
 }
 
-impl Drop for DirLock {
+impl Drop for FileLock {
     fn drop(&mut self) {
         let _ = self.0.unlock();
     }
 }
 
-#[cfg(unix)]
-fn private_file(path: &Path) -> Result<File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    Ok(OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)?)
+/// `O_NOFOLLOW`: refuse to open a lock path that is a symlink.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const O_NOFOLLOW: i32 = 0x0100;
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+const O_NOFOLLOW: i32 = 0o400_000;
+
+/// Held while reading or writing one vault file (short).
+fn write_lock(dir: &Path) -> Result<FileLock> {
+    FileLock::acquire(
+        &dir.join(LOCK_FILE),
+        LOCK_WAIT,
+        "another Logos Kit process is writing the vault",
+    )
 }
 
-#[cfg(not(unix))]
-fn private_file(path: &Path) -> Result<File> {
-    Ok(OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)?)
-}
-
-/// Replace `dest` atomically with `bytes` (staged file + fsync + rename + dir fsync).
-fn atomic_write(dir: &Path, bytes: &[u8]) -> Result<()> {
-    let staged = dir.join(STAGED_FILE);
+/// Create `path` (and parents) owner-only (0700 on unix).
+pub fn private_dir(path: &Path) -> Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
     {
-        let mut f = private_file(&staged)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
+        use std::os::unix::fs::DirBuilderExt as _;
+        builder.mode(0o700);
     }
-    fs::rename(&staged, dir.join(VAULT_FILE))?;
+    builder
+        .create(path)
+        .with_context(|| format!("create {}", path.display()))
+}
+
+/// Atomically replace `dir/name` with `bytes`: a fresh randomly named temp
+/// file (exclusive create, 0600 on unix, so no pre-planted file or symlink is
+/// ever written through), fsync, rename, fsync the directory. A crash leaves
+/// the old file or the new one, never a torn one.
+pub fn atomic_write(dir: &Path, name: &str, bytes: &[u8]) -> Result<()> {
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".staged-")
+        .tempfile_in(dir)?;
+    tmp.write_all(bytes)?;
+    tmp.as_file().sync_all()?;
+    tmp.persist(dir.join(name)).map_err(|e| e.error)?;
     // Without this the rename is atomic but may not survive power loss.
     #[cfg(unix)]
     File::open(dir)?.sync_all()?;
@@ -210,8 +226,8 @@ impl Vault {
         cost: KdfCost,
     ) -> Result<Self> {
         let dir = dir.into();
-        fs::create_dir_all(&dir)?;
-        let _lock = DirLock::acquire(&dir)?;
+        private_dir(&dir)?;
+        let _lock = write_lock(&dir)?;
         ensure!(
             !Self::exists(&dir),
             "a vault already exists in {}",
@@ -234,7 +250,7 @@ impl Vault {
     /// and a tampered file both fail the AEAD tag with the same error.
     pub fn unlock(dir: impl Into<PathBuf>, password: &str) -> Result<(Self, Zeroizing<Vec<u8>>)> {
         let dir = dir.into();
-        let _lock = DirLock::acquire(&dir)?;
+        let _lock = write_lock(&dir)?;
         let file: VaultFile =
             serde_json::from_slice(&fs::read(dir.join(VAULT_FILE)).context("read vault")?)
                 .context("vault is not valid JSON")?;
@@ -272,7 +288,7 @@ impl Vault {
 
     /// Re-encrypt `plaintext` under the session key (new nonce every time).
     pub fn save(&self, plaintext: &[u8]) -> Result<()> {
-        let _lock = DirLock::acquire(&self.dir)?;
+        let _lock = write_lock(&self.dir)?;
         self.write_locked(plaintext)
     }
 
@@ -285,7 +301,7 @@ impl Vault {
         let mut salt = [0_u8; 16];
         OsRng.fill_bytes(&mut salt);
         let key = derive(new, &salt, self.cost)?;
-        let _lock = DirLock::acquire(&self.dir)?;
+        let _lock = write_lock(&self.dir)?;
         let previous = (self.salt, std::mem::replace(&mut self.key, key));
         self.salt = salt;
         if let Err(e) = self.write_locked(plaintext) {
@@ -317,17 +333,22 @@ impl Vault {
             nonce: B64.encode(nonce),
             ciphertext: B64.encode(ciphertext),
         };
-        atomic_write(&self.dir, &serde_json::to_vec_pretty(&file)?)
+        atomic_write(&self.dir, VAULT_FILE, &serde_json::to_vec_pretty(&file)?)
     }
 }
 
 /// LEZ `StorageBackend` over a [`Vault`]. LEZ saves after every synced block;
 /// this keeps the newest bytes in memory and writes at most once per
-/// `interval`, plus on [`EncryptedBackend::flush`] (call it on lock/exit).
+/// `interval`, plus on [`EncryptedBackend::flush`] and on drop.
+///
+/// Owns the vault's session lock for its lifetime: a second process (CLI vs
+/// Basecamp module) cannot open the same zone, so neither can overwrite the
+/// other's newer state or undo its password change.
 pub struct EncryptedBackend {
     vault: Vault,
     interval: Duration,
     state: Mutex<Pending>,
+    _session: FileLock,
 }
 
 struct Pending {
@@ -336,28 +357,48 @@ struct Pending {
 }
 
 impl EncryptedBackend {
-    pub fn new(vault: Vault, interval: Duration) -> Self {
-        Self {
+    pub fn new(vault: Vault, interval: Duration) -> Result<Self> {
+        let session = FileLock::acquire(
+            &vault.dir.join(SESSION_LOCK_FILE),
+            Duration::ZERO,
+            "this wallet is open in another Logos Kit process (Basecamp or the CLI); close it there first",
+        )?;
+        Ok(Self {
             vault,
             interval,
             state: Mutex::new(Pending {
                 bytes: None,
                 last_write: None,
             }),
-        }
+            _session: session,
+        })
     }
 
-    /// Write any pending bytes now.
+    /// Write any pending bytes now. Pending bytes are only dropped once written.
     pub fn flush(&self) -> Result<()> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| anyhow::anyhow!("vault backend poisoned"))?;
-        if let Some(bytes) = state.bytes.take() {
-            self.vault.save(&bytes)?;
+        Self::write_pending(&self.vault, &mut state)
+    }
+
+    fn write_pending(vault: &Vault, state: &mut Pending) -> Result<()> {
+        if let Some(bytes) = &state.bytes {
+            vault.save(bytes)?;
+            state.bytes = None;
             state.last_write = Some(Instant::now());
         }
         Ok(())
+    }
+}
+
+impl Drop for EncryptedBackend {
+    fn drop(&mut self) {
+        // Best effort: a session dropped without lock() still persists.
+        if let Ok(mut state) = self.state.lock() {
+            let _ = Self::write_pending(&self.vault, &mut state);
+        }
     }
 }
 
@@ -381,15 +422,11 @@ impl wallet::storage::StorageBackend for EncryptedBackend {
             .lock()
             .map_err(|_| anyhow::anyhow!("vault backend poisoned"))?;
         state.bytes = Some(Zeroizing::new(bytes.to_vec()));
-        let due = state
+        if state
             .last_write
-            .is_none_or(|t| t.elapsed() >= self.interval);
-        if due {
-            let pending = state.bytes.take();
-            if let Some(pending) = pending {
-                self.vault.save(&pending)?;
-                state.last_write = Some(Instant::now());
-            }
+            .is_none_or(|t| t.elapsed() >= self.interval)
+        {
+            Self::write_pending(&self.vault, &mut state)?;
         }
         Ok(())
     }
@@ -398,7 +435,7 @@ impl wallet::storage::StorageBackend for EncryptedBackend {
 impl EncryptedBackend {
     /// Decrypt the file with the session key (no KDF run).
     fn reread(&self) -> Result<Zeroizing<Vec<u8>>> {
-        let _lock = DirLock::acquire(&self.vault.dir)?;
+        let _lock = write_lock(&self.vault.dir)?;
         let file: VaultFile = serde_json::from_slice(&fs::read(self.vault.dir.join(VAULT_FILE))?)?;
         let nonce_bytes = B64.decode(&file.nonce)?;
         ensure!(nonce_bytes.len() == 24, "vault nonce must be 24 bytes");

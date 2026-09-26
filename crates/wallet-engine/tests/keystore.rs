@@ -108,7 +108,7 @@ fn keystore_change_password() {
 fn keystore_backend_debounces_block_saves() {
     let dir = tempfile::tempdir().unwrap();
     let vault = Vault::create(dir.path(), "pw", b"block-0", COST).unwrap();
-    let backend = EncryptedBackend::new(vault, Duration::from_secs(3600));
+    let backend = EncryptedBackend::new(vault, Duration::from_secs(3600)).unwrap();
 
     backend.save(b"block-1").unwrap(); // first save writes
     backend.save(b"block-2").unwrap(); // within the interval: buffered
@@ -131,5 +131,41 @@ fn keystore_backend_debounces_block_saves() {
         backend.load().unwrap().as_deref(),
         Some(&b"block-2"[..]),
         "reads back from disk after flush"
+    );
+}
+
+#[test]
+fn keystore_one_session_per_vault() {
+    let dir = tempfile::tempdir().unwrap();
+    let first = EncryptedBackend::new(
+        Vault::create(dir.path(), "pw", b"state", COST).unwrap(),
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    // A second process (CLI vs Basecamp) must not open the same vault.
+    let (again, _) = Vault::unlock(dir.path(), "pw").unwrap();
+    let err = EncryptedBackend::new(again, Duration::from_secs(1))
+        .err()
+        .unwrap();
+    assert!(err.to_string().contains("open in another"), "{err}");
+    drop(first);
+    let (again, _) = Vault::unlock(dir.path(), "pw").unwrap();
+    assert!(
+        EncryptedBackend::new(again, Duration::from_secs(1)).is_ok(),
+        "released on drop"
+    );
+}
+
+#[test]
+fn keystore_drop_persists_buffered_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = Vault::create(dir.path(), "pw", b"block-0", COST).unwrap();
+    let backend = EncryptedBackend::new(vault, Duration::from_secs(3600)).unwrap();
+    backend.save(b"block-1").unwrap();
+    backend.save(b"block-2").unwrap(); // buffered
+    drop(backend); // no explicit flush
+    assert_eq!(
+        Vault::unlock(dir.path(), "pw").unwrap().1.as_slice(),
+        b"block-2"
     );
 }
