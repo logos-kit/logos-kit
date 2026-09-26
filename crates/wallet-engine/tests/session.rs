@@ -213,3 +213,29 @@ fn wallet_engine_noop() -> impl wallet::sync_observer::SyncObserver {
     impl wallet::sync_observer::SyncObserver for Noop {}
     Noop
 }
+
+#[test]
+fn zone_state_is_never_deleted_on_a_guess() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = || DataDir::new(dir.path());
+    let (session, _) = Session::create(data(), "pw", Zone::local(), COST).unwrap();
+    session.lock().unwrap();
+
+    // An alias of an existing zone on a case-insensitive disk is refused.
+    let mut alias = Zone::local();
+    alias.id = "LEZ-LOCAL".into();
+    assert!(Session::unlock(data(), "pw", alias).is_err());
+
+    // A zone vault whose key the keys vault doesn't have (keys vault rolled
+    // back) is refused and left in place, not replaced.
+    let stray = dir.path().join("zones/lez-other");
+    std::fs::create_dir_all(&stray).unwrap();
+    std::fs::copy(
+        dir.path().join("zones/lez-local/vault.json"),
+        stray.join("vault.json"),
+    )
+    .unwrap();
+    let before = std::fs::read(stray.join("vault.json")).unwrap();
+    assert!(Session::unlock(data(), "pw", other_zone()).is_err());
+    assert_eq!(std::fs::read(stray.join("vault.json")).unwrap(), before);
+}

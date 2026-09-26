@@ -97,11 +97,12 @@ impl Zone {
     fn check(&self) -> Result<()> {
         ensure!(
             !self.id.is_empty()
-                && self
-                    .id
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
-            "zone id must be letters, digits, '-' or '_'"
+                && self.id.bytes().all(|b| b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || b == b'-'
+                    || b == b'_'),
+            // Lowercase only: on case-insensitive disks `A` and `a` are one directory.
+            "zone id must be lowercase letters, digits, '-' or '_'"
         );
         ensure!(
             self.chain.starts_with("lez:"),
@@ -200,7 +201,7 @@ struct Secrets {
     zone_keys: Vec<ZoneKey>,
 }
 
-#[derive(Serialize, Deserialize, Zeroize)]
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 struct ZoneKey {
     zone: String,
     /// Base64 of the 32-byte zone vault key.
@@ -267,8 +268,24 @@ impl KeysRecord {
         serde_json::from_slice(bytes).context("keys vault contents")
     }
 
+    /// Serialized into a buffer sized up front, so no reallocation leaves a
+    /// stray copy of the phrase in freed memory.
     fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>> {
-        Ok(Zeroizing::new(serde_json::to_vec(self)?))
+        struct Count(usize);
+        impl std::io::Write for Count {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0 += buf.len();
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut count = Count(0);
+        serde_json::to_writer(&mut count, self)?;
+        let mut out = Zeroizing::new(Vec::with_capacity(count.0));
+        serde_json::to_writer(&mut *out, self)?;
+        Ok(out)
     }
 }
 
@@ -308,7 +325,9 @@ pub enum AccountKind {
 /// How a restore should pick its starting point for private-note scanning.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Birthday {
-    /// The wallet was first used around this time (unix ms).
+    /// The wallet was first used around this time (unix ms). Private notes
+    /// older than this (minus a day) are not scanned, so a date that is too
+    /// late hides those notes and discovery drops their accounts.
     At(u64),
     /// Scan the whole chain (slow on a long chain; always complete).
     Genesis,
@@ -379,6 +398,11 @@ pub struct ZoneStatus {
     pub auto_lock_secs: u32,
 }
 
+enum Failure {
+    Network(anyhow::Error),
+    Local(anyhow::Error),
+}
+
 enum Net {
     Idle,
     Online {
@@ -401,7 +425,8 @@ fn backoff(attempts: u32) -> Duration {
     half + Duration::from_millis(jitter_ms)
 }
 
-/// Failed re-auth attempts on phrase reveal: free for 3, then doubling waits.
+/// Failed re-auth attempts (phrase reveal, password change): after the 3rd
+/// wrong password, doubling waits (1 s … 5 min) before the next try.
 #[derive(Default)]
 struct RevealThrottle {
     failures: u32,
@@ -459,19 +484,21 @@ fn with_privacy(kind: AccountKind, account_id: &str) -> Result<AccountIdWithPriv
 
 /// Accounts derived from the layered tree (everything but the root `/`).
 fn layered_counts(storage: &Storage) -> Counts {
+    // Distinct tree paths: one private node can carry several account ids,
+    // and imported accounts have no path.
     let keys = storage.key_chain();
-    let non_root = |path: Option<String>| path.is_some_and(|p| p != "/");
-    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let count = |paths: BTreeSet<String>| u32::try_from(paths.len()).unwrap_or(u32::MAX);
+    let tree_path = |path: Option<String>| path.filter(|p| p != "/");
     Counts {
         public: count(
             keys.public_account_ids()
-                .filter(|(_, p)| non_root(p.map(ToString::to_string)))
-                .count(),
+                .filter_map(|(_, p)| tree_path(p.map(ToString::to_string)))
+                .collect(),
         ),
         private: count(
             keys.private_account_ids()
-                .filter(|(_, p)| non_root(p.map(ToString::to_string)))
-                .count(),
+                .filter_map(|(_, p)| tree_path(p.map(ToString::to_string)))
+                .collect(),
         ),
     }
 }
@@ -619,41 +646,49 @@ impl Session {
         let config_path = data.write_zone_config(&zone)?;
         let context = zone.vault_context();
 
-        let (vault, storage) = match record.secrets.zone_key(&zone.id)? {
+        let key = record.secrets.zone_key(&zone.id)?;
+        let (vault, storage) = match key {
             Some(key) if Vault::exists(&dir) => {
                 let (vault, bytes) = Vault::unlock_keyed(&dir, key, &context)?;
                 (vault, Storage::from_bytes(&bytes)?)
             }
-            _ => {
-                // A vault without a recorded key is left over from a crash
-                // between writing it and recording its key: it only ever held
-                // state derived from the phrase, so start that zone over.
-                if Vault::exists(&dir) {
-                    std::fs::remove_file(dir.join("vault.json"))?;
-                }
+            None if Vault::exists(&dir) => {
+                // Zone state (imported keys, notes) is never deleted on a guess:
+                // this happens only if the keys vault was rolled back.
+                bail!(
+                    "{} holds a zone vault this wallet has no key for (keys vault restored from an older copy?); move it away to start this zone over",
+                    dir.display()
+                );
+            }
+            key => {
                 let storage = match fresh {
                     Some(storage) => storage,
                     None => Self::derive_zone_storage(&record)?,
                 };
-                let key = new_key();
-                let vault = Vault::create_keyed(
-                    &dir,
-                    key.clone(),
-                    &context,
-                    &Zeroizing::new(storage.to_bytes()?),
-                )?;
-                record.secrets.set_zone_key(&zone.id, &key);
-                if !record.meta.restored {
-                    record.meta.discovered.insert(zone.id.clone());
-                }
+                // Record the key before writing the vault: a crash in between
+                // leaves a key without a vault, which the next open recreates.
+                let key = match key {
+                    Some(key) => key,
+                    None => {
+                        let key = new_key();
+                        record.secrets.set_zone_key(&zone.id, &key);
+                        if !record.meta.restored {
+                            record.meta.discovered.insert(zone.id.clone());
+                        }
+                        keys.save(&record.to_bytes()?)?;
+                        key
+                    }
+                };
+                let vault =
+                    Vault::create_keyed(&dir, key, &context, &Zeroizing::new(storage.to_bytes()?))?;
                 (vault, storage)
             }
         };
 
         if !record.meta.zones.contains(&zone) {
             record.meta.zones.push(zone.clone());
+            keys.save(&record.to_bytes()?)?;
         }
-        keys.save(&record.to_bytes()?)?;
         data.write_zones_hint(&record.meta.zones)?;
 
         let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL)?);
@@ -717,8 +752,8 @@ impl Session {
                 return Ok(());
             }
         };
-        // Keep a copy: WalletCore::new consumes the storage even when it fails.
-        let fallback = Storage::from_bytes(&Zeroizing::new(storage.to_bytes()?))?;
+        // Keep the bytes: WalletCore::new consumes the storage even when it fails.
+        let fallback = Zeroizing::new(storage.to_bytes()?);
         match WalletCore::new_with_storage_backend(
             self.config_path.clone(),
             // LEZ installs a plaintext FileBackend at this path before swapping
@@ -736,7 +771,7 @@ impl Session {
                 Ok(())
             }
             Err(e) => {
-                self.link = Link::Offline(Box::new(fallback));
+                self.link = Link::Offline(Box::new(Storage::from_bytes(&fallback)?));
                 Err(e.context(format!("can't reach {}", self.zone.sequencer)))
             }
         }
@@ -817,6 +852,12 @@ impl Session {
     /// Derive the next account of `kind` (the same key-chain calls LEZ's
     /// `WalletCore::create_new_account_*` make) and persist it right away.
     pub fn new_account(&mut self, kind: AccountKind) -> Result<AccountInfo> {
+        // The discovery tree fills every slot above its depth, so an account
+        // made now would land outside it and not match other zones.
+        ensure!(
+            !self.discovering(),
+            "still finding this wallet's accounts; sync once, then add accounts"
+        );
         let keys = self.storage_mut()?.key_chain_mut();
         let (id, path) = match kind {
             AccountKind::Public => keys.generate_new_public_transaction_private_key(None),
@@ -825,15 +866,11 @@ impl Session {
             }
         };
         self.persist_now()?;
-        // While discovery runs, this zone's tree is the oversized discovery
-        // tree; its counts are recorded when discovery finishes.
-        if !self.discovering() {
-            let counts = layered_counts(self.storage()?);
-            self.update_meta(|meta| {
-                meta.accounts.public = meta.accounts.public.max(counts.public);
-                meta.accounts.private = meta.accounts.private.max(counts.private);
-            })?;
-        }
+        let counts = layered_counts(self.storage()?);
+        self.update_meta(|meta| {
+            meta.accounts.public = meta.accounts.public.max(counts.public);
+            meta.accounts.private = meta.accounts.private.max(counts.private);
+        })?;
         Ok(AccountInfo {
             account_id: id.to_string(),
             kind,
@@ -853,6 +890,15 @@ impl Session {
             .find(|a| a.account_id == account_id)
             .context("no such account in this wallet")?;
         let id = with_privacy(account.kind, account_id)?;
+        if let Some(label) = &label
+            && self
+                .meta
+                .labels
+                .iter()
+                .any(|(other, l)| l == label && other != account_id)
+        {
+            bail!("another account is already called {label:?}");
+        }
         let storage = self.storage_mut()?;
         if let Some(label) = &label
             && let Some(other) = storage.resolve_label(&Label::new(label))
@@ -902,7 +948,9 @@ impl Session {
                 self.net = Net::Online { tip };
                 Ok(tip)
             }
-            Err(e) => {
+            // Local failures (disk, bookkeeping) are not an outage.
+            Err(Failure::Local(e)) => Err(e),
+            Err(Failure::Network(e)) => {
                 let attempts = match &self.net {
                     Net::Offline { attempts, .. } => attempts + 1,
                     _ => 1,
@@ -924,24 +972,26 @@ impl Session {
         }
     }
 
-    async fn sync_inner(&mut self, observer: &mut dyn SyncObserver) -> Result<u64> {
-        self.connect().await?;
+    async fn sync_inner(&mut self, observer: &mut dyn SyncObserver) -> Result<u64, Failure> {
+        use Failure::{Local, Network};
+        self.connect().await.map_err(Network)?;
         let birthday = self.meta.birthday_ms;
-        let core = self.core_mut().context("not connected")?;
+        let core = self.core_mut().context("not connected").map_err(Local)?;
         if core.storage().last_synced_block() == 0
             && let Some(birthday) = birthday
         {
-            let first =
-                first_block_at_or_after(core, birthday.saturating_sub(BIRTHDAY_MARGIN_MS)).await?;
+            let first = first_block_at_or_after(core, birthday.saturating_sub(BIRTHDAY_MARGIN_MS))
+                .await
+                .map_err(Network)?;
             core.storage_mut()
                 .set_last_synced_block(first.saturating_sub(1));
         }
         let result = core.sync_to_latest_block_with_observer(observer).await;
         // Persist whatever was synced, even if sync stopped part-way.
-        self.backend.flush()?;
-        let tip = result?;
+        self.backend.flush().map_err(Local)?;
+        let tip = result.map_err(Network)?;
         if self.discovering() {
-            self.finish_discovery().await?;
+            self.finish_discovery().await.map_err(Network)?;
         }
         Ok(tip)
     }
@@ -958,6 +1008,17 @@ impl Session {
                 async move { client.get_account(id).await.map_err(anyhow::Error::from) }
             })
             .await?;
+        // Cleanup keeps a prefix of the layered order, so topping up to the
+        // wallet's known counts rebuilds exactly the other zones' accounts.
+        let want = self.meta.accounts;
+        let have = layered_counts(self.storage()?);
+        let keys = self.storage_mut()?.key_chain_mut();
+        for _ in have.public..want.public {
+            keys.generate_new_public_transaction_private_key(None);
+        }
+        for _ in have.private..want.private {
+            keys.generate_new_privacy_preserving_transaction_key_chain(None);
+        }
         self.persist_now()?;
         let counts = layered_counts(self.storage()?);
         let zone = self.zone.id.clone();
@@ -1009,14 +1070,9 @@ impl Session {
     }
 
     /// The recovery phrase, after re-entering the password. Wrong passwords
-    /// are throttled (3 free tries, then doubling waits up to 5 minutes).
+    /// are throttled (see `RevealThrottle`).
     pub fn reveal_phrase(&mut self, password: &str) -> Result<Zeroizing<String>> {
-        self.reveal.check()?;
-        if !self.keys.verify_password(password)? {
-            self.reveal.fail();
-            bail!("wrong password");
-        }
-        self.reveal = RevealThrottle::default();
+        self.verify_current(password)?;
         let record = KeysRecord::parse(&self.keys.read()?)?;
         Ok(Zeroizing::new(record.secrets.phrase.clone()))
     }
@@ -1024,8 +1080,21 @@ impl Session {
     /// New password. Only the keys vault is rewritten (zone vaults are keyed).
     pub fn change_password(&mut self, current: &str, new: &str) -> Result<()> {
         ensure!(!new.is_empty(), "the new password is empty");
+        self.verify_current(current)?;
         let bytes = self.keys.read()?;
         self.keys.change_password(current, new, &bytes)
+    }
+
+    /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be
+    /// used to guess its own password.
+    fn verify_current(&mut self, password: &str) -> Result<()> {
+        self.reveal.check()?;
+        if !self.keys.verify_password(password)? {
+            self.reveal.fail();
+            bail!("wrong password");
+        }
+        self.reveal = RevealThrottle::default();
+        Ok(())
     }
 
     fn update_meta(&mut self, f: impl FnOnce(&mut Meta)) -> Result<()> {

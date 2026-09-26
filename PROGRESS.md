@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S0 wrap-up: proving benchmarks E1–E4 + `RISC0_KECCAK_PO2` (pins.md), then `/code-review` for S0+S1-so-far. S1 continues on `stage/01-protocol`: LEZ fork patches, typify → `crates/lwsp-types`, Nix build of the engine.
+**Next action:** S3 on `stage/03-policy`: policy authority, approvals, tx prepare/prove/sign, preflight, `logos-kit` CLI. Storybook run stays queued before S7.
 
 ---
 
@@ -133,20 +133,33 @@ The single place to resume from after a context clear.
 
 ## Stage S2 · Keystore, accounts, zones, sync, E2E harness, branch `stage/02-keystore`
 
-**Status:** in progress (started 2026-09-26, while the S1 Linux build finishes)
+**Status:** done (2026-09-26)
 
 - [x] `vault.v1` (`crates/wallet-engine/src/vault.rs`): Argon2id (64 MiB/t3/p1; bounds on load 19 MiB–1 GiB, t 2–10, p 1–8) → XChaCha20-Poly1305, header as AAD, lock file + staged 0600 + fsync + rename + dir fsync, `Zeroizing`. `EncryptedBackend` = LEZ `StorageBackend` (patch 0001) with debounced saves + flush. Proof: `tests/keystore.rs` 5 passed (round trip, wrong password, header tamper/bounds, crash mid-write, password change, debounce) (`87db62c`)
 - [x] Session + zones (`session.rs`): `keys/` vault holds the phrase, `zones/<id>/` holds LEZ Storage per zone; offline-first (create/restore/unlock/accounts/new account without a sequencer; `connect()` builds `WalletCore`, stays offline and usable on failure). Proof: `tests/session.rs` 2 passed (`ec81a10`)
 - [x] E2E harness `e2e/standalone.sh` (standalone `sequencer_service` from vendor/lez, `RISC0_DEV_MODE=1`, debug genesis, loopback :3040; needs `r0vm` 3.0.5 via rzup). `just e2e`. Fingerprint: version 0.3
 - [x] Integration-confidence #2 (network half): `tests/e2e_sync.rs` creates public + private accounts, connects, syncs (observer `start 1..=3`, `finish 3`), sync position survives lock/unlock (`9653513`)
-- [ ] Labels, import birthday, persisted indexes, auto-lock, mnemonic reveal with re-auth (engine API), network-drop backoff + offline banner state
+- [x] **Key hierarchy** (`vault.rs`, `session.rs`): password → Argon2id **once** → keys vault (phrase + a random key per zone + authenticated wallet metadata). Zone vaults are keyed (`"kdf":{"alg":"none","context":"zone:<id>"}`, context in the AAD, so a swapped file fails). Password change rewrites one file. One exclusive `.session.lock` per wallet dir. Closes the follow-ups "derive once per unlock", "authenticate zones.json" (the keys-vault zone list is authoritative; a zone whose URL changed is refused) and the cross-zone swap (`34ea69b`)
+- [x] Labels in LEZ's own label map (official CLI sees them) via LEZ patch **0006 `Storage::remove_label`**, mirrored in keys-vault meta so new zones get them; unique, trimmed, ≤32 chars
+- [x] Restore date: new wallets = creation time, restore = a date or genesis; first sync of a zone binary-searches block timestamps (ms) and skips older blocks (1-day margin)
+- [x] Persisted indexes + restore discovery: layered account counts in meta, replayed on every new zone (same accounts everywhere); restore derives a depth-6 tree (LEZ `restore-keys` semantics), prunes unused after the first sync
+- [x] Auto-lock (`auto_lock.rs`, 1 min–24 h, default 15 min; checked on every use + host timer `tick`), `reveal_phrase(password)` (3 free tries, then doubling waits ≤5 min), `change_password`
+- [x] Network drops: `NetStatus` Idle/Online{tip}/Offline{attempts, retryInMs, error} for the banner; capped exponential backoff + jitter (1 s → 60 s), fail-fast inside the window, `retry_now`. Proof: `cargo test -p wallet-engine` 19 passed; E2E on standalone: `e2e_create_accounts_and_sync` ok (fresh wallet scan starts at block 2: genesis carries an old timestamp), `e2e_restore_skips_blocks_before_birthday_and_discovers` ok (`mid 3 … start 3..=7`; `discovery tree 64 accounts → 2`). A used account surviving discovery gets its proof in S3 once we can send
 - [x] Security review (S2 keystore): 12 findings, none critical. **Fixed:** one session per vault (exclusive `.session.lock`; blocks CLI/Basecamp lost updates and a password change being undone), pending saves kept until written + flush on drop + flush after a failed sync, all writes via random-name exclusive temp files (0600) + atomic rename, lock opened `O_NOFOLLOW`, data dirs 0700, zones/config written atomically, `Zeroizing` around serialized storage, `bip39`/`argon2` zeroize features, LEZ's plaintext `FileBackend` pointed at a never-read path, zone URL validated before any write + rollback of a failed create, KDF ceiling 256 MiB/t6/p4, phrase-taking FFI method test-only. Proof: engine tests 16 passed incl. 2 new regressions; E2E sync passes
-- [ ] Security follow-ups (tracked): file role + zone id + write counter in the AAD (rollback / cross-zone swap), authenticate `zones.json` (keys vault or MAC), derive once per unlock (3 Argon2 runs today), zeroize-on-drop for LEZ `Storage` (LEZ patch), Windows owner-only ACL + exclusive lock
-- [ ] Code review
+- [ ] Security follow-ups (tracked): write counter in the AAD (rollback to an older vault file), zeroize-on-drop for LEZ `Storage` (LEZ patch), Windows owner-only ACL + exclusive lock. (Zone-id binding, authenticated zone list and one Argon2 per unlock are done above.)
+- [x] Code review + security review of the S2 additions (`34ea69b`), 14 findings, all fixed or documented in the fix commit:
+  - **security high:** the "orphan vault" cleanup could delete a real zone vault (case-alias zone id on case-insensitive disks; keys vault rolled back). Now zone ids are lowercase-only, the zone key is recorded *before* its vault is written, and a keyless vault is refused, never deleted (regression test `zone_state_is_never_deleted_on_a_guess`)
+  - **security medium:** `change_password` was an unthrottled password oracle → one throttled `verify_current` for reveal + change
+  - **security low:** `ZoneKey` zeroize-on-drop; keys record serialized into an exact-capacity zeroizing buffer
+  - **code:** no new accounts while discovery runs; after cleanup, top up to the wallet's known counts (accounts match across zones); counts = distinct tree paths; auto-lock also measures wall time (sleep counts); only network failures enter backoff; label uniqueness across zones; `AutoLock::set` keeps the new session if the old flush fails; restore-date caveat documented; connect keeps bytes, not a second `Storage`
+  - Accepted: a password change does not rotate zone keys (an old keys-vault copy + old password still opens zone vaults; it already holds the phrase). Proof: `cargo test -p wallet-engine` 21 passed; E2E 2 passed (`start 3..=6`, `64 → 2`)
 
 ### Exit criteria
-- [x] Logos Kit creates accounts and syncs against the standalone sequencer (proof above)
+- [x] Logos Kit creates accounts and syncs against the standalone sequencer (proof above). **S2 complete (2026-09-26).**
 
 ### Decisions and deviations
 - 2026-09-26: **Offline-first session.** `WalletCore::new` fails with "Failed to find leader" when no sequencer answers, so the session keeps LEZ `Storage` itself until `connect()`. Creating, restoring and unlocking a wallet never need the network.
 - 2026-09-26: Keys and per-zone state are separate vaults under one password: adding a zone restores the same phrase, so accounts match across zones (LP-0022).
+- 2026-09-26: **Key hierarchy instead of one password per vault.** With password-sealed zone vaults a password change had to rewrite every vault (a crash mid-way splits them across two passwords) and each unlock ran Argon2 up to 3×. Zone vaults now use random keys held in the keys vault. Nothing is released, so there is no migration.
+- 2026-09-26: `xtask lez-export` keeps patch file names and uses `--zero-commit`, so exports are deterministic (the 0001–0005 diffs in `29fb76e` are header-only).
+- 2026-09-26: The engine now depends on LEZ's `sequencer_service_rpc` (client) for discovery's account lookups; the Nix engine build picks it up from the same vendored tree (re-verify with the next lgx build).
