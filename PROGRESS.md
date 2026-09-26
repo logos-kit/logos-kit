@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S0: when the inspector-enabled Basecamp build finishes, install the 3 `.lgx` into `--user-dir /tmp/lk-bc` with lgpm, run the identity-hop and sandbox probes (QML Inspector MCP), and record the results.
+**Next action:** S0 wrap-up: proving benchmarks E1–E4 + `RISC0_KECCAK_PO2` (pins.md), then `/code-review` for S0+S1-so-far. S1 continues on `stage/01-protocol`: LEZ fork patches, typify → `crates/lwsp-types`, Nix build of the engine.
 
 ---
 
@@ -39,11 +39,12 @@ The single place to resume from after a context clear.
 - [x] `modules/logos_kit_wallet` (rust-module template; `ping`, `whoami`, `pinged` event). The `path:../..` pattern is deferred to S1 (external-staticlib pattern from widespread)
 - [x] `modules/logos_kit_wallet_ui` (imports Logos.Theme/Controls, paints its own bg, provides `lez.wallet.connect`, answers with probe data). A dependency needs a flake input named like the dep (`logos_kit_wallet.url = "path:../logos_kit_wallet"`) because the builder reads its LIDL
 - [x] `modules/probe_dapp` (throwaway; direct call, intent, sandbox probes)
-- [ ] Identity-hop probe: `requesterName` vs `current_caller()`. Record the result and the grant-key rule
-- [ ] QML sandbox probes: Canvas paint, OS-opener path, bundled SVG, `textFormat`
+- [x] Identity-hop probe: `requesterName` vs `current_caller()`. Result and grant-key rule under *Probe results*
+- [x] QML sandbox probes: Canvas paint, OS-opener path, bundled SVG, `textFormat` (results below; screenshots in `docs/reviews/s0/`)
 
 ### QA tooling
-- [ ] Build `logos-qt-mcp`; run the design-system storybook
+- [x] Build `logos-qt-mcp` (`MCP EXIT 0`; driven from Node via `test-framework/framework.mjs` over TCP :3768)
+- [ ] Run the design-system storybook (before S7)
 
 ### Design and chain tooling
 - [x] Brand assets: official marks and lockups from guide.logos.co → `assets/logos/logos/`, recorded in `docs/design/brand.md`
@@ -56,8 +57,8 @@ The single place to resume from after a context clear.
 
 ### Exit criteria
 - [x] `nix build ./modules/logos_kit_wallet#lgx-portable` succeeds on darwin-arm64. Proof: `EXIT 0`, `Added variant 'darwin-arm64' … logos-logos_kit_wallet-module-lib.lgx` (first build about 25 min). `logos_kit_wallet_ui` and `probe_dapp` lgx-portable builds also exit 0
-- [ ] The module loads in Basecamp and answers `ping` via `logos.callModuleAsync`
-- [ ] The probe results are recorded below
+- [x] The module loads in Basecamp and answers `ping` via `logos.callModuleAsync`. Proof: wallet UI shows `core: {"module":"logos_kit_wallet","ok":true,"version":"0.1.0"}` (`docs/reviews/s0/bc-wallet.png`)
+- [x] The probe results are recorded below
 - [x] `pnpm i && pnpm check` is green
 - [ ] `/code-review` run; findings recorded
 
@@ -72,13 +73,49 @@ The single place to resume from after a context clear.
   - Commands: `logosctl --config-dir <tmp> package install -y <lgx>` → `module load logos_kit_wallet` → `call logos_kit_wallet ping` / `whoami`.
   - Result: installed (unsigned, 0.1.0); loaded; `ping` → `{"module":"logos_kit_wallet","ok":true,"version":"0.1.0"}`; `whoami` → `{"kind":"host"}`.
   - Conclusion: `current_caller()` works through the scaffold. A CLI caller shows up as `host`.
-- **Identity hop and QML sandbox:** waiting on the inspector-enabled Basecamp (`nix build .#bin-bundle-dir-inspector` in `refs/basecamp/logos-basecamp` @2c20227).
+- **Basecamp run (2026-09-26, inspector build `bin-bundle-dir-inspector` @2c20227, portable, macOS arm64).**
+  - Install: `lgpm --modules-dir /tmp/lk-bc/modules --ui-plugins-dir /tmp/lk-bc/plugins --allow-unsigned install --file <lgx-portable>` ×3, then `LogosBasecamp --user-dir /tmp/lk-bc`. Both apps appear in the sidebar (user-installed modules **are** discovered by this build). Inspector port is up ~57 s after launch.
+- **Identity hop.**
+  - dApp → core directly: core sees `{"kind":"module","name":"probe_dapp"}`.
+  - dApp → `lez.wallet.connect` intent → shell chooser ("Use this app?", provider listed by module id) → wallet UI gets `requesterName = "probe_dapp"`. When the wallet UI then calls the core, the core sees `{"kind":"module","name":"logos_kit_wallet_ui"}`.
+  - After `respond`, the shell returns focus to the requester.
+  - **Grant-key rule (S3):** `requester` = the module name. The shell's `requesterName` and `current_caller()` use the same namespace, so a grant made via an intent also matches that dApp's direct calls. The core can't see the original dApp on an intent hop; it trusts the `requester` only when relayed by `current_caller() == logos_kit_wallet_ui` (WalletUi). Any other module calling sensitive methods directly is `Module(name)` and needs a grant; `ui_*` methods are WalletUi-only.
+- **Sandbox.**
+  - `Qt.openUrlExternally("https://…")` → `false`; log: `Blocked URL import … scheme "https" is not allowed`. Links go through a core method (plan unchanged).
+  - Bundled SVG (`qml/logo.svg`) → `Image.Ready`, renders.
+  - **Canvas paints** in this build (green square visible). Deviation from the plan's caution: Canvas is allowed for QR/identicons on macOS; re-check on Linux in S7 before relying on it (Rectangle-grid fallback stays documented).
+  - `textFormat: Text.PlainText` shows `<b>bold?</b>` literally. The rule stands.
+  - `Logos.Theme/Controls/Icons` imports are redirected to the vetted design-system dir (log `Redirected Logos.Theme probe away from plugin tree`), confirming "import, never bundle".
 
 ### Local tools installed (user-level, `~/.local/share/logos-tools/`)
 - `lgpm` 0.2.1 (sha256 `56523ecb…d52cc`)
 - `logosctl` / `logoscore` 0.3.0 (sha256 `a49f7a41…402d7`)
 - Basecamp 0.3.0 release app in `~/Applications`
-- building: `basecamp-inspector` (bin-bundle-dir-inspector) and `logos-qt-mcp`
+- `basecamp-inspector` (bin-bundle-dir-inspector @2c20227) and `logos-qt-mcp`
+- Apple Metal Toolchain 17F109 (`xcodebuild -downloadComponent MetalToolchain`; required by risc0-sys on macOS, per LEZ `flake.nix`)
 
 ### Review
 (pending)
+
+---
+
+## Stage S1 · Protocol + engine links LEZ 0.3 + vectors, branch `stage/01-protocol`
+
+**Status:** in progress (started 2026-09-26)
+
+- [x] `@logos-kit/protocol` (LWS-0): TypeBox schemas → `schema/{lws0.schema.json,methods.json,intents.json}`; 12 methods, 6 notifications, 6 intents; `LezError` + codes. Proof: `publint --strict` and `attw --profile esm-only` pass; `dist/index.js` has no TypeBox import (`a97a3d1`)
+- [x] `crates/wallet-engine` links `wallet`, `lee` (`prove`), `lee_core`, `key_protocol`, `common` at the pinned rev. Proof: `cargo test -p wallet-engine` builds with real Metal kernels, 5 tests pass (`aff4502`)
+- [x] `cargo xtask vectors` → `protocol/vectors/{public_tx,keys}.json`: LEZ's 4 pinned message layouts, a signed native transfer (fixed aux rand, verified by LEZ's public verifier) incl. the `sendTransaction` base64 param and tx hash, public nodes `/`, `/0`, `/1`, `/0/0` (the wallet's layered order) and private nodes `/0`, `/1`
+- [x] Integration test #1 (Rust side): `crates/wallet-engine/tests/vectors.rs` decodes the committed bytes with LEZ and re-verifies. Proof: `cargo test -p wallet-engine` → `vectors_*` 4 passed
+- [ ] LEZ fork patches in `vendor/lez-patches/` (StorageBackend, SyncObserver, prepare/sign split, prove split, keycard feature)
+- [ ] typify → `crates/lwsp-types` (+ CI diff)
+- [ ] Nix build `.#logos_kit_wallet-lgx` with the engine (external-staticlib pattern; 2-day timebox, fallback C++ over wallet-ffi)
+
+### Exit criteria
+- [ ] `nix build .#logos_kit_wallet-lgx` on darwin-arm64 (+ Linux via CI/remote builder)
+- [x] `cargo test -p wallet-engine vectors` passes
+
+### Decisions and deviations
+- 2026-09-26: macOS builds of `lee/prove` need the Metal Toolchain (risc0-sys always compiles Metal kernels on macOS). Installed per LEZ's `flake.nix` note. `RISC0_SKIP_BUILD_KERNELS=1` is fine for `cargo check` only.
+- 2026-09-26: vectors derive keys through LEZ's real `KeyTree` API, not our own path walk. The official wallet's layered order is `/0`, `/1`, `/0/0`, which a naive derivation would get wrong.
+- 2026-09-26: the `keys.json` private entries embed LEZ's serde form of `KeyChain`, so the shape tracks upstream. Test mnemonic only (`abandon … about`), never funded.
