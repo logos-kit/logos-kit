@@ -37,3 +37,6 @@ coverage/
 
 # Linux lgx builds (from agari-box)
 /dist-linux/
+
+# Generated: LEZ at the pinned rev + vendor/lez-patches (cargo xtask lez-vendor)
+/vendor/lez/

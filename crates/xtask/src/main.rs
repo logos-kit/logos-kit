@@ -5,8 +5,11 @@
 //!   There is no version RPC; v0.3 exposes `getFeeState`, v0.2.x has `pinata`
 //!   in `getProgramIds`.
 //! - `vectors`: regenerate `protocol/vectors/*.json` from LEZ code (see vectors.rs).
+//! - `lez-vendor` / `lez-export`: materialize `vendor/lez` (LEZ rev + our
+//!   patches) / write its commits back to `vendor/lez-patches` (see lez.rs).
 //! - `types`: regenerate `crates/lwsp-types/src/generated.rs` from the LWS-0 JSON Schema.
 
+mod lez;
 mod types;
 mod vectors;
 
@@ -27,6 +30,8 @@ fn main() -> Result<()> {
             let url = args.get(1).map_or(DEFAULT_SEQUENCER, String::as_str);
             fingerprint(url)
         }
+        Some("lez-vendor") => lez::vendor(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")),
+        Some("lez-export") => lez::export(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")),
         Some("types") => {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
             types::run(&root)
@@ -36,7 +41,9 @@ fn main() -> Result<()> {
             vectors::run(&root)
         }
         _ => {
-            eprintln!("usage: cargo xtask <fingerprint [sequencer-url] | vectors | types>");
+            eprintln!(
+                "usage: cargo xtask <fingerprint [sequencer-url] | vectors | types | lez-vendor | lez-export>"
+            );
             std::process::exit(2);
         }
     }
