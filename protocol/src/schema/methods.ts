@@ -75,7 +75,7 @@ export const Notifications = {
   lez_accountsChanged: Type.Array(WalletAccount),
   lez_chainChanged: ChainId,
   lez_sessionChanged: Type.Union([Session, Null]),
-  lez_disconnect: Type.Object({ code: Type.Integer(), message: Type.String() }),
+  lez_disconnected: Type.Object({ code: Type.Integer(), message: Type.String() }),
   /** Handle-only: fetch details with lez_getTransactionStatus (caller-gated). */
   lez_transactionUpdated: Type.Object({ handle: Type.String() }),
   lez_capabilitiesChanged: Capabilities,

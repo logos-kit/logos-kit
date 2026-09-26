@@ -9,8 +9,11 @@ use std::{fs, path::PathBuf};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use common::transaction::LeeTransaction;
-use key_protocol::key_management::{key_tree::KeyTreePublic, secret_holders::SeedHolder};
-use lee::{PublicTransaction, public_transaction::Message};
+use key_protocol::key_management::{
+    key_tree::{KeyTreePrivate, KeyTreePublic, keys_public::ChildKeysPublic, traits::KeyTreeNode},
+    secret_holders::SeedHolder,
+};
+use lee::{PublicKey, PublicTransaction, Signature, public_transaction::Message};
 use serde_json::Value;
 
 fn load(name: &str) -> Value {
@@ -25,7 +28,14 @@ fn hex_field(v: &Value, key: &str) -> Vec<u8> {
 }
 
 #[test]
-fn vectors_rev_matches_engine() {
+fn vectors_rev_matches_engine_and_lockfile() {
+    let lock_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+    let lock = fs::read_to_string(lock_path).expect("Cargo.lock");
+    let pinned = format!("logos-execution-zone?rev={}#", wallet_engine::LEZ_REV);
+    assert!(
+        lock.contains(&pinned),
+        "Cargo.lock doesn't resolve LEZ at LEZ_REV"
+    );
     for name in ["public_tx.json", "keys.json"] {
         assert_eq!(
             load(name)["meta"]["lezRev"],
@@ -63,6 +73,14 @@ fn vectors_signed_transfer_verifies() {
         );
         assert_eq!(tx.hash().to_vec(), hex_field(tx_json, "hash"));
 
+        let msg: Message = borsh::from_slice(&hex_field(case, "borsh")).unwrap();
+        let sig: Signature = case["signature"].as_str().unwrap().parse().unwrap();
+        let pk: PublicKey = case["publicKey"].as_str().unwrap().parse().unwrap();
+        assert!(
+            sig.is_valid_for(&msg.hash(), &pk),
+            "listed signature must verify"
+        );
+
         let wire = B64
             .decode(case["rpc"]["sendTransactionParam"].as_str().unwrap())
             .unwrap();
@@ -76,7 +94,7 @@ fn vectors_signed_transfer_verifies() {
 }
 
 #[test]
-fn vectors_public_keys_match_wallet_derivation() {
+fn vectors_keys_match_wallet_derivation() {
     let v = load("keys.json");
     let mnemonic = bip39::Mnemonic::parse(v["mnemonic"].as_str().unwrap()).unwrap();
     assert_eq!(
@@ -84,19 +102,61 @@ fn vectors_public_keys_match_wallet_derivation() {
         v["seed"].as_str().unwrap()
     );
 
-    let mut tree = KeyTreePublic::new(&SeedHolder::from_mnemonic(&mnemonic, ""));
-    // Entry 0 is the root; the rest follow the official wallet's layered order.
-    for expected in &v["public"].as_array().unwrap()[1..] {
-        let (id, path) = tree.generate_new_public_node_layered().unwrap();
-        let node = tree.get_node(id).unwrap();
-        assert_eq!(path.to_string(), expected["path"].as_str().unwrap());
+    let seed = SeedHolder::from_mnemonic(&mnemonic, "");
+    let check = |expected: &Value, node: &ChildKeysPublic| {
         assert_eq!(
-            id.to_string(),
-            expected["accountId"]["base58"].as_str().unwrap()
+            hex::encode(node.sk.value()),
+            expected["sk"].as_str().unwrap(),
+            "{}",
+            expected["path"]
+        );
+        assert_eq!(
+            hex::encode(node.ssk.value()),
+            expected["ssk"].as_str().unwrap(),
+            "{}",
+            expected["path"]
         );
         assert_eq!(
             hex::encode(node.pk.value()),
-            expected["pk"].as_str().unwrap()
+            expected["pk"].as_str().unwrap(),
+            "{}",
+            expected["path"]
         );
+        assert_eq!(
+            hex::encode(node.cc),
+            expected["cc"].as_str().unwrap(),
+            "{}",
+            expected["path"]
+        );
+        assert_eq!(
+            node.account_id().to_string(),
+            expected["accountId"]["base58"].as_str().unwrap()
+        );
+    };
+
+    let public = v["public"].as_array().unwrap();
+    check(&public[0], &ChildKeysPublic::root(mnemonic.to_seed("")));
+    let mut tree = KeyTreePublic::new(&seed);
+    // The rest follow the official wallet's layered order.
+    for expected in &public[1..] {
+        let (id, path) = tree.generate_new_public_node_layered().unwrap();
+        assert_eq!(path.to_string(), expected["path"].as_str().unwrap());
+        check(expected, tree.get_node(id).unwrap());
+    }
+
+    let mut private = KeyTreePrivate::new(&seed);
+    for expected in v["private"].as_array().unwrap() {
+        let path = private.create_private_accounts_key_node_layered().unwrap();
+        assert_eq!(path.to_string(), expected["path"].as_str().unwrap());
+        let node = private.key_map.get(&path).unwrap();
+        let ids: Vec<String> = node.account_ids().map(|id| id.to_string()).collect();
+        let want: Vec<String> = expected["accountIds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["base58"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(ids, want, "private {}", expected["path"]);
+        assert_eq!(hex::encode(node.ccc), expected["ccc"].as_str().unwrap());
     }
 }

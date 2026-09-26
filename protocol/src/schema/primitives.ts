@@ -31,8 +31,19 @@ export const Hex = Type.String({ pattern: '^0x[0-9a-f]*$' })
 /** 32-byte hash as 0x-hex (tx hashes, image ids). */
 export const Hash32 = Type.String({ pattern: '^0x[0-9a-f]{64}$' })
 
+/**
+ * Basecamp intent payloads cap strings at 64 KB and whole payloads at 1000
+ * nodes (IntentBroker). Byte fields and arrays are capped below those limits
+ * so an oversized request fails validation with a clear error, not the
+ * shell's generic `bad_request`.
+ */
+export const INTENT_MAX_STRING = 65_000
+
 /** Standard base64 (RFC 4648 §4, with padding). Used for byte payloads. */
-export const Base64 = Type.String({ pattern: '^[A-Za-z0-9+/]*={0,2}$' })
+export const Base64 = Type.String({
+  pattern: '^[A-Za-z0-9+/]*={0,2}$',
+  maxLength: INTENT_MAX_STRING,
+})
 
 /**
  * Unsigned integer amount as a decimal string. LEZ balances are u128, which
@@ -40,7 +51,8 @@ export const Base64 = Type.String({ pattern: '^[A-Za-z0-9+/]*={0,2}$' })
  */
 export const U128 = Type.String({
   pattern: '^(0|[1-9][0-9]{0,38})$',
-  description: 'u128 as a decimal string',
+  description:
+    'u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602.',
 })
 
 /** RFC 3339 timestamp. */

@@ -13,6 +13,7 @@ export const Instruction = Type.Object({
       writable: Type.Boolean(),
       signer: Type.Boolean(),
     }),
+    { maxItems: 64 },
   ),
   /** Borsh-encoded instruction bytes (v0.3). */
   data: Base64,
@@ -31,7 +32,7 @@ export const TransactionProposal = Type.Object({
   account: AccountRef,
   /** Optional dApp-chosen id, unique per (origin, account). */
   id: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
-  instructions: Type.Array(Instruction, { minItems: 1 }),
+  instructions: Type.Array(Instruction, { minItems: 1, maxItems: 16 }),
   /** Reject with 5760 if atomic execution of all instructions isn't possible. */
   atomicRequired: Type.Optional(Type.Boolean()),
 })

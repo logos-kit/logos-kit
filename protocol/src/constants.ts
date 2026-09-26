@@ -22,7 +22,7 @@ export const NOTIFICATIONS = {
   accountsChanged: 'lez_accountsChanged',
   chainChanged: 'lez_chainChanged',
   sessionChanged: 'lez_sessionChanged',
-  disconnect: 'lez_disconnect',
+  disconnected: 'lez_disconnected',
   transactionUpdated: 'lez_transactionUpdated',
   capabilitiesChanged: 'lez_capabilitiesChanged',
 } as const

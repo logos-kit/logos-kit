@@ -14,7 +14,7 @@
     "dist",
     "src",
     "schema",
-    "fixtures",
+    "vectors",
     "!src/**/*.test.ts"
   ],
   "exports": {
@@ -29,12 +29,14 @@
     "./schema.json": "./schema/lws0.schema.json",
     "./methods.json": "./schema/methods.json",
     "./intents.json": "./schema/intents.json",
+    "./vectors/*": "./vectors/*",
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsdown",
-    "emit": "node scripts/emit-schema.ts && biome format --write schema",
+    "emit": "node scripts/emit-schema.ts && biome format --write schema ../modules/logos_kit_wallet_ui/metadata.json",
     "check:types": "tsc --noEmit && tsc --noEmit -p tsconfig.qml.json",
+    "check:qml": "node scripts/check-qml.ts",
     "test:build": "publint --strict && attw --pack --profile esm-only"
   },
   "dependencies": {
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
+    "acorn": "catalog:",
     "publint": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"

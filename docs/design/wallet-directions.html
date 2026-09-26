@@ -1,0 +1,605 @@
+<title>Logos Kit Wallet Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Nunito:wght@500;600;700;800;900&display=swap">
+<style>
+/* Page chrome: deliberately single-theme dark. Basecamp's shell is dark-only,
+   so every mock is judged on the surface it will actually live on. */
+:root {
+  color-scheme: dark;
+  --bg: #0d0e11;
+  --panel: #14151a;
+  --panel-2: #1a1c22;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --text: #eceef4;
+  --muted: #9298a7;
+  --faint: #5d6270;
+  --pick: #3898ff;
+  --ui: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body {
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: 0 64px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1240px; margin: 0 auto; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+
+/* Header */
+.top { padding-block: 40px 28px; display: grid; gap: 18px; border-bottom: 1px solid var(--line); }
+.eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+.lede { max-width: 68ch; color: var(--muted); margin: 0; font-size: 15px; }
+.lede b { color: var(--text); font-weight: 500; }
+.store-state { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+/* Direction cards */
+.dirs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-block: 28px; }
+.dir { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 10px; align-content: start; }
+.dir.rec { border-color: rgba(56, 152, 255, 0.45); }
+.dir-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dir-letter { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 600; background: var(--panel-2); border: 1px solid var(--line-2); font-family: var(--mono); }
+.dir h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.badge-rec { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: #bcdcff; background: rgba(56, 152, 255, 0.14); border: 1px solid rgba(56, 152, 255, 0.35); padding: 2px 8px; border-radius: 999px; }
+.dir p { margin: 0; color: var(--muted); }
+.lineage { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-2); }
+
+/* Overall pick */
+.overall { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; gap: 14px 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.overall .label { font-weight: 500; }
+
+/* Screen sections */
+.screen { padding-block: 36px 8px; border-top: 1px solid var(--line); margin-top: 28px; }
+.screen-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: end; margin-bottom: 18px; }
+.screen-head h3 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.screen-head p { margin: 0; color: var(--muted); max-width: 70ch; }
+.cols-scroll { overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; }
+.cols { display: grid; grid-template-columns: repeat(3, 392px); gap: 24px; justify-content: space-between; min-width: min-content; }
+.col { display: grid; gap: 10px; align-content: start; scroll-snap-align: start; }
+.col-label { font-family: var(--mono); font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.col-label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.col.rec .col-label .dot { background: var(--pick); }
+
+/* Pick row */
+.pick { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; cursor: pointer; font-weight: 500; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--pick); color: #fff; }
+.note { flex: 1 1 260px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 8px 12px; font: inherit; }
+.note::placeholder { color: var(--faint); }
+.saved { font-family: var(--mono); font-size: 12px; color: var(--faint); min-width: 60px; }
+
+/* QML strip */
+.qml { margin-top: 36px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.qml div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.qml b { display: block; font-weight: 600; margin-bottom: 4px; }
+.qml span { color: var(--muted); font-size: 13.5px; }
+code { font-family: var(--mono); font-size: 12.5px; color: #c9cfdd; }
+
+/* ===================== Mock system ===================== */
+.mock {
+  --m-pad: 20px;
+  --m-gap: 14px;
+  font-family: var(--m-font);
+  color: var(--m-text);
+  background: var(--m-bg);
+  border-radius: var(--m-r-sheet);
+  border: 1px solid var(--m-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+  padding: var(--m-pad);
+  display: grid;
+  gap: var(--m-gap);
+  position: relative;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.mock[data-opt="a"] {
+  --m-font: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --m-bg: #1a1b1f; --m-surface: rgba(224, 232, 255, 0.05); --m-surface-2: rgba(224, 232, 255, 0.1);
+  --m-border: rgba(255, 255, 255, 0.08); --m-text: #fff; --m-text-2: rgba(255, 255, 255, 0.6); --m-text-3: rgba(224, 232, 255, 0.34);
+  --m-accent: #3898ff; --m-accent-fg: #fff; --m-private: #7a70ff; --m-ok: #30e000; --m-warn: #ffd641; --m-err: #ff494a;
+  --m-primary: #3898ff; --m-primary-fg: #fff;
+  --m-r-sheet: 24px; --m-r-card: 16px; --m-r-btn: 9999px; --m-r-row: 12px; --m-w-title: 800; --m-w-num: 800;
+}
+.mock[data-opt="b"] {
+  --m-font: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --m-bg: #000; --m-surface: rgba(255, 255, 255, 0.06); --m-surface-2: rgba(255, 255, 255, 0.1);
+  --m-border: rgba(255, 255, 255, 0.09); --m-text: #fff; --m-text-2: rgba(255, 255, 255, 0.6); --m-text-3: rgba(255, 255, 255, 0.3);
+  --m-accent: #3898ff; --m-accent-fg: #fff; --m-private: #7a70ff; --m-ok: #30e000; --m-warn: #ffd641; --m-err: #ff494a;
+  --m-primary: #fff; --m-primary-fg: #000;
+  --m-r-sheet: 16px; --m-r-card: 12px; --m-r-btn: 10px; --m-r-row: 10px; --m-w-title: 600; --m-w-num: 600;
+  --m-pad: 18px; --m-gap: 12px;
+}
+.mock[data-opt="c"] {
+  --m-font: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --m-bg: #1f2023; --m-surface: rgba(255, 255, 255, 0.05); --m-surface-2: rgba(255, 255, 255, 0.09);
+  --m-border: rgba(255, 255, 255, 0.06); --m-text: #fff; --m-text-2: #8b8f97; --m-text-3: #5d6068;
+  --m-accent: #1a88f8; --m-accent-fg: #fff; --m-private: #7a70ff; --m-ok: #32d74b; --m-warn: #ffc93c; --m-err: #ff4e4e;
+  --m-primary: #1a88f8; --m-primary-fg: #fff;
+  --m-r-sheet: 20px; --m-r-card: 14px; --m-r-btn: 12px; --m-r-row: 12px; --m-w-title: 700; --m-w-num: 700;
+  --m-pad: 22px; --m-gap: 16px;
+}
+
+.m-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.m-between { justify-content: space-between; }
+.m-grow { flex: 1 1 auto; min-width: 0; }
+.m-title { font-size: 18px; font-weight: var(--m-w-title); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.mock[data-opt="c"] .m-title { font-size: 20px; }
+.m-sub { color: var(--m-text-2); font-size: 13px; }
+.m-dim { color: var(--m-text-3); font-size: 12px; }
+.m-mono { font-family: var(--mono); font-size: 12px; letter-spacing: -0.01em; }
+.m-center { text-align: center; justify-items: center; }
+.m-close { width: 28px; height: 28px; border-radius: 50%; background: var(--m-surface-2); display: grid; place-items: center; color: var(--m-text-2); flex: none; }
+.mock[data-opt="b"] .m-close { border-radius: 8px; background: transparent; border: 1px solid var(--m-border); }
+
+.m-card { background: var(--m-surface); border-radius: var(--m-r-card); padding: 12px 14px; display: grid; gap: 10px; }
+.mock[data-opt="b"] .m-card { background: transparent; border: 1px solid var(--m-border); }
+.m-list { display: grid; gap: 4px; }
+.mock[data-opt="b"] .m-list { gap: 0; }
+.m-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--m-r-row); background: var(--m-surface); min-width: 0; }
+.mock[data-opt="b"] .m-item { background: transparent; border-radius: 0; border-bottom: 1px solid var(--m-border); padding: 11px 2px; }
+.mock[data-opt="b"] .m-item:last-child { border-bottom: 0; }
+.m-item.sel { box-shadow: inset 0 0 0 2px var(--m-accent); background: var(--m-surface-2); }
+.mock[data-opt="b"] .m-item.sel { box-shadow: none; background: var(--m-surface); border-radius: 8px; padding-inline: 10px; }
+.m-item .m-grow > div:first-child { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-amt { text-align: right; font-weight: 700; white-space: nowrap; }
+.mock[data-opt="b"] .m-amt { font-weight: 500; }
+
+.m-check { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--m-text-3); display: grid; place-items: center; flex: none; }
+.m-check.on { background: var(--m-accent); border-color: var(--m-accent); }
+.mock[data-opt="a"] .m-check { border-radius: 50%; }
+
+.m-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.m-btn { border: 0; border-radius: var(--m-r-btn); padding: 12px 16px; font-family: var(--m-font); font-weight: 700; font-size: 15px; cursor: default; text-align: center; transition: transform 0.125s ease; }
+.mock[data-opt="b"] .m-btn { font-weight: 500; font-size: 14px; padding: 11px 14px; }
+.mock[data-opt="a"] .m-btn:hover { transform: scale(1.025); }
+.mock[data-opt="a"] .m-btn:active { transform: scale(0.95); }
+.m-btn.primary { background: var(--m-primary); color: var(--m-primary-fg); }
+.m-btn.secondary { background: var(--m-surface-2); color: var(--m-text); }
+.mock[data-opt="b"] .m-btn.secondary { background: transparent; border: 1px solid var(--m-border); }
+.m-btn.private { background: var(--m-private); color: #fff; }
+
+.m-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 999px; background: var(--m-surface-2); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.mock[data-opt="b"] .m-pill { border-radius: 8px; background: transparent; border: 1px solid var(--m-border); font-weight: 500; }
+.m-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.mock[data-opt="b"] .m-tag { font-weight: 500; border-radius: 6px; }
+.t-ok { color: var(--m-ok); background: color-mix(in srgb, var(--m-ok) 14%, transparent); }
+.t-warn { color: var(--m-warn); background: color-mix(in srgb, var(--m-warn) 14%, transparent); }
+.t-priv { color: #b9b4ff; background: color-mix(in srgb, var(--m-private) 22%, transparent); }
+.t-pub { color: #9fcbff; background: color-mix(in srgb, var(--m-accent) 18%, transparent); }
+.t-neutral { color: var(--m-text-2); background: var(--m-surface-2); }
+
+.m-seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--m-surface); border-radius: var(--m-r-btn); padding: 3px; }
+.mock[data-opt="b"] .m-seg { border: 1px solid var(--m-border); background: transparent; border-radius: 10px; }
+.m-seg span { text-align: center; padding: 7px 0; border-radius: var(--m-r-btn); font-weight: 700; font-size: 13px; color: var(--m-text-2); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.mock[data-opt="b"] .m-seg span { border-radius: 7px; font-weight: 500; }
+.m-seg span.on { background: var(--m-surface-2); color: var(--m-text); }
+.m-seg .pdot { width: 7px; height: 7px; border-radius: 50%; background: var(--m-private); }
+
+.m-kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 13px; }
+.m-kv dt { color: var(--m-text-2); }
+.m-kv dd { margin: 0; text-align: right; font-weight: 600; min-width: 0; }
+.mock[data-opt="b"] .m-kv dd { font-weight: 500; }
+
+.m-hr { height: 1px; background: var(--m-border); }
+
+.m-big { font-size: 36px; font-weight: var(--m-w-num); letter-spacing: -0.02em; line-height: 1.05; }
+.mock[data-opt="b"] .m-big { font-size: 34px; letter-spacing: -0.03em; }
+.m-big small { font-size: 0.5em; color: var(--m-text-2); font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+
+.m-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.m-act { background: var(--m-surface); border-radius: var(--m-r-card); padding: 12px 6px 10px; display: grid; justify-items: center; gap: 6px; font-weight: 700; font-size: 13px; }
+.m-act svg { color: var(--m-accent); }
+.mock[data-opt="b"] .m-actions { display: flex; gap: 8px; }
+.mock[data-opt="b"] .m-act { display: flex; gap: 6px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--m-border); background: transparent; font-weight: 500; }
+.mock[data-opt="b"] .m-act svg { color: var(--m-text); }
+.mock[data-opt="b"] .m-act.first { background: #fff; color: #000; border-color: #fff; }
+.mock[data-opt="b"] .m-act.first svg { color: #000; }
+.mock[data-opt="c"] .m-act { border-radius: 999px; grid-auto-flow: column; padding: 10px 8px; gap: 6px; }
+
+.m-section-label { font-size: 12px; font-weight: 700; color: var(--m-text-2); letter-spacing: 0.01em; }
+.mock[data-opt="b"] .m-section-label { font-family: var(--mono); font-weight: 400; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; color: var(--m-text-3); }
+
+.m-note { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--m-text-2); background: var(--m-surface); padding: 10px 12px; border-radius: var(--m-r-row); }
+.m-note.warn { color: #f4e2a2; background: color-mix(in srgb, var(--m-warn) 9%, transparent); }
+.mock[data-opt="b"] .m-note { background: transparent; border: 1px dashed var(--m-border); }
+
+.m-token { width: 36px; height: 36px; border-radius: 50%; background: #0b0b0d; display: grid; place-items: center; flex: none; box-shadow: 0 2px 16px rgba(0, 0, 0, 0.16); overflow: hidden; }
+.m-token svg.logos { width: 58%; height: auto; }
+.m-avatar { flex: none; overflow: hidden; }
+
+/* Buckets bar on private accounts */
+.m-buckets { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
+.mock[data-opt="b"] .m-buckets { border-radius: 2px; height: 6px; }
+.m-buckets i { display: block; }
+.m-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; }
+.m-legend div { display: grid; gap: 2px; }
+.m-legend b { font-size: 14px; font-weight: 700; }
+.mock[data-opt="b"] .m-legend b { font-weight: 500; }
+.m-legend span { color: var(--m-text-2); display: flex; align-items: center; gap: 6px; }
+.m-legend span::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--c); }
+
+/* Proving */
+.m-prog { height: 10px; border-radius: 999px; background: var(--m-surface-2); overflow: hidden; position: relative; }
+.m-prog i { position: absolute; inset: 0 auto 0 0; width: 62%; border-radius: inherit; background: linear-gradient(90deg, var(--m-private), #a59fff); }
+.m-prog i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent); transform: translateX(-100%); animation: shimmer 1.8s ease-in-out infinite; }
+.mock[data-opt="b"] .m-prog { height: 4px; border-radius: 2px; }
+.mock[data-opt="b"] .m-prog i { background: var(--m-private); }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.m-ring { width: 132px; height: 132px; border-radius: 50%; background: conic-gradient(var(--m-private) 0 62%, var(--m-surface-2) 62% 100%); display: grid; place-items: center; position: relative; }
+.m-ring::before { content: ""; position: absolute; inset: 10px; border-radius: 50%; background: var(--m-bg); }
+.m-ring > * { position: relative; }
+.m-ring b { font-size: 28px; font-weight: 800; }
+.m-steps { display: grid; gap: 0; }
+.m-step { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: start; padding: 8px 0; position: relative; }
+.m-step .bul { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--m-surface-2); color: var(--m-text-3); font-size: 11px; font-weight: 800; }
+.m-step.done .bul { background: color-mix(in srgb, var(--m-ok) 18%, transparent); color: var(--m-ok); }
+.m-step.now .bul { background: var(--m-private); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--m-private) 25%, transparent); }
+.m-step .t { font-weight: 700; }
+.mock[data-opt="b"] .m-step .t { font-weight: 500; }
+.m-step.todo .t { color: var(--m-text-3); }
+.m-step .d { font-size: 12px; color: var(--m-text-2); }
+.m-step .r { font-size: 12px; color: var(--m-text-2); white-space: nowrap; }
+.m-log { font-family: var(--mono); font-size: 11.5px; color: var(--m-text-3); display: grid; gap: 3px; background: #0a0a0a; border: 1px solid var(--m-border); border-radius: 8px; padding: 10px 12px; }
+.m-log .hl { color: #b9b4ff; }
+
+/* Activity rows */
+.m-act-row { display: flex; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--m-border); min-width: 0; }
+.m-act-row:last-child { border-bottom: 0; }
+.m-act-ic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--m-surface-2); color: var(--m-text-2); }
+.mock[data-opt="b"] .m-act-ic { border-radius: 8px; }
+.m-act-ic.priv { background: color-mix(in srgb, var(--m-private) 22%, transparent); color: #c7c2ff; }
+.m-act-row .m-grow > div:first-child { font-weight: 600; }
+.m-mini-prog { height: 3px; border-radius: 3px; background: var(--m-surface-2); margin-top: 6px; overflow: hidden; }
+.m-mini-prog i { display: block; height: 100%; width: 62%; background: var(--m-private); }
+
+/* Basecamp frame for the desktop view */
+.bc { background: #1b1b1b; border: 1px solid #2a2a2a; border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: 64px 1fr; min-height: 560px; }
+.bc-side { background: #202020; border-right: 1px solid #2a2a2a; display: grid; align-content: start; justify-items: center; gap: 14px; padding: 14px 0; }
+.bc-dots { display: flex; gap: 5px; }
+.bc-dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.bc-mono { width: 36px; height: 36px; border-radius: 9px; border: 1px solid #333; display: grid; place-items: center; font-weight: 600; font-size: 12px; color: #aaa; font-family: "Public Sans", var(--ui); }
+.bc-mono.on { color: #fff; border-color: #555; box-shadow: -8px 0 0 -5px #ef7b55; }
+.bc-main { display: grid; grid-template-rows: 38px 1fr; min-width: 0; }
+.bc-tabs { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #2a2a2a; font-size: 12.5px; color: #bbb; }
+.bc-tab { padding: 4px 12px; border-radius: 7px; background: #2a2a2a; color: #eee; }
+.bc-body { padding: 0; min-width: 0; }
+.bc-body .mock { border: 0; border-radius: 0; box-shadow: none; height: 100%; grid-template-columns: 260px 1fr; align-items: start; gap: 22px; padding: 22px; }
+.desk-side { display: grid; gap: 8px; }
+.desk-main { display: grid; gap: 16px; min-width: 0; }
+.desk-cols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+.desk-switch { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.desk-scroll { overflow-x: auto; }
+.desk-scroll .bc { min-width: 980px; }
+
+@media (max-width: 900px) {
+  .dirs { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .m-prog i::after { animation: none; }
+  .mock[data-opt="a"] .m-btn { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Logos Kit · design review · S7 wallet UI</div>
+    <h1>Pick how the wallet looks</h1>
+    <p class="lede">Three directions for the Logos Kit wallet, all using <b>RainbowKit-family colours</b> and each traced to a real reference kit. Every direction shows the same five screens with the same real content, side by side. Pick a direction per screen (mixing is fine) and leave a note. <b>Your picks save to this page and I read them back.</b></p>
+    <div class="store-state" id="storeState">Connecting to the page's store…</div>
+  </header>
+
+  <section class="dirs" aria-label="Directions">
+    <article class="dir rec">
+      <div class="dir-head"><span class="dir-letter">A</span><h2>Rainbow</h2><span class="badge-rec">Recommended</span></div>
+      <p>RainbowKit's dark theme with the large radius: rounded type, pill buttons, soft surfaces, and the little scale bounce on press. Blue for public, RainbowKit's own purple for private. It's the look people already trust when they connect a wallet.</p>
+      <div class="swatches"><span class="sw" style="background:#1a1b1f"></span><span class="sw" style="background:#3898ff"></span><span class="sw" style="background:#7a70ff"></span><span class="sw" style="background:#30e000"></span><span class="sw" style="background:#ffd641"></span></div>
+      <div class="lineage">rainbowkit/themes/darkTheme.ts · radius "large" · font SF Rounded → Nunito</div>
+    </article>
+    <article class="dir">
+      <div class="dir-head"><span class="dir-letter">B</span><h2>Midnight</h2></div>
+      <p>RainbowKit's midnight theme with Privy's restraint: true black, hairlines instead of fills, white primary buttons, and colour only where state lives. It reads as a precise instrument, denser and more pro.</p>
+      <div class="swatches"><span class="sw" style="background:#000"></span><span class="sw" style="background:#fff"></span><span class="sw" style="background:#3898ff"></span><span class="sw" style="background:#7a70ff"></span><span class="sw" style="background:#30e000"></span></div>
+      <div class="lineage">rainbowkit/themes/midnightTheme.ts · radius "medium" · Privy modal density</div>
+    </article>
+    <article class="dir">
+      <div class="dir-head"><span class="dir-letter">C</span><h2>Soft</h2></div>
+      <p>ConnectKit's midnight and soft themes: warmer charcoal, gentle 12px corners, centred layouts, and a proving ring as the hero moment. Friendliest for people new to wallets.</p>
+      <div class="swatches"><span class="sw" style="background:#1f2023"></span><span class="sw" style="background:#1a88f8"></span><span class="sw" style="background:#7a70ff"></span><span class="sw" style="background:#32d74b"></span><span class="sw" style="background:#8b8f97"></span></div>
+      <div class="lineage">connectkit/styles/themes/{midnight,soft}.ts · radius 12 · Figtree</div>
+    </article>
+  </section>
+
+  <div class="overall">
+    <span class="label">Overall direction</span>
+    <div class="seg" data-pick="overall" role="group" aria-label="Overall direction">
+      <button type="button" data-v="a" aria-pressed="false">A</button><button type="button" data-v="b" aria-pressed="false">B</button><button type="button" data-v="c" aria-pressed="false">C</button>
+    </div>
+    <input class="note" id="note-overall" data-note="overall" placeholder="Anything you love or hate across all of them">
+    <span class="saved" data-saved="overall"></span>
+  </div>
+
+  <main id="screens"></main>
+
+  <section class="screen" id="desktop">
+    <div class="screen-head">
+      <div>
+        <h3>In Basecamp, at desktop width</h3>
+        <p>The same wallet inside the real Basecamp shell (sidebar and tabs drawn to match the running app). At 1024 px and up, accounts move to a side list. Switch direction to compare.</p>
+      </div>
+    </div>
+    <div class="desk-switch">
+      <div class="seg" id="deskSeg" role="group" aria-label="Desktop preview direction">
+        <button type="button" data-v="a" aria-pressed="true">A</button><button type="button" data-v="b" aria-pressed="false">B</button><button type="button" data-v="c" aria-pressed="false">C</button>
+      </div>
+    </div>
+    <div class="desk-scroll"><div id="deskMount"></div></div>
+    <div class="pick">
+      <div class="seg" data-pick="desktop" role="group" aria-label="Desktop layout pick"><button type="button" data-v="a" aria-pressed="false">A</button><button type="button" data-v="b" aria-pressed="false">B</button><button type="button" data-v="c" aria-pressed="false">C</button></div>
+      <input class="note" id="note-desktop" data-note="desktop" placeholder="Notes on the desktop layout">
+      <span class="saved" data-saved="desktop"></span>
+    </div>
+
+    <div class="qml">
+      <div><b>Built in Qt Quick, not a web view</b><span>Everything above maps to stock QML: <code>Rectangle</code> radii and borders, <code>MultiEffect</code> for shadows and backdrop blur, <code>Behavior</code> animations for the press bounce, <code>Shape</code> for the proving ring.</span></div>
+      <div><b>Our own font ships inside the module</b><span>Nunito, Geist or Figtree loads via <code>FontLoader</code> from the module folder, which the sandbox allows. We don't depend on the host font.</span></div>
+      <div><b>Checked in Basecamp on S0</b><span>Bundled SVG logos render and Canvas paints (probe run 2026-09-26). Remote images are blocked, so every token and brand logo is bundled.</span></div>
+      <div><b>One spec, three renderers</b><span>The picked direction becomes <code>@logos-kit/theme</code> tokens that feed QML (<code>Tokens.qml</code>), React (CSS variables) and React Native from one source.</span></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  var LOGOS = '<svg class="logos" viewBox="0 0 106 116" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Logos"><path d="M79.5652 90H26.4297V56.8093H79.515L79.5652 90ZM52.9388 59.472C48.4035 59.4768 43.9396 60.6156 39.9432 62.7872C35.9469 64.9588 32.5417 68.0962 30.0301 71.9207C29.6978 72.3092 29.5149 72.8059 29.5149 73.3199C29.5149 73.8338 29.6978 74.3306 30.0301 74.7191C32.5579 78.526 35.9695 81.6464 39.9656 83.8067C43.9617 85.967 48.4203 87.1011 52.95 87.1094C57.4798 87.1178 61.9425 86.0002 65.9463 83.8547C69.9502 81.7092 73.373 78.6014 75.9145 74.8039C76.277 74.3934 76.4774 73.862 76.4774 73.3114C76.4774 72.7607 76.277 72.2293 75.9145 71.8189C73.38 68.01 69.9577 64.8924 65.9503 62.7418C61.9429 60.5912 57.474 59.474 52.9388 59.489V59.472Z" fill="white"/><path d="M53.0896 53.7055C48.5833 53.6964 44.1464 52.5807 40.1594 50.4539C36.1723 48.3271 32.754 45.2527 30.1976 41.4944C29.7714 41.0352 29.5341 40.4286 29.5341 39.7984C29.5341 39.1681 29.7714 38.5616 30.1976 38.1024C32.7526 34.3508 36.1732 31.2875 40.1623 29.1786C44.1514 27.0696 48.5885 25.9786 53.0884 26.0003C57.5883 26.022 62.015 27.1558 65.9841 29.3032C69.9532 31.4507 73.3447 34.5468 75.8643 38.3228C76.2256 38.7305 76.4254 39.259 76.4254 39.8068C76.4254 40.3546 76.2256 40.8831 75.8643 41.2908C73.3478 45.0765 69.9593 48.185 65.9914 50.348C62.0236 52.5109 57.5955 53.6633 53.0896 53.7055ZM63.0033 39.9679C63.0499 37.9459 62.5004 35.9556 61.4251 34.2512C60.3498 32.5469 58.7973 31.2057 56.9659 30.399C55.1345 29.5923 53.1073 29.3565 51.143 29.722C49.1788 30.0874 47.3666 31.0374 45.9379 32.4506C44.5091 33.8638 43.5287 35.6762 43.1216 37.6563C42.7145 39.6365 42.8994 41.6946 43.6525 43.5678C44.4056 45.4411 45.6928 47.0447 47.3498 48.1737C49.0069 49.3027 50.9585 49.906 52.9556 49.9065C55.5803 49.9072 58.1011 48.8678 59.9788 47.0105C61.8565 45.1532 62.942 42.6254 63.0033 39.9679Z" fill="white"/><path d="M52.9886 83.3344C51.0413 83.301 49.1471 82.6854 47.5442 81.565C45.9412 80.4446 44.701 78.8694 43.9793 77.0373C43.2576 75.2052 43.0866 73.198 43.4879 71.2678C43.8892 69.3376 44.8448 67.5705 46.2347 66.1887C47.6246 64.8069 49.3867 63.8719 51.2997 63.5013C53.2126 63.1307 55.1911 63.3409 56.9864 64.1056C58.7817 64.8703 60.3139 66.1553 61.3903 67.7992C62.4667 69.4431 63.0394 71.3725 63.0363 73.345C63.0321 74.6714 62.7679 75.9837 62.2592 77.2059C61.7504 78.4281 61.0072 79.5359 60.0726 80.4651C59.138 81.3943 58.0306 82.1263 56.8146 82.6189C55.5986 83.1114 54.2982 83.3546 52.9886 83.3344Z" fill="white"/></svg>';
+
+  // Minimal UI glyphs (affordances only; brands always use their real logo).
+  function g(d, s) { return '<svg width="' + (s || 16) + '" height="' + (s || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>"; }
+  var I = {
+    x: g('<path d="M6 6l12 12M18 6L6 18"/>', 14),
+    up: g('<path d="M12 19V5M5 12l7-7 7 7"/>'),
+    down: g('<path d="M12 5v14M19 12l-7 7-7-7"/>'),
+    drop: g('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'),
+    check: g('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 13),
+    checkW: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    shield: g('<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/>', 14),
+    chev: g('<path d="M8 10l4 4 4-4"/>', 14),
+    lock: g('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 14),
+    info: g('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', 15),
+    copy: g('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', 13)
+  };
+
+  // Deterministic identicon: a mirrored 5x5 grid on a two-hue gradient.
+  // Same algorithm the QML atom uses (a grid of Rectangles, no Canvas needed).
+  function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  var uid = 0;
+  function identicon(seed, size, shape) {
+    var h = hash(seed), h1 = h % 360, h2 = (h1 + 48) % 360, cells = "", c = size / 7;
+    for (var y = 0; y < 5; y++) for (var x = 0; x < 3; x++) {
+      if ((h >>> ((y * 3 + x) % 31)) & 1) {
+        cells += '<rect x="' + (c * (x + 1)) + '" y="' + (c * (y + 1)) + '" width="' + c + '" height="' + c + '" fill="rgba(255,255,255,.88)"/>';
+        if (x < 2) cells += '<rect x="' + (c * (5 - x)) + '" y="' + (c * (y + 1)) + '" width="' + c + '" height="' + c + '" fill="rgba(255,255,255,.88)"/>';
+      }
+    }
+    var r = shape === "square" ? size * 0.24 : size / 2, id = "g" + h + "-" + (uid++);
+    return '<svg class="m-avatar" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + " " + size + '" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(' + h1 + ',72%,58%)"/><stop offset="1" stop-color="hsl(' + h2 + ',70%,42%)"/></linearGradient><clipPath id="c' + id + '"><rect width="' + size + '" height="' + size + '" rx="' + r + '"/></clipPath></defs><g clip-path="url(#c' + id + ')"><rect width="' + size + '" height="' + size + '" fill="url(#' + id + ')"/>' + cells + "</g></svg>";
+  }
+  function av(seed, size, o) { return identicon(seed, size, o === "b" ? "square" : "circle"); }
+  function logosToken(size) { return '<span class="m-token" style="width:' + size + "px;height:" + size + 'px">' + LOGOS + "</span>"; }
+  function dapp(o) {
+    var r = o === "a" ? "14px" : o === "b" ? "10px" : "12px";
+    return '<span style="width:44px;height:44px;border-radius:' + r + ';background:#26272c;border:1px solid rgba(255,255,255,.1);display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;flex:none;font-family:var(--m-font)">TE</span>';
+  }
+
+  var ACC1 = "7Hk3xQvN2cRt5mYbJp8LsWd4FgUe6nKaZq1mR8aW9Qp";
+  var ACC2 = "Bm2vC9sDj4YkQ7eHw3NpXt6RuLf8GzAb5VcKq2PpL4a";
+
+  function close(o) { return '<span class="m-close">' + I.x + "</span>"; }
+
+  /* ---------- Screens ---------- */
+  function connect(o) {
+    var head = o === "c"
+      ? '<div class="m-row m-between"><span></span>' + close(o) + '</div><div class="m-center" style="display:grid;gap:10px"><div class="m-row" style="justify-content:center;gap:0">' + dapp(o) + '<span style="width:34px;height:2px;background:repeating-linear-gradient(90deg,var(--m-text-3) 0 4px,transparent 4px 8px)"></span>' + logosToken(44) + '</div><h4 class="m-title">Testimonials wants to connect</h4><span class="m-mono m-dim">logos_kit_testimonial · v0.3.1</span></div>'
+      : '<div class="m-row" style="align-items:flex-start">' + dapp(o) + '<div class="m-grow" style="display:grid;gap:3px"><h4 class="m-title">Testimonials wants to connect</h4><span class="m-mono m-dim">logos_kit_testimonial · v0.3.1</span></div>' + close(o) + "</div>";
+    return head +
+      '<div class="m-note warn">' + I.info + '<span>Unsigned. Basecamp can\'t confirm who published this app.</span></div>' +
+      '<div class="m-card"><div class="m-section-label">This app will be able to</div>' +
+      '<div class="m-row m-sub" style="color:var(--m-text)">' + '<span style="color:var(--m-ok)">' + I.check + "</span>See the accounts you pick and their balances</div>" +
+      '<div class="m-row m-sub" style="color:var(--m-text)">' + '<span style="color:var(--m-ok)">' + I.check + "</span>Propose transactions for you to approve</div>" +
+      '<div class="m-row m-dim"><span style="width:13px"></span>It can never move funds without you</div></div>' +
+      '<div class="m-seg"><span class="on">Public</span><span><i class="pdot"></i>Private</span></div>' +
+      '<div class="m-list">' +
+        '<div class="m-item sel">' + av(ACC1, 34, o) + '<div class="m-grow"><div>Public account 1</div><div class="m-mono m-dim">7Hk3…W9Qp</div></div><div class="m-amt">42.50 LEZ</div><span class="m-check on">' + I.checkW + "</span></div>" +
+        '<div class="m-item">' + av(ACC2, 34, o) + '<div class="m-grow"><div>Public account 2</div><div class="m-mono m-dim">Bm2v…PL4a</div></div><div class="m-amt">3.00 LEZ</div><span class="m-check"></span></div>' +
+      "</div>" +
+      '<div class="m-btns"><button class="m-btn secondary" type="button" tabindex="-1">Cancel</button><button class="m-btn primary" type="button" tabindex="-1">Connect 1 account</button></div>';
+  }
+
+  function approve(o) {
+    var amount = o === "c"
+      ? '<div class="m-center" style="display:grid;gap:6px;padding:4px 0">' + logosToken(52) + '<div class="m-big">−12.50<small>LEZ</small></div><div class="m-sub">to <span class="m-mono">4f9C…K2mT</span></div></div>'
+      : '<div class="m-card"><div class="m-row m-between"><span class="m-section-label">You send</span><span class="m-tag t-pub">Public</span></div><div class="m-row">' + logosToken(40) + '<div class="m-big m-grow">12.50<small>LEZ</small></div></div><div class="m-hr"></div><div class="m-row m-between m-sub"><span>To</span><span class="m-mono" style="color:var(--m-text)">4f9C…K2mT</span></div></div>';
+    return '<div class="m-row m-between"><div style="display:grid;gap:2px"><h4 class="m-title">Review transaction</h4><span class="m-sub">Requested by <b style="color:var(--m-text)">Testimonials</b> <span class="m-mono m-dim">logos_kit_testimonial</span></span></div>' + close(o) + "</div>" +
+      amount +
+      '<dl class="m-kv"><dt>From</dt><dd><span class="m-row" style="justify-content:flex-end;gap:6px">' + av(ACC1, 18, o) + "Public account 1</span></dd>" +
+      '<dt>Program</dt><dd>Native token <span class="m-tag t-ok" style="margin-left:4px">' + I.check + " Verified</span></dd>" +
+      '<dt>Source</dt><dd class="m-sub" style="font-weight:500">Rebuilt locally · Immutable</dd>' +
+      '<dt>Network fee</dt><dd>≤ 0.0021 LEZ</dd></dl>' +
+      '<div class="m-row m-between m-sub" style="padding:2px 0"><span>Instruction data</span><span class="m-row" style="gap:4px">Details ' + I.chev + "</span></div>" +
+      '<div class="m-btns"><button class="m-btn secondary" type="button" tabindex="-1">Reject</button><button class="m-btn primary" type="button" tabindex="-1">Approve</button></div>';
+  }
+
+  function header(o, label, seed, priv) {
+    return '<div class="m-row m-between"><span class="m-pill">' + av(seed, 24, o) + label + (priv ? ' <span class="m-tag t-priv" style="padding:1px 6px">' + I.shield + "</span>" : "") + I.chev + '</span><span class="m-pill" style="padding-left:8px"><span style="width:7px;height:7px;border-radius:50%;background:var(--m-ok)"></span>LEZ testnet</span></div>';
+  }
+  function actions(o, faucet) {
+    return '<div class="m-actions"><div class="m-act first">' + I.up + 'Send</div><div class="m-act">' + I.down + 'Receive</div><div class="m-act">' + I.drop + (faucet || "Test funds") + "</div></div>";
+  }
+  function balance(o, amt, sub) {
+    var align = o === "b" ? "" : ' style="text-align:center;display:grid;justify-items:center;gap:4px"';
+    return "<div" + align + (o === "b" ? ' style="display:grid;gap:4px"' : "") + '><div class="m-sub">' + sub + '</div><div class="m-big">' + amt + "<small>LEZ</small></div></div>";
+  }
+
+  function home(o) {
+    var top = o === "b" ? "" : '<div style="display:grid;justify-items:center;gap:8px;padding-top:6px">' + av(ACC1, o === "c" ? 64 : 72, o) + '<div class="m-row" style="gap:6px"><b style="font-size:16px">Public account 1</b><span class="m-mono m-dim">7Hk3…W9Qp</span><span class="m-dim">' + I.copy + "</span></div></div>";
+    return header(o, "Public account 1", ACC1, false) + top +
+      balance(o, "42.50", o === "b" ? "Public account 1 · 7Hk3…W9Qp" : "Balance") +
+      actions(o) +
+      '<div style="display:grid;gap:8px"><div class="m-section-label">Assets</div><div class="m-list">' +
+        '<div class="m-item">' + logosToken(36) + '<div class="m-grow"><div>LEZ</div><div class="m-dim">Native token</div></div><div class="m-amt">42.50</div></div>' +
+        '<div class="m-item">' + av("TST-token", 36, "a") + '<div class="m-grow"><div>TST</div><div class="m-dim">Demo token · unverified logo</div></div><div class="m-amt">1,000</div></div>' +
+      "</div></div>";
+  }
+
+  function privateHome(o) {
+    return header(o, "Private account 1", "private-1", true) +
+      '<div class="m-row m-between"><span class="m-tag t-priv">' + I.shield + ' Only you can see this balance</span><span class="m-dim">Synced · block 25,947</span></div>' +
+      balance(o, "35.70", "Total") +
+      '<div class="m-card"><div class="m-buckets"><i style="flex:18.2;background:var(--m-private)"></i><i style="flex:5;background:#a59fff"></i><i style="flex:12.5;background:repeating-linear-gradient(135deg,var(--m-text-3) 0 3px,transparent 3px 6px)"></i></div>' +
+      '<div class="m-legend"><div><span style="--c:var(--m-private)">Spendable</span><b>18.20</b></div><div><span style="--c:#a59fff">Pending</span><b>5.00</b></div><div><span style="--c:var(--m-text-3)">Locked by a proof</span><b>12.50</b></div></div></div>' +
+      actions(o, "Shield") +
+      '<div style="display:grid;gap:4px"><div class="m-section-label">Activity</div><div>' +
+        '<div class="m-act-row"><span class="m-act-ic priv">' + I.lock + '</span><div class="m-grow"><div>Private send · 12.50 LEZ</div><div class="m-dim">Proving on this Mac · 62% · about 1 min left</div><div class="m-mini-prog"><i></i></div></div></div>' +
+        '<div class="m-act-row"><span class="m-act-ic priv">' + I.down + '</span><div class="m-grow"><div>Shielded 5.00 LEZ</div><div class="m-dim">Waiting for block</div></div><span class="m-tag t-neutral">Pending</span></div>' +
+        '<div class="m-act-row"><span class="m-act-ic">' + I.down + '</span><div class="m-grow"><div>Received 20.00 LEZ</div><div class="m-dim">Yesterday · block 25,611</div></div><span class="m-tag t-ok">Confirmed</span></div>' +
+      "</div></div>";
+  }
+
+  function proving(o) {
+    var hero;
+    if (o === "c") {
+      hero = '<div style="display:grid;justify-items:center;gap:10px;padding:6px 0"><div class="m-ring"><div style="display:grid;justify-items:center"><b>62%</b><span class="m-dim">about 1 min</span></div></div></div>';
+    } else {
+      hero = '<div class="m-card"><div class="m-row m-between"><b>Proving on this Mac</b><span class="m-sub">62% · about 1 min left</span></div><div class="m-prog"><i></i></div></div>';
+    }
+    var steps = '<div class="m-steps">' +
+      '<div class="m-step done"><span class="bul">' + I.check + '</span><div><div class="t">Prepared</div><div class="d">Notes selected, amount locked</div></div><span class="r">0:02</span></div>' +
+      '<div class="m-step now"><span class="bul">2</span><div><div class="t">Proving</div><div class="d">Your keys never leave this device</div></div><span class="r">1:48</span></div>' +
+      '<div class="m-step todo"><span class="bul">3</span><div><div class="t">Submit</div></div><span class="r"></span></div>' +
+      '<div class="m-step todo"><span class="bul">4</span><div><div class="t">Wait for block</div></div><span class="r">~15–60 s</span></div></div>';
+    var log = o === "b" ? '<div class="m-log"><span>segment 38/61 · keccak po2 17</span><span class="hl">rayon 10 threads · cpu prover</span><span>ETA from this device\'s last 3 proofs</span></div>' : "";
+    return '<div class="m-row m-between"><div style="display:grid;gap:2px"><h4 class="m-title">Sending privately</h4><span class="m-sub">12.50 LEZ to <span class="m-mono">ends 4Q-MN</span></span></div>' + close(o) + "</div>" +
+      hero + steps + log +
+      '<div class="m-note">' + I.lock + '<span>12.50 LEZ stays locked until this finishes. You can close the wallet: proving keeps going and you\'ll get a notice when it\'s sent.</span></div>' +
+      '<div class="m-btns"><button class="m-btn secondary" type="button" tabindex="-1">Cancel</button><button class="m-btn private" type="button" tabindex="-1">Hide</button></div>';
+  }
+
+  var SCREENS = [
+    { id: "connect", title: "Connect", blurb: "A dApp raises the lez.wallet.connect intent and the shell hands it to us. The person picks which accounts to share. The dApp's name comes from Basecamp (attested) and is always drawn as plain text.", fn: connect },
+    { id: "approve", title: "Approve a transaction", blurb: "Every transaction gets the same three answers: who's asking, what exactly you're signing (program, source verification, mutability), and what it will cost.", fn: approve },
+    { id: "home", title: "Home: public account", blurb: "Balance first, three actions, then assets with real logos. The native token uses the official Logos mark; unknown tokens get a deterministic identicon, never a generic icon.", fn: home },
+    { id: "private", title: "Home: private account", blurb: "Private balances split into spendable, pending and locked by a proof in progress, so the number never lies. A proof running in the background shows up in activity.", fn: privateHome },
+    { id: "proving", title: "Private send, proving", blurb: "The moment unique to LEZ: a proof takes minutes on the person's own machine. We show where it is, how long is left, what's locked, and that closing the window is safe. Times shown are examples until the S0 benchmarks land.", fn: proving }
+  ];
+
+  function segHTML(id) {
+    return '<div class="seg" data-pick="' + id + '" role="group" aria-label="Pick for ' + id + '"><button type="button" data-v="a" aria-pressed="false">A</button><button type="button" data-v="b" aria-pressed="false">B</button><button type="button" data-v="c" aria-pressed="false">C</button></div>';
+  }
+
+  var mount = document.getElementById("screens");
+  var names = { a: "A · Rainbow", b: "B · Midnight", c: "C · Soft" };
+  SCREENS.forEach((s) => {
+    var cols = ["a", "b", "c"].map((o) => '<div class="col' + (o === "a" ? " rec" : "") + '"><div class="col-label"><span class="dot"></span>' + names[o] + (o === "a" ? " · recommended" : "") + '</div><div class="mock" data-opt="' + o + '">' + s.fn(o) + "</div></div>").join("");
+    var sec = document.createElement("section");
+    sec.className = "screen";
+    sec.id = s.id;
+    sec.innerHTML = '<div class="screen-head"><div><h3>' + s.title + "</h3><p>" + s.blurb + '</p></div></div><div class="cols-scroll"><div class="cols">' + cols + '</div></div><div class="pick">' + segHTML(s.id) + '<input class="note" id="note-' + s.id + '" data-note="' + s.id + '" placeholder="What would you change on this screen?"><span class="saved" data-saved="' + s.id + '"></span></div>';
+    mount.appendChild(sec);
+  });
+
+  /* ---------- Desktop Basecamp view ---------- */
+  function desktop(o) {
+    var accs = '<div class="desk-side"><div class="m-section-label" style="padding:0 4px 4px">Accounts</div>' +
+      '<div class="m-item sel">' + av(ACC1, 30, o) + '<div class="m-grow"><div>Public account 1</div><div class="m-dim">42.50 LEZ</div></div></div>' +
+      '<div class="m-item">' + av(ACC2, 30, o) + '<div class="m-grow"><div>Public account 2</div><div class="m-dim">3.00 LEZ</div></div></div>' +
+      '<div class="m-item">' + av("private-1", 30, o) + '<div class="m-grow"><div>Private account 1</div><div class="m-dim">35.70 LEZ · private</div></div><span class="m-tag t-priv" style="padding:2px 6px">' + I.shield + "</span></div>" +
+      '<div class="m-item" style="color:var(--m-text-2);justify-content:center">+ New account</div></div>';
+    var main = '<div class="desk-main">' + header(o, "Public account 1", ACC1, false) +
+      '<div class="desk-cols"><div style="display:grid;gap:14px;align-content:start">' + balance(o, "42.50", "Public account 1 · 7Hk3…W9Qp") + actions(o) +
+      '<div style="display:grid;gap:8px"><div class="m-section-label">Assets</div><div class="m-list">' +
+        '<div class="m-item">' + logosToken(34) + '<div class="m-grow"><div>LEZ</div><div class="m-dim">Native token</div></div><div class="m-amt">42.50</div></div>' +
+        '<div class="m-item">' + av("TST-token", 34, "a") + '<div class="m-grow"><div>TST</div><div class="m-dim">Demo token</div></div><div class="m-amt">1,000</div></div></div></div></div>' +
+      '<div class="m-card" style="align-content:start"><div class="m-section-label">Activity</div>' +
+        '<div class="m-act-row"><span class="m-act-ic">' + I.up + '</span><div class="m-grow"><div>Sent 12.50 LEZ</div><div class="m-dim">To 4f9C…K2mT · 2 min ago</div></div><span class="m-tag t-ok">Confirmed</span></div>' +
+        '<div class="m-act-row"><span class="m-act-ic">' + I.down + '</span><div class="m-grow"><div>Testimonial posted</div><div class="m-dim">Testimonials · 1 h ago</div></div><span class="m-tag t-neutral">Not confirmed yet</span></div>' +
+        '<div class="m-act-row"><span class="m-act-ic">' + I.drop + '</span><div class="m-grow"><div>Test funds received</div><div class="m-dim">Faucet · yesterday</div></div><span class="m-tag t-ok">Confirmed</span></div>' +
+      "</div></div></div>";
+    return '<div class="bc"><div class="bc-side"><div class="bc-dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div style="width:34px;height:26px;display:grid;place-items:center">' + LOGOS.replace('class="logos"', 'style="width:26px;height:28px"') + '</div><div class="bc-mono on">LK</div><div class="bc-mono">TE</div><div class="bc-mono">AM</div></div>' +
+      '<div class="bc-main"><div class="bc-tabs"><span class="bc-tab">Logos Kit Wallet</span><span>Testimonials</span></div><div class="bc-body"><div class="mock" data-opt="' + o + '">' + accs + main + "</div></div></div></div>";
+  }
+  var deskMount = document.getElementById("deskMount");
+  function renderDesk(o) {
+    deskMount.innerHTML = desktop(o);
+    document.querySelectorAll("#deskSeg button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.v === o)); });
+  }
+  document.getElementById("deskSeg").addEventListener("click", (e) => { var b = e.target.closest("button"); if (b) renderDesk(b.dataset.v); });
+  renderDesk("a");
+
+  /* ---------- Picks: saved to the page's db (read back by Claude) ---------- */
+  var db = null, local = {};
+  var state = document.getElementById("storeState");
+  function readLocal() { try { return JSON.parse(localStorage.getItem("lk-picks") || "{}"); } catch (e) { return {}; } }
+  function writeLocal() { try { localStorage.setItem("lk-picks", JSON.stringify(local)); } catch (e) {} }
+  function apply(id, data) {
+    local[id] = data;
+    var seg = document.querySelector('[data-pick="' + id + '"]');
+    if (seg) seg.querySelectorAll("button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.v === data.option)); });
+    var note = document.querySelector('[data-note="' + id + '"]');
+    if (note && document.activeElement !== note && typeof data.note === "string") note.value = data.note;
+  }
+  function flash(id, text) { var el = document.querySelector('[data-saved="' + id + '"]'); if (el) el.textContent = text; }
+  function save(id) {
+    var data = { option: (local[id] && local[id].option) || null, note: (local[id] && local[id].note) || "", updatedAt: new Date().toISOString() };
+    local[id] = data;
+    writeLocal();
+    if (!db) { flash(id, "Saved here"); return; }
+    flash(id, "Saving…");
+    db.doc("picks/" + id).set(data).then(() => { flash(id, "Saved"); }, (err) => { flash(id, "Not saved"); state.textContent = "Couldn't save (" + (err && err.code ? err.code : "error") + "). Tell me your picks in chat instead."; });
+  }
+  document.addEventListener("click", (e) => {
+    var b = e.target.closest("[data-pick] button");
+    if (!b) return;
+    var id = b.parentElement.dataset.pick;
+    apply(id, { option: b.dataset.v, note: (local[id] && local[id].note) || "" });
+    save(id);
+  });
+  var timers = {};
+  document.addEventListener("input", (e) => {
+    var id = e.target.dataset && e.target.dataset.note;
+    if (!id) return;
+    local[id] = { option: (local[id] && local[id].option) || null, note: e.target.value };
+    flash(id, "…");
+    clearTimeout(timers[id]);
+    timers[id] = setTimeout(() => { save(id); }, 700);
+  });
+
+  local = readLocal();
+  Object.keys(local).forEach((id) => { apply(id, local[id]); });
+  var use = window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null);
+  Promise.resolve(use).then((handle) => {
+    db = handle;
+    if (!db) { state.textContent = "Picks save in this browser only here. Tell me your picks in chat."; return; }
+    state.textContent = "Picks save to this page. Claude reads them back.";
+    return db.collection("picks").get().then((snap) => {
+      snap.docs.forEach((d) => { if (d.exists) apply(d.id, d.data()); });
+    });
+  }).catch(() => { state.textContent = "Picks save in this browser only here. Tell me your picks in chat."; });
+})();
+</script>

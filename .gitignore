@@ -34,3 +34,6 @@ coverage/
 
 # Logos AI skills are copied locally from refs/tooling/logos-ai-skills (no licence upstream): never commit them
 /.claude/skills/logos-*
+
+# Linux lgx builds (from agari-box)
+/dist-linux/

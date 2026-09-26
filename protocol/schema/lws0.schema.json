@@ -23,7 +23,8 @@
     },
     "Base64": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "maxLength": 65000
     },
     "ChainId": {
       "type": "string",
@@ -50,7 +51,7 @@
     "U128": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]{0,38})$",
-      "description": "u128 as a decimal string"
+      "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
     },
     "Capabilities": {
       "type": "object",
@@ -88,7 +89,8 @@
           "properties": {
             "maxInstructions": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 16
             },
             "atomic": {
               "anyOf": [
@@ -354,7 +356,8 @@
               },
               "publicKey": {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "maxLength": 65000
               },
               "label": {
                 "type": "string",
@@ -434,7 +437,8 @@
               "properties": {
                 "maxInstructions": {
                   "type": "integer",
-                  "minimum": 1
+                  "minimum": 1,
+                  "maximum": 16
                 },
                 "atomic": {
                   "anyOf": [
@@ -551,7 +555,8 @@
                 },
                 "publicKey": {
                   "type": "string",
-                  "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+                  "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                  "maxLength": 65000
                 },
                 "label": {
                   "type": "string",
@@ -595,7 +600,8 @@
             },
             "signature": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "maxLength": 65000
             }
           }
         }
@@ -681,7 +687,8 @@
             },
             "publicKey": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "maxLength": 65000
             },
             "label": {
               "type": "string",
@@ -725,7 +732,8 @@
         },
         "signature": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         }
       }
     },
@@ -766,7 +774,8 @@
         },
         "publicKey": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         },
         "label": {
           "type": "string",
@@ -878,12 +887,12 @@
         "estimatedMax": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]{0,38})$",
-          "description": "u128 as a decimal string"
+          "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
         },
         "used": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]{0,38})$",
-          "description": "u128 as a decimal string"
+          "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
         },
         "gasLimit": {
           "type": "string",
@@ -927,11 +936,13 @@
                 "type": "boolean"
               }
             }
-          }
+          },
+          "maxItems": 64
         },
         "data": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         },
         "display": {
           "type": "object",
@@ -1111,11 +1122,13 @@
                       "type": "boolean"
                     }
                   }
-                }
+                },
+                "maxItems": 64
               },
               "data": {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "maxLength": 65000
               },
               "display": {
                 "type": "object",
@@ -1134,7 +1147,8 @@
               }
             }
           },
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 16
         },
         "atomicRequired": {
           "type": "boolean"
@@ -1369,12 +1383,12 @@
             "estimatedMax": {
               "type": "string",
               "pattern": "^(0|[1-9][0-9]{0,38})$",
-              "description": "u128 as a decimal string"
+              "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
             },
             "used": {
               "type": "string",
               "pattern": "^(0|[1-9][0-9]{0,38})$",
-              "description": "u128 as a decimal string"
+              "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
             },
             "gasLimit": {
               "type": "string",
@@ -1486,7 +1500,7 @@
         "amount": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]{0,38})$",
-          "description": "u128 as a decimal string"
+          "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
         },
         "synced": {
           "type": "boolean"
@@ -1549,7 +1563,7 @@
         "amount": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]{0,38})$",
-          "description": "u128 as a decimal string"
+          "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
         },
         "retryAfterSeconds": {
           "type": "integer",
@@ -1579,7 +1593,8 @@
         },
         "message": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         }
       }
     },
@@ -1589,11 +1604,13 @@
       "properties": {
         "signature": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         },
         "publicKey": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "maxLength": 65000
         },
         "tag": {
           "type": "string",

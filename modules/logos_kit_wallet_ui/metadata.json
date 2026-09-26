@@ -12,14 +12,126 @@
     {
       "intent": "lez.wallet.connect",
       "params": [
-        { "name": "chains", "type": "array", "required": false },
-        { "name": "accountKinds", "type": "array", "required": false }
+        {
+          "name": "chains",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "accountKinds",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "capabilities",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "signIn",
+          "type": "object",
+          "required": false
+        }
       ]
+    },
+    {
+      "intent": "lez.transaction.send",
+      "params": [
+        {
+          "name": "chain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "instructions",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "atomicRequired",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "intent": "lez.message.sign",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "intent": "lez.wallet.sign_in",
+      "params": [
+        {
+          "name": "domain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "nonce",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "issuedAt",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "intent": "lez.wallet.request_funds",
+      "params": [
+        {
+          "name": "chain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "intent": "lez.wallet.open",
+      "params": [],
+      "handoff": true,
+      "web": true
     }
   ],
   "uses": [],
   "nix": {
-    "packages": { "build": [], "runtime": [] },
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
     "external_libraries": [],
     "cmake": {
       "find_packages": [],

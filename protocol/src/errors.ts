@@ -1,4 +1,5 @@
-// QML-safe module: ES2017 only (no BigInt, no Intl, fields set in constructors).
+// QML-safe module: ES2017 only (no BigInt, no Intl, no optional chaining, and
+// `declare` fields so the build emits no class-field syntax; see check-qml.ts).
 
 /**
  * LWS-0 error codes.
@@ -68,10 +69,10 @@ export type LezErrorJson = { code: number; message: string; data?: unknown }
  * this class adds viem-style ergonomics (`shortMessage`, `docsUrl`, `walk`).
  */
 export class LezError extends Error {
-  readonly code: number
-  readonly shortMessage: string
-  readonly data: unknown
-  readonly docsUrl: string
+  declare readonly code: number
+  declare readonly shortMessage: string
+  declare readonly data: unknown
+  declare readonly docsUrl: string
 
   constructor(code: number, message?: string, data?: unknown, options?: { cause?: unknown }) {
     const short = message || defaultMessages[code] || 'Wallet error'
@@ -87,12 +88,15 @@ export class LezError extends Error {
     Object.setPrototypeOf(this, new.target.prototype)
   }
 
-  /** Walk the `cause` chain; returns the first error matching `fn` (or the deepest). */
+  /**
+   * Walk the `cause` chain; returns the first error matching `fn` (or the
+   * deepest). Stops after 16 links so a cyclic chain can't hang the UI thread.
+   */
   walk(fn?: (err: unknown) => boolean): unknown {
     let current: unknown = this
     let last: unknown = this
-    while (current) {
-      if (fn?.(current)) return current
+    for (let depth = 0; current && depth < 16; depth++) {
+      if (fn && fn(current)) return current
       last = current
       current = (current as { cause?: unknown }).cause
     }

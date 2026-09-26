@@ -14,7 +14,8 @@
       "!sdk/qml/**/logoskit.js",
       "!docs/dev/PLAN.md",
       "!assets/logos",
-      "!protocol/vectors"
+      "!protocol/vectors",
+      "!docs/design/*.html"
     ]
   },
   "formatter": {
@@ -83,6 +84,9 @@
       ],
       "linter": {
         "rules": {
+          "complexity": {
+            "useOptionalChain": "off"
+          },
           "style": {
             "noRestrictedGlobals": {
               "level": "error",

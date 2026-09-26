@@ -31,6 +31,11 @@ use lee_core::{
     native_token::{self, NATIVE_TOKEN_PROGRAM_ID},
 };
 use serde_json::{Value, json};
+use sha2::{Digest as _, Sha256};
+
+/// LEZ's public-message hash prefix. LEZ keeps it private, so we restate it
+/// here and prove it against `Message::hash` for every vector we emit.
+const PUBLIC_PREFIX: &[u8; 32] = b"/LEE/v0.3/Message/Public/\x00\x00\x00\x00\x00\x00\x00";
 
 /// BIP-39 reference mnemonic (Trezor vectors). Test-only; never fund it.
 const MNEMONIC: &str =
@@ -39,11 +44,29 @@ const MNEMONIC: &str =
 const AUX_RAND: [u8; 32] = [0x11; 32];
 
 pub fn run(repo_root: &Path) -> Result<()> {
-    let out = repo_root.canonicalize()?.join("protocol/vectors");
+    let root = repo_root.canonicalize()?;
+    check_lez_rev(&root)?;
+    let out = root.join("protocol/vectors");
     fs::create_dir_all(&out)?;
     write_json(&out.join("public_tx.json"), &public_tx_vectors()?)?;
     write_json(&out.join("keys.json"), &key_vectors()?)?;
     println!("wrote {}/{{public_tx,keys}}.json", out.display());
+    Ok(())
+}
+
+/// `LEZ_REV` must be the rev Cargo actually resolved, or `meta.lezRev` lies.
+fn check_lez_rev(root: &Path) -> Result<()> {
+    let lock = fs::read_to_string(root.join("Cargo.lock"))?;
+    let marker = "logos-execution-zone?rev=";
+    let revs: std::collections::BTreeSet<&str> = lock
+        .match_indices(marker)
+        .filter_map(|(i, _)| lock.get(i + marker.len()..i + marker.len() + 40))
+        .collect();
+    ensure!(
+        revs.len() == 1 && revs.contains(crate::LEZ_REV),
+        "Cargo.lock resolves LEZ at {revs:?}, but xtask LEZ_REV is {}",
+        crate::LEZ_REV
+    );
     Ok(())
 }
 
@@ -67,6 +90,15 @@ fn account_json(id: &AccountId) -> Value {
 
 fn message_json(msg: &Message) -> Result<Value> {
     let borsh = borsh::to_vec(msg)?;
+    let recomputed: [u8; 32] = Sha256::new()
+        .chain_update(PUBLIC_PREFIX)
+        .chain_update(&borsh)
+        .finalize()
+        .into();
+    ensure!(
+        recomputed == msg.hash(),
+        "PUBLIC_PREFIX no longer matches LEZ's Message::hash"
+    );
     Ok(json!({
         "fields": {
             "programAccountId": account_json(&msg.program_account_id),
@@ -128,7 +160,7 @@ fn public_tx_vectors() -> Result<Value> {
 
     Ok(json!({
         "meta": meta(),
-        "prefix": hex::encode(b"/LEE/v0.3/Message/Public/\x00\x00\x00\x00\x00\x00\x00"),
+        "prefix": hex::encode(PUBLIC_PREFIX),
         "messages": messages,
         "signed": [signed_native_transfer()?],
     }))

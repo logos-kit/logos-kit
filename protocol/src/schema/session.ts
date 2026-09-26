@@ -32,7 +32,7 @@ export const Capabilities = Type.Object({
   /** False for wallets that must own submission (all private flows). */
   signTransaction: Type.Boolean(),
   batch: Type.Object({
-    maxInstructions: Type.Integer({ minimum: 1 }),
+    maxInstructions: Type.Integer({ minimum: 1, maximum: 16 }),
     atomic: Type.Union([Type.Literal('supported'), Type.Literal('unsupported')]),
   }),
   proving: Type.Optional(

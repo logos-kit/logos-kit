@@ -6,8 +6,8 @@ import Logos.Controls
 // S0 skeleton of the Logos Kit wallet UI.
 // - Paints its own background (the host widget behind a view is white).
 // - Pings the core module via callModuleAsync.
-// - Provides `lez.wallet.connect` and, for the S0 identity-hop probe, answers
-//   with the host-attested requesterName plus what the core saw as our caller.
+// - Declares every LWS-0 intent (generated from protocol/schema/intents.json)
+//   and answers `unavailable` until the S7 sheets exist.
 Item {
     id: root
     width: 480
@@ -36,22 +36,14 @@ Item {
         call("ping", [], function (r) { root.coreStatus = JSON.stringify(r) })
     }
 
+    // Until S7 lands the real sheets, every intent is answered immediately
+    // with `unavailable`, so a dApp never hangs and nothing is auto-approved.
+    // (The S0 identity-hop probe that answered here is recorded in PROGRESS.md.)
     Connections {
         target: typeof logos !== "undefined" ? logos : null
         function onIntentRequested(requestId, intent, params, requesterName) {
-            if (intent !== "lez.wallet.connect") {
-                logos.respond(requestId, false, {}, "bad_request")
-                return
-            }
-            root.lastRequest = requesterName
-            // Probe: what does the core see when WE (the wallet UI) call it?
-            root.call("whoami", [], function (seen) {
-                logos.respond(requestId, true, {
-                    probe: true,
-                    requesterName: requesterName,
-                    walletUiSeenByCore: seen
-                }, "")
-            })
+            root.lastRequest = requesterName + " → " + intent
+            logos.respond(requestId, false, {}, "unavailable")
         }
     }
 

@@ -34,8 +34,8 @@ fn caller_json() -> String {
 
 impl LogosKitWalletModule for Wallet {
     fn ping(&mut self) -> String {
-        let caller = caller_json();
-        emit_pinged(&caller);
+        // Events reach every subscriber, so they never carry caller identity.
+        emit_pinged("{\"ok\":true}");
         serde_json::json!({ "ok": true, "module": "logos_kit_wallet", "version": env!("CARGO_PKG_VERSION") })
             .to_string()
     }
