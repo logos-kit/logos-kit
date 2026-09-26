@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # S5 exit proof, through the `logos-kit` CLI against the standalone sequencer
 # (e2e/standalone.sh), dev-mode proofs:
-#   - the reproducibly built testimonial program deploys and checks out as
-#     `verified_local` (recognised by its image, wherever it is deployed);
+#   - the reproducibly built testimonial program deploys (immutable) and
+#     checks out as `verified_local` (recognised by its image); an upgradeable
+#     copy of the same image is only `claimed`, and the wallet won't post to it;
 #   - posts from three distinct accounts (two wallets) land and decode (no
 #     `--ack-unknown`), a second post by the same account and a post from a
 #     private account are refused;
@@ -39,11 +40,18 @@ for acct in "$DEPLOYER" "$A1" "$A2"; do
   "$LK" faucet "$acct" --key-env LK_GENESIS_KEY --drop 2000000000 --yes --json >/dev/null
 done
 
-# Deploy (upgradeable, as staging would be) and check the header.
+# Deploy (immutable, the default) and check the header.
 PROGRAM=$("$LK" testimonial deploy --payer "$DEPLOYER" --yes --json | field "['account']")
 echo "info program $PROGRAM"
 check "program name" "$("$LK" program "$PROGRAM" --json | field "['name']")" testimonial
 check "program status" "$("$LK" program "$PROGRAM" --json | field "['status']")" verified_local
+
+# Someone else's upgradeable copy of the same image: its owner could swap
+# the code between approval and inclusion, so it is not trusted.
+COPY=$("$LK" testimonial deploy --payer "$DEPLOYER" --upgradeable --yes --json | field "['account']")
+check "upgradeable copy status" "$("$LK" program "$COPY" --json | field "['status']")" claimed
+refused "post to an upgradeable copy" "owner can still change it" \
+  "$LK" testimonial post --program "$COPY" --from "$A1" --text "hi" --yes --json
 
 # Posts decode (the CLI would demand --ack-unknown otherwise).
 POST=$("$LK" testimonial post --program "$PROGRAM" --from "$A1" --username alice \
@@ -80,6 +88,7 @@ check "evidence distinct authors" "$(echo "$EV" | field "['distinctAuthors']")" 
 check "evidence tally consistent" "$(echo "$EV" | field "['programs'][0]['consistent']")" True
 check "evidence months" "$(echo "$EV" | field "['months'].__len__()")" 1
 check "evidence target met" "$(echo "$EV" | field "['target']['met']")" False
+check "evidence program immutable" "$(echo "$EV" | field "['target']['immutable']")" True
 check "evidence author other txs" "$(echo "$EV" | field "['entries'][0]['otherTxs']")" 0
 check "snapshot written" "$(ls "$SNAP" | wc -l | tr -d ' ')" 1
 

@@ -3,13 +3,17 @@
 //!
 //! The wallet recognises the program by its **image**, never by an address:
 //! `programs/testimonial/artifacts/build.json` records the image our pinned
-//! docker build produces, and only a program whose live header runs exactly
-//! that image gets the testimonial decoder or a post. Any deployment (local,
-//! staging, production) qualifies; any other code at a claimed address is
-//! refused, because a signer's authorization reaches every program it calls.
+//! docker build produces. A program is trusted (testimonial decoder, posts,
+//! `verified_local`) only if its live header runs exactly that image **and**
+//! nobody can change it: the header is immutable, or it is the registry's
+//! deployment. A public transaction names the program account, not its
+//! image, so an upgradeable copy run by someone else could swap its code
+//! between approval and inclusion, with the signer's authorization.
 
 use std::{
     borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    sync::LazyLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -23,7 +27,7 @@ use wallet::{WalletCore, program_facades::program_loader::ProgramLoader};
 use crate::{
     session::{AccountKind, Session},
     tx::{CallAccount, Intent},
-    verify::{self, Source},
+    verify::{self, ProgramCheck, Source, Status},
 };
 
 /// Our submission id for LP-0021.
@@ -34,6 +38,7 @@ pub const TARGET_TOTAL: usize = 150;
 pub const TARGET_PER_MONTH: usize = 30;
 
 const BUILD: &str = include_str!("../../../programs/testimonial/artifacts/build.json");
+static PARSED: LazyLock<Option<Build>> = LazyLock::new(|| serde_json::from_str(BUILD).ok());
 
 /// What our reproducible build of the program produced.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -45,8 +50,8 @@ pub struct Build {
     pub built: String,
 }
 
-pub fn build() -> Option<Build> {
-    serde_json::from_str(BUILD).ok()
+pub fn build() -> Option<&'static Build> {
+    PARSED.as_ref()
 }
 
 /// Whether `image` is the testimonial program's.
@@ -54,17 +59,25 @@ pub fn is_image(image: &[u32; 8]) -> bool {
     build().is_some_and(|b| b.image_id == verify::image_hex(image))
 }
 
-/// The program's live header must run our image.
-pub async fn check_program(core: &WalletCore, program: AccountId) -> Result<()> {
-    let header = verify::read_header(core, program)
-        .await?
-        .with_context(|| format!("no program is deployed at {program}"))?;
+/// A header check that [`verify`] classified as our program, fixed in place.
+pub fn trusted(check: &ProgramCheck) -> bool {
+    is_image(&check.image_id_words) && check.status == Status::VerifiedLocal
+}
+
+/// The program must be one we trust (see the module docs).
+pub async fn check_program(core: &WalletCore, program: AccountId) -> Result<ProgramCheck> {
+    let check = verify::check(core, program).await?;
     ensure!(
-        is_image(&header.image_id),
+        is_image(&check.image_id_words),
         "{program} does not run the Logos Kit testimonial program (image {})",
-        verify::image_hex(&header.image_id)
+        check.image_id
     );
-    Ok(())
+    ensure!(
+        trusted(&check),
+        "{program} runs the testimonial image but its owner can still change it; \
+         use the registry's deployment or an immutable one"
+    );
+    Ok(check)
 }
 
 /// The testimonial program the registry names for `chain`.
@@ -78,12 +91,14 @@ pub fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// The `Call` that posts: `[author (signs), stats, record]`, all on the
-/// program's shard. The author pays the fee.
+/// The `Call` that posts: `[author (signs), stats(page), record]` (+
+/// `stats(page - 1)` after page 0), all on the program's shard. The author
+/// pays the fee.
 pub fn post_call(
     program: AccountId,
     author: AccountId,
     submission: &str,
+    page: u32,
     username: Option<&str>,
     text: &str,
     timestamp_ms: u64,
@@ -92,6 +107,7 @@ pub fn post_call(
     let p = program.value();
     let data = borsh::to_vec(&Instruction::Post {
         submission: submission.to_owned(),
+        page,
         username: username.map(str::to_owned),
         text: text.to_owned(),
         timestamp_ms,
@@ -101,17 +117,24 @@ pub fn post_call(
         shard: None,
         signer,
     };
+    let mut accounts = vec![
+        row(*author.value(), true),
+        row(testimonial_core::stats_account(p, submission, page), false),
+        row(
+            testimonial_core::record_account(p, submission, author.value()),
+            false,
+        ),
+    ];
+    if let Some(previous) = page.checked_sub(1) {
+        accounts.push(row(
+            testimonial_core::stats_account(p, submission, previous),
+            false,
+        ));
+    }
     Ok(Intent::Call {
         from: author.to_string(),
         program: program.to_string(),
-        accounts: vec![
-            row(*author.value(), true),
-            row(testimonial_core::stats_account(p, submission), false),
-            row(
-                testimonial_core::record_account(p, submission, author.value()),
-                false,
-            ),
-        ],
+        accounts,
         data: STANDARD.encode(data),
     })
 }
@@ -123,15 +146,37 @@ async fn shard(core: &WalletCore, id: [u8; 32], program: AccountId) -> Result<Ve
     Ok(account.data.shard(program).as_ref().to_vec())
 }
 
-pub async fn stats(core: &WalletCore, program: AccountId, submission: &str) -> Result<Stats> {
+/// Every stats page with authors, in order. The last one is the page to
+/// post to, unless it is full (then the next).
+pub async fn pages(core: &WalletCore, program: AccountId, submission: &str) -> Result<Vec<Stats>> {
     testimonial_core::check_submission(submission)?;
-    let bytes = shard(
-        core,
-        testimonial_core::stats_account(program.value(), submission),
-        program,
-    )
-    .await?;
-    Ok(Stats::load(submission, &bytes)?)
+    let mut pages = Vec::new();
+    for page in 0.. {
+        let bytes = shard(
+            core,
+            testimonial_core::stats_account(program.value(), submission, page),
+            program,
+        )
+        .await?;
+        let stats = Stats::load(submission, page, &bytes)?;
+        let full = stats.is_full();
+        if stats.count() > 0 {
+            pages.push(stats);
+        }
+        if !full {
+            break;
+        }
+    }
+    Ok(pages)
+}
+
+/// The first page that isn't full.
+pub fn open_page(pages: &[Stats]) -> u32 {
+    match pages.last() {
+        Some(last) if last.is_full() => last.page + 1,
+        Some(last) => last.page,
+        None => 0,
+    }
 }
 
 pub async fn record(
@@ -162,60 +207,40 @@ pub async fn record(
 #[derive(Clone, Debug)]
 pub struct Watch {
     program: AccountId,
-    submission: String,
-    author: AccountId,
-    username: Option<String>,
-    text: String,
+    expected: Testimonial,
 }
 
-/// The post a reviewed transaction makes, if it runs our program's image.
-pub fn watch(review: &crate::tx::Review) -> Option<Watch> {
-    let program_check = review.program.as_ref()?;
-    if !is_image(&program_check.image_id_words) {
+/// The post a transaction makes, read from the exact message that is signed,
+/// if it calls a program we trust.
+pub fn watch(
+    check: Option<&ProgramCheck>,
+    message: Option<&lee::public_transaction::Message>,
+) -> Option<Watch> {
+    let (check, message) = (check?, message?);
+    if !trusted(check) || message.program_account_id.to_string() != check.account {
         return None;
     }
-    let program = crate::decode::account_id(&program_check.account).ok()?;
-    let id = |s: &str| crate::decode::account_id(s.strip_prefix("Public/").unwrap_or(s)).ok();
-    match &review.intent {
-        Intent::Testimonial {
-            from,
-            submission,
-            username,
-            text,
-            ..
-        } => Some(Watch {
-            program,
-            submission: submission.clone(),
-            author: id(from)?,
-            username: username.clone(),
-            text: text.clone(),
-        }),
-        Intent::Call { accounts, data, .. } => {
-            let bytes = STANDARD.decode(data).ok()?;
-            let Instruction::Post {
-                submission,
-                username,
-                text,
-                ..
-            } = borsh::from_slice(&bytes).ok()?;
-            Some(Watch {
-                program,
-                submission,
-                author: id(&accounts.first()?.account)?,
-                username,
-                text,
-            })
-        }
-        Intent::Transfer { .. } => None,
-    }
+    let Instruction::Post {
+        submission,
+        username,
+        text,
+        timestamp_ms,
+        ..
+    } = borsh::from_slice(&message.instruction_data).ok()?;
+    let author = message.shard_selectors.first()?.account_id;
+    Some(Watch {
+        program: message.program_account_id,
+        expected: Testimonial::new(submission, *author.value(), username, text, timestamp_ms),
+    })
 }
 
-/// `Some(true)`: the record holds this post. `Some(false)`: nothing was
-/// written (the program refused it). `None`: a different post is there.
+/// `Some(true)`: the record is exactly this post. `Some(false)`: nothing
+/// was written (the program refused it). `None`: another post is there.
 pub async fn observe(core: &WalletCore, w: &Watch) -> Result<Option<bool>> {
+    let author = AccountId::new(w.expected.author);
     Ok(
-        match record(core, w.program, &w.submission, w.author).await? {
-            Some(t) => (t.text == w.text && t.username == w.username).then_some(true),
+        match record(core, w.program, &w.expected.submission, author).await? {
+            Some(t) => (t == w.expected).then_some(true),
             None => Some(false),
         },
     )
@@ -253,8 +278,11 @@ pub struct MonthCount {
 #[serde(rename_all = "camelCase")]
 pub struct ProgramSummary {
     pub account: String,
+    /// Only an immutable header guarantees earlier code didn't write records.
+    pub immutable: bool,
     pub count: usize,
-    /// The program's own monthly tally.
+    pub pages: usize,
+    /// The program's own monthly tally (summed over pages).
     pub monthly: Vec<MonthCount>,
     /// The tally equals the one recomputed from the records.
     pub consistent: bool,
@@ -269,6 +297,8 @@ pub struct Target {
     pub total_met: bool,
     /// Two consecutive calendar months with ≥ per_month new authors each.
     pub months_met: bool,
+    /// Every program read is immutable (its whole history is this code).
+    pub immutable: bool,
     pub met: bool,
 }
 
@@ -287,13 +317,15 @@ pub struct Tip {
 pub struct Evidence {
     pub submission: String,
     pub programs: Vec<ProgramSummary>,
-    /// New distinct authors per month (an author counts once, at its first post).
+    /// New distinct authors per month: an author counts once, in the month
+    /// of its earliest post across all programs.
     pub months: Vec<MonthCount>,
     pub distinct_authors: usize,
     /// Authors who posted under more than one program account (counted once).
     pub repeat_authors: Vec<String>,
     pub target: Target,
     pub entries: Vec<Entry>,
+    /// Read before the records: every record here is at or before this block.
     pub tip: Tip,
     pub generated_ms: u64,
 }
@@ -304,71 +336,83 @@ pub async fn evidence(
     submission: &str,
 ) -> Result<Evidence> {
     ensure!(!programs.is_empty(), "name at least one program account");
-    let mut entries = Vec::new();
-    let mut summaries = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut repeat = Vec::new();
-    let mut months: std::collections::BTreeMap<u32, usize> = Default::default();
-    for &program in programs {
-        check_program(core, program).await?;
-        let stats = stats(core, program, submission).await?;
-        let mut recomputed: std::collections::BTreeMap<u32, u32> = Default::default();
-        for (index, author) in stats.authors.iter().enumerate() {
-            let author = AccountId::new(*author);
-            let t = record(core, program, submission, author)
-                .await?
-                .with_context(|| format!("{author} is counted but has no record"))?;
-            let month = testimonial_core::yyyymm(t.timestamp_ms);
-            *recomputed.entry(month).or_default() += 1;
-            if seen.insert(author) {
-                *months.entry(month).or_default() += 1;
-            } else {
-                repeat.push(author.to_string());
-            }
-            let account = core
-                .get_account_view(ProgramShardSelector::native_balance(author))
-                .await?;
-            entries.push(Entry {
-                program: program.to_string(),
-                index,
-                author: author.to_string(),
-                username: t.username,
-                text: t.text,
-                timestamp_ms: t.timestamp_ms,
-                time: iso(t.timestamp_ms),
-                month: month_str(month),
-                other_txs: account.nonce.0.saturating_sub(1).to_string(),
-                balance: account.data.native_balance().unwrap_or(0).to_string(),
-            });
-        }
-        let on_chain: std::collections::BTreeMap<u32, u32> =
-            stats.monthly.iter().map(|m| (m.yyyymm, m.count)).collect();
-        summaries.push(ProgramSummary {
-            account: program.to_string(),
-            count: stats.count(),
-            monthly: stats
-                .monthly
-                .iter()
-                .map(|m| MonthCount {
-                    month: month_str(m.yyyymm),
-                    count: m.count as usize,
-                })
-                .collect(),
-            consistent: on_chain == recomputed,
-        });
-    }
-    let distinct = seen.len();
-    let months_met = months.iter().any(|(&m, &n)| {
-        n >= TARGET_PER_MONTH
-            && months
-                .get(&next_month(m))
-                .is_some_and(|&k| k >= TARGET_PER_MONTH)
-    });
     let tip_id = core.get_last_block_id().await?;
     let tip = core
         .get_block(tip_id)
         .await?
         .with_context(|| format!("block {tip_id} not found"))?;
+    let mut entries = Vec::new();
+    let mut summaries = Vec::new();
+    let mut earliest: HashMap<AccountId, u64> = HashMap::new();
+    let mut repeat = BTreeSet::new();
+    for &program in programs {
+        let check = check_program(core, program).await?;
+        let pages = pages(core, program, submission).await?;
+        let mut on_chain: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut recomputed: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut index = 0;
+        for stats in &pages {
+            for m in &stats.monthly {
+                *on_chain.entry(m.yyyymm).or_default() += m.count;
+            }
+            for author in &stats.authors {
+                let author = AccountId::new(*author);
+                let t = record(core, program, submission, author)
+                    .await?
+                    .with_context(|| format!("{author} is counted but has no record"))?;
+                let month = testimonial_core::yyyymm(t.timestamp_ms);
+                *recomputed.entry(month).or_default() += 1;
+                if let Some(first) = earliest.get_mut(&author) {
+                    repeat.insert(author.to_string());
+                    *first = (*first).min(t.timestamp_ms);
+                } else {
+                    earliest.insert(author, t.timestamp_ms);
+                }
+                let account = core
+                    .get_account_view(ProgramShardSelector::native_balance(author))
+                    .await?;
+                entries.push(Entry {
+                    program: program.to_string(),
+                    index,
+                    author: author.to_string(),
+                    username: t.username,
+                    text: t.text,
+                    timestamp_ms: t.timestamp_ms,
+                    time: iso(t.timestamp_ms),
+                    month: month_str(month),
+                    other_txs: account.nonce.0.saturating_sub(1).to_string(),
+                    balance: account.data.native_balance().unwrap_or(0).to_string(),
+                });
+                index += 1;
+            }
+        }
+        summaries.push(ProgramSummary {
+            account: program.to_string(),
+            immutable: check.immutable,
+            count: index,
+            pages: pages.len(),
+            monthly: on_chain
+                .iter()
+                .map(|(&m, &count)| MonthCount {
+                    month: month_str(m),
+                    count: count as usize,
+                })
+                .collect(),
+            consistent: on_chain == recomputed,
+        });
+    }
+    let mut months: BTreeMap<u32, usize> = BTreeMap::new();
+    for &first in earliest.values() {
+        *months.entry(testimonial_core::yyyymm(first)).or_default() += 1;
+    }
+    let distinct = earliest.len();
+    let months_met = months.iter().any(|(&m, &n)| {
+        n >= TARGET_PER_MONTH
+            && months
+                .get(&testimonial_core::next_month(m))
+                .is_some_and(|&k| k >= TARGET_PER_MONTH)
+    });
+    let immutable = summaries.iter().all(|p| p.immutable);
     Ok(Evidence {
         submission: submission.to_owned(),
         programs: summaries,
@@ -380,13 +424,14 @@ pub async fn evidence(
             })
             .collect(),
         distinct_authors: distinct,
-        repeat_authors: repeat,
+        repeat_authors: repeat.into_iter().collect(),
         target: Target {
             total: TARGET_TOTAL,
             per_month: TARGET_PER_MONTH,
             total_met: distinct >= TARGET_TOTAL,
             months_met,
-            met: distinct >= TARGET_TOTAL && months_met,
+            immutable,
+            met: distinct >= TARGET_TOTAL && months_met && immutable,
         },
         entries,
         tip: Tip {
@@ -398,14 +443,6 @@ pub async fn evidence(
     })
 }
 
-const fn next_month(yyyymm: u32) -> u32 {
-    if yyyymm % 100 == 12 {
-        (yyyymm / 100 + 1) * 100 + 1
-    } else {
-        yyyymm + 1
-    }
-}
-
 fn month_str(yyyymm: u32) -> String {
     format!("{}-{:02}", yyyymm / 100, yyyymm % 100)
 }
@@ -414,15 +451,7 @@ fn month_str(yyyymm: u32) -> String {
 pub fn iso(ms: u64) -> String {
     let secs = ms / 1000;
     let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let z = i64::try_from(secs / 86_400).unwrap_or(0) + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(mo <= 2);
+    let (y, mo, d) = testimonial_core::civil(ms);
     format!("{y:04}-{mo:02}-{d:02} {h:02}:{m:02}:{s:02} UTC")
 }
 
@@ -480,7 +509,6 @@ mod tests {
     fn times_and_months() {
         assert_eq!(iso(1_709_251_199_999), "2024-02-29 23:59:59 UTC");
         assert_eq!(iso(1_798_761_600_000), "2027-01-01 00:00:00 UTC");
-        assert_eq!(next_month(202_612), 202_701);
         assert_eq!(month_str(202_611), "2026-11");
     }
 }

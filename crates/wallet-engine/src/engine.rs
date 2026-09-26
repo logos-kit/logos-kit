@@ -953,7 +953,8 @@ impl Engine {
         // Own-account invariant: which of our private accounts must move, by how much.
         let watch = own_invariant(&prepared.review);
         // A testimonial post proves itself by the record it writes.
-        let post = crate::testimonial::watch(&prepared.review);
+        let post =
+            crate::testimonial::watch(prepared.review.program.as_ref(), prepared.public_message());
         let tx_hash = if prepared.needs_proof() {
             let (job, pins) = prepared.into_proving()?;
             let slot = {

@@ -256,6 +256,16 @@ pub struct Prepared {
     body: Body,
 }
 
+impl Prepared {
+    /// The public message that gets signed (public transactions only).
+    pub fn public_message(&self) -> Option<&lee::public_transaction::Message> {
+        match &self.body {
+            Body::Public(tx) => Some(tx.message()),
+            Body::Private { .. } => None,
+        }
+    }
+}
+
 enum Body {
     Public(PreparedPublicTx),
     Private {
@@ -1117,9 +1127,20 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
         .await
         .map_err(lez)?;
     let message = tx.message();
-    // The testimonial decoder follows the image, never the address.
+    // The testimonial decoder follows the image (in a header nobody can
+    // change), never the address.
     let decoders = match &check {
-        Some(c) if crate::testimonial::is_image(&c.image_id_words) => {
+        Some(c) if crate::testimonial::trusted(c) => {
+            if let Ok(testimonial_core::Instruction::Post { submission, .. }) =
+                borsh::from_slice(&message.instruction_data)
+            {
+                ensure!(
+                    crate::testimonial::record(core, program, &submission, from)
+                        .await?
+                        .is_none(),
+                    "{from} already posted a testimonial for {submission}"
+                );
+            }
             decoders.clone().with(program, decode::Decoder::Testimonial)
         }
         _ => decoders.clone(),
@@ -1187,11 +1208,7 @@ async fn prepare_testimonial(
     };
     let program_id = decode::account_id(&program)?;
     testimonial::check_program(core, program_id).await?;
-    let stats = testimonial::stats(core, program_id, &submission).await?;
-    ensure!(
-        stats.count() < testimonial_core::MAX_AUTHORS,
-        "{submission} has reached its testimonial limit"
-    );
+    let page = testimonial::open_page(&testimonial::pages(core, program_id, &submission).await?);
     ensure!(
         testimonial::record(core, program_id, &submission, author)
             .await?
@@ -1202,6 +1219,7 @@ async fn prepare_testimonial(
         program_id,
         author,
         &submission,
+        page,
         username.as_deref(),
         &text,
         testimonial::now_ms(),

@@ -261,9 +261,10 @@ enum TestimonialCmd {
     Deploy {
         #[arg(long)]
         payer: String,
-        /// Nobody can upgrade it afterwards (production).
+        /// Keep an upgrade key (staging only: the wallet trusts an
+        /// upgradeable copy only if the registry names it).
         #[arg(long)]
-        immutable: bool,
+        upgradeable: bool,
         #[arg(long, default_value = "programs/testimonial/artifacts/testimonial.bin")]
         bin: PathBuf,
     },
@@ -854,6 +855,20 @@ fn testimonial_program(session: &Session, program: Option<&str>) -> Result<Accou
     wallet_engine::decode::account_id(&program)
 }
 
+/// Untrusted text for the terminal: control characters (except newline)
+/// escaped, so a stored string can't drive the terminal.
+fn shown(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_control() && c != '\n' {
+                c.escape_default().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 fn git(args: &[&str]) -> Result<String> {
     let out = std::process::Command::new("git").args(args).output()?;
     ensure!(out.status.success(), "git {} failed", args.join(" "));
@@ -887,9 +902,9 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
             let program = testimonial_program(&session, program.as_deref())?;
             let core = session.core().context("not connected")?;
             testimonial::check_program(core, program).await?;
-            let stats = testimonial::stats(core, program, submission).await?;
+            let pages = testimonial::pages(core, program, submission).await?;
             let mut rows = Vec::new();
-            for author in &stats.authors {
+            for author in pages.iter().flat_map(|p| &p.authors) {
                 let author = AccountId::new(*author);
                 if let Some(t) = testimonial::record(core, program, submission, author).await? {
                     rows.push(serde_json::json!({
@@ -906,8 +921,8 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                         "#{i} {} {} ({})\n    {}",
                         r["time"].as_str().unwrap_or(""),
                         r["author"].as_str().unwrap_or(""),
-                        r["username"].as_str().unwrap_or("no name"),
-                        r["text"].as_str().unwrap_or("").replace('\n', "\n    ")
+                        shown(r["username"].as_str().unwrap_or("no name")),
+                        shown(r["text"].as_str().unwrap_or("")).replace('\n', "\n    ")
                     );
                 }
             });
@@ -986,6 +1001,14 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                 docker_tag: docker_tag.clone(),
                 features: None,
             };
+            // What gets built is the commit; it must be public for anyone
+            // to reproduce the image build.json records.
+            if git(&["branch", "-r", "--contains", &source.commit])?.is_empty() {
+                eprintln!(
+                    "warning: {} is on no remote branch yet; push it to {repo_url} before publishing build.json",
+                    &source.commit[..12]
+                );
+            }
             let work = std::env::temp_dir().join("logos-kit-build-testimonial");
             eprintln!(
                 "building testimonial @ {} in docker {docker_tag} …",
@@ -1015,9 +1038,10 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
         }
         TestimonialCmd::Deploy {
             payer,
-            immutable,
+            upgradeable,
             bin,
         } => {
+            let immutable = !upgradeable;
             let elf = std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))?;
             let image = verify::image_hex(&testimonial::image_of(&elf)?);
             let pinned = testimonial::build()
@@ -1034,7 +1058,7 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                 cli,
                 &format!(
                     "Deploy the testimonial program ({}) to {}, paid by {payer}?",
-                    if *immutable {
+                    if immutable {
                         "immutable"
                     } else {
                         "upgradeable"
@@ -1044,7 +1068,7 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
             )? {
                 bail!("cancelled");
             }
-            let program = session.deploy_program(elf, payer, *immutable).await?;
+            let program = session.deploy_program(elf, payer, immutable).await?;
             let entry = serde_json::json!({
                 "name": "testimonial", "chain": session.zone().chain,
                 "account": program.to_string(), "imageId": image,

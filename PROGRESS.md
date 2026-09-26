@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** finish S4's builtin evidence (`just verify-builtins` → `registry/builtins.json`, docker image pull in progress), then merge S4 and start S5 (testimonial program). Storybook run stays queued before S7.
+**Next action:** S5 is done locally on `stage/05-testimonial` (not merged). Two things are waiting on you: (1) go-ahead to push the repo, so the testimonial build commit is public; (2) on the 0.3 testnet launch (target 2026-09-30), run `just fingerprint`, then do the staging and production testimonial deploys plus the faucet decision. Meanwhile, start S6 (TS codec + client + theme + QML bundle; include a `postTestimonial` helper). Storybook run stays queued before S7.
 
 ---
 
@@ -220,3 +220,33 @@ The single place to resume from after a context clear.
 - 2026-09-26: A private payment to foreign keys lands under a fresh account id (npk, vpk, random identifier); the receiver's sync finds it as a new private account (LEZ's own behaviour). Surfacing that as "received" in the UI is S7 work.
 - 2026-09-26: Program `image_id` hex = the 8 u32 words little-endian (`verify::image_hex`).
 - Tracked: `Undisclosed` image claims are accepted (count-bounded) only when the approved program is immutable; binding them to the pinned image needs the mirror-commitment membership check. The drip-service HTTP server itself is launch-day work.
+
+---
+
+## Stage S5 · Testimonial program + deploy + evidence, branch `stage/05-testimonial`
+
+**Status:** local exit proof passes (2026-09-27); testnet deploy waits for the 0.3 launch
+
+- [x] Program (`programs/testimonial/`, own workspace, lockfile seeded from LEZ's so risc0-zkvm is 3.0.5): `core` (types, seeds, PDAs via sha2, checks, date math; no `lee_core`, so the engine links it) + `methods/guest` (`plan`/`apply` lib, 3-line `testimonial` bin). Rules: author signs and selects our shard; **top-level only** (`caller_account_id` must be `None`); text 1–280 B, username 1–32 B, submission 1–32 printable ASCII; control, direction, invisible and line-separator characters refused; `timestamp_window [ts − 2 min, ts + 10 min)`; `Posted` event (public data only). Proof: `cargo test` in `programs/testimonial` → 9 passed, incl. `pda_matches_lee_core`
+- [x] Reproducible build: `logos-kit testimonial build` (= `verify::build` of a commit in docker `r0.1.91.1`) → `programs/testimonial/artifacts/{testimonial.bin, build.json}` image `8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e` from commit `bb7764a`, `testimonial.bin` sha256 `aca042ea…62f6` (409 KB, 4 segments). The CLI build matched a separate manual `cargo risczero build` byte for byte (the second hit docker's layer cache)
+- [x] Engine (`testimonial.rs`): the program is recognised by **image**, and trusted only when the header can't change (immutable, or the registry's deployment). Then: `verify` says `verified_local`, the testimonial decoder attaches (Call or `Testimonial` intent), posts are allowed. `Intent::Testimonial {from, program?, submission=LP-0021/logos-kit, username?, text}`: the wallet adds time, page and derived accounts; public author only; preflight input → trusted program → not posted yet. Outcome read back from the record (exact match incl. timestamp; `failure` when nothing was written). `Session::deploy_program` (LEZ program loader, header + segment keys derived from the phrase)
+- [x] Evidence: `logos-kit testimonial evidence [--program …] [--snapshot dir]`: pages → records → per-month **new distinct authors** (earliest post across programs), LEZ-side tally cross-check, each author's other signed txs and balance, `target {total 150, perMonth 30, monthsMet (2 consecutive), immutable, met}`, tip block read first. Also `testimonial list`, `post`, `deploy` (immutable unless `--upgradeable`)
+- [x] Exit proof `just e2e-testimonial` → immutable deploy `verified_local`; an `--upgradeable` copy of the same image is `claimed` and refused; posts from 3 accounts in 2 wallets, first post outcome `success` (read back from its record); second post, private author, direction override refused; `list` 3, `evidence` 3 distinct, tally consistent, `target.immutable` true, snapshot written. `OK: S5 testimonial deploy + posts + evidence (dev-mode proofs)`
+- [x] Regression `just e2e-cli` OK, `just e2e-tokens` OK, `just e2e` OK; engine with the sequencer: unit 11 + authz 7 + e2e_sync 2 + keystore 7 + session 6 + vectors 4 pass; program workspace 9 pass; clippy `-D warnings` clean. Fixed on the way: S2's restore test asserted the fresh chain already had 4 blocks (true only after a cold build); it now waits for them
+- [x] Security review (2026-09-27, 3 medium, 4 low, 2 info) + code review (2 high, 3 medium/low); all fixed or tracked here:
+  - **medium:** a program the user signs for could chain-call the testimonial and post in their name (a signer's authorization reaches every program in a chained call; `execution_state.rs::authorize`) → posts must be top-level
+  - **medium:** an upgradeable copy of our image at any address got `verified_local` + the decoder; a public tx names the account, not the image → trusted only if immutable or the registry's
+  - **medium:** a 3000-author cap per submission could be filled by a griefer → paged stats (1000/page, page p opens only after p − 1 is full, checked by a read-only `Full` effect)
+  - **high (code):** a failed duplicate post read back as success (only text/username compared) → the watch is decoded from the signed message and compared in full, timestamp included; a raw Call is pre-checked for an existing record too
+  - **high (code):** `testimonial build` records the public repo URL but builds the local commit → warns when the commit is on no remote branch (push before publishing build.json)
+  - evidence counted a repeat author in the month of the first *listed* program → earliest post; repeat authors deduped; `immutable` per program and in `target.met`
+  - sheet: text with newlines could fake sheet lines → quoted, newlines shown as ⏎; more invisible characters refused; `list` escapes control characters
+  - tracked: evidence reads are sequential (fine at 150 authors; parallelise if it grows); a failed deploy leaves its uploaded segments orphaned (LEZ loader has no resume, upstream FIXME); `otherTxs` counts only txs the author signed (a rough activity signal)
+- [ ] Staging deploy on the 0.3 testnet under a test submission id, then production `testimonial deploy` (immutable) + registry entry `{name: testimonial, chain: lez:testnet, account, imageId, source}`; `verify-program` from the public repo once pushed. **Blocked on the 0.3 testnet launch** (target 2026-09-30) and the maintainer's go-ahead to deploy and push
+
+### Decisions and deviations
+- 2026-09-26: **Records keyed by (submission, author), not by index.** In 0.3 `plan()` can't read the count, so an index-addressed record races every concurrent post and the user would re-approve. Record `(sub, author)` + authors listed in stats pages: no race inside a page, one-per-author falls out of the empty-record rule, enumeration needs no indexer. Replaces the plan's `tm(sub, i)`/`author(sub, author)` PDAs and the `index == count` retry.
+- 2026-09-26: **Window −2 min / +10 min** instead of ±2 min: the approval sheet can stay open up to the 5-min deadline before the tx is sent, so the block may land well after the signed time.
+- 2026-09-27: **Trust by image *and* fixity.** Production deploys immutable. A staging deploy may stay upgradeable only if the registry names it.
+- 2026-09-27: The LWS-0 protocol is unchanged: a dApp proposes a generic instruction and the engine decodes it by image. S6's client gets a `postTestimonial` helper (borsh + sha256 PDAs + open page in TS).
+- 2026-09-27: The `xtask deploy-testimonial` of the plan became `logos-kit testimonial deploy` (the engine holds the keys); it prints the registry entry instead of editing the file.

@@ -295,15 +295,31 @@ fn classify(
 
     // Our own program is known by its image wherever it is deployed; the
     // build record says which commit and builder reproduce it.
+    // A public transaction names the account, not the image, so a copy
+    // someone can still upgrade is only as good as its owner: verified only
+    // when immutable or the registry's own deployment.
     if let Some(build) = crate::testimonial::build().filter(|b| b.image_id == image) {
         out.name = Some("testimonial".to_owned());
-        out.source = Some(build.source);
-        out.status = Status::VerifiedLocal;
-        out.note = format!(
-            "Logos Kit testimonial program, the image our docker build reproduced on {}",
-            build.built
-        );
-        if !out.immutable {
+        out.source = Some(build.source.clone());
+        let registered = registry()
+            .iter()
+            .any(|e| e.name == "testimonial" && e.account == account);
+        (out.status, out.note) = if header.immutable || registered {
+            (
+                Status::VerifiedLocal,
+                format!(
+                    "Logos Kit testimonial program, the image our docker build reproduced on {}",
+                    build.built
+                ),
+            )
+        } else {
+            (
+                Status::Claimed,
+                "an upgradeable copy of the Logos Kit testimonial program: its owner can change it"
+                    .to_owned(),
+            )
+        };
+        if !out.immutable && registered {
             out.note.push_str("; its owner can still upgrade it");
         }
         return out;

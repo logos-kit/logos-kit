@@ -1,8 +1,8 @@
 {
-  "imageId": "922675311071493a41461e5db400f70453b212849654da46fdfc627dfefa64f7",
+  "imageId": "8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e",
   "source": {
     "repo": "https://github.com/logos-kit/logos-kit",
-    "commit": "74e756c2f210f11c43ea793aae27292f7a7b8dec",
+    "commit": "bb7764af54455eba33ee0a81c05cce94ab64778f",
     "guestPath": "programs/testimonial/methods/guest",
     "bin": "testimonial.bin",
     "dockerTag": "r0.1.91.1"
