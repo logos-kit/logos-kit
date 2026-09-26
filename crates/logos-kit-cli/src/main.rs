@@ -196,9 +196,24 @@ fn date_ms(date: &str) -> Result<u64> {
     let [y, m, d] = parts[..] else {
         bail!("date must be YYYY-MM-DD");
     };
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let days_in = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     ensure!(
-        (1..=12).contains(&m) && (1..=31).contains(&d),
-        "no such date"
+        (1..=12).contains(&m) && d >= 1 && d <= days_in[usize::try_from(m - 1)?],
+        "no such date: {date}"
     );
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -246,6 +261,11 @@ fn describe(status: &TxStatus, started: Instant) -> String {
 }
 
 async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
+    // JSON output leaves no room for the review; scripts confirm with --yes.
+    ensure!(
+        !cli.json || cli.yes,
+        "--json needs --yes (run without --json to review first)"
+    );
     let (session, pw) = open(cli).await?;
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
@@ -290,7 +310,7 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
             println!("{}", describe(s, started));
         }
     };
-    let status = engine
+    let approved = engine
         .approve(
             &owner,
             &ticket.handle,
@@ -298,7 +318,22 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
             Some(&pw),
             &mut progress,
         )
-        .await?;
+        .await;
+    let status = match approved {
+        Ok(status) => status,
+        Err(e) => {
+            // Say how far it got: a submitted tx may still land; don't resend blindly.
+            if let Ok(s) = engine.status(&owner, &ticket.handle)
+                && let Some(hash) = &s.tx_hash
+            {
+                eprintln!("tx {hash} was submitted; check it before sending again");
+            }
+            return Err(e);
+        }
+    };
+    if let Some(warning) = &status.error {
+        eprintln!("note: {warning}");
+    }
     print(cli, &serde_json::to_value(&status)?, || {
         println!(
             "tx {} in block {} (outcome: {:?})",

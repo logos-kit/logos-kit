@@ -33,6 +33,11 @@ use crate::{
 
 /// How long a request waits for the user.
 pub const REQUEST_TTL: Duration = Duration::from_secs(5 * 60);
+/// After an app's request is declined or expires, it waits this long before
+/// it can ask again (so it can't keep the one pending slot busy).
+pub const APP_COOLDOWN: Duration = Duration::from_secs(30);
+/// Statuses kept for reads; the oldest finished ones go first.
+const MAX_STATUSES: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -80,10 +85,42 @@ pub struct TxStatus {
     pub block: Option<u64>,
     /// When the current phase began (unix ms), for elapsed timers.
     pub phase_started_ms: u64,
+    /// Why it stopped (the wallet's own UI; apps get only `errorCode`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<i64>,
     #[serde(skip)]
     requester: Option<String>,
+}
+
+impl TxStatus {
+    fn new(handle: &str, chain: &str, requester: Option<String>) -> Self {
+        Self {
+            handle: handle.to_owned(),
+            chain: chain.to_owned(),
+            lifecycle: Lifecycle::AwaitingApproval,
+            outcome: Outcome::Unknown,
+            outcome_source: OutcomeSource::None,
+            tx_hash: None,
+            block: None,
+            phase_started_ms: now_ms(),
+            error: None,
+            error_code: None,
+            requester,
+        }
+    }
+
+    const fn is_final(&self) -> bool {
+        !matches!(
+            self.lifecycle,
+            Lifecycle::AwaitingApproval
+                | Lifecycle::Building
+                | Lifecycle::Proving
+                | Lifecycle::Signing
+                | Lifecycle::Submitted
+        )
+    }
 }
 
 /// What `request_*` hands the approving UI.
@@ -127,6 +164,9 @@ struct Pending {
     hash: [u8; 32],
     needs_password: bool,
     deadline: Instant,
+    /// The wallet/zone generation it was built in, and its zone.
+    epoch: u64,
+    zone: String,
 }
 
 #[derive(Default)]
@@ -136,6 +176,46 @@ struct State {
     /// Handle of the transaction being proved (one prover slot).
     proving: Option<String>,
     cancelled: Vec<String>,
+    /// Bumped on lock, zone switch and unlock: requests from an older
+    /// generation are never approved or stored.
+    epoch: u64,
+    /// App → when it may ask again.
+    cooldown: HashMap<String, Instant>,
+}
+
+impl State {
+    fn insert_status(&mut self, status: TxStatus) {
+        if self.statuses.len() >= MAX_STATUSES {
+            let mut done: Vec<(u64, String)> = self
+                .statuses
+                .values()
+                .filter(|s| s.is_final())
+                .map(|s| (s.phase_started_ms, s.handle.clone()))
+                .collect();
+            done.sort();
+            for (_, h) in done.iter().take(self.statuses.len() + 1 - MAX_STATUSES) {
+                self.statuses.remove(h);
+            }
+        }
+        self.statuses.insert(status.handle.clone(), status);
+    }
+}
+
+/// Holds the one prover slot; released on every exit path, including the
+/// approve future being dropped mid-proof.
+struct ProvingSlot<'a> {
+    engine: &'a Engine,
+    handle: String,
+}
+
+impl Drop for ProvingSlot<'_> {
+    fn drop(&mut self) {
+        let mut state = self.engine.state();
+        if state.proving.as_deref() == Some(self.handle.as_str()) {
+            state.proving = None;
+        }
+        state.cancelled.retain(|h| *h != self.handle);
+    }
 }
 
 pub struct Config {
@@ -219,7 +299,12 @@ impl Engine {
     }
 
     /// Host timer: auto-lock when idle (also expires the pending request).
+    /// Not while a proof runs: the user is waiting on it, and locking would
+    /// throw the proof away.
     pub async fn tick(&self) -> Result<bool> {
+        if self.state().proving.is_some() {
+            return Ok(false);
+        }
         let locked = self.wallet.lock().await.tick()?;
         if locked {
             self.expire_pending("wallet locked");
@@ -235,16 +320,24 @@ impl Engine {
 
     fn expire_pending(&self, why: &str) {
         let mut state = self.state();
+        state.epoch += 1;
         if let Some(p) = state.pending.take() {
-            Self::finish(&mut state, &p.handle, Lifecycle::Expired, Some(why));
+            Self::finish(&mut state, &p, Lifecycle::Expired, Some(why));
         }
     }
 
-    fn finish(state: &mut State, handle: &str, lifecycle: Lifecycle, error: Option<&str>) {
-        if let Some(s) = state.statuses.get_mut(handle) {
+    /// End a request that never ran; an app's declined or expired request
+    /// starts its cooldown.
+    fn finish(state: &mut State, p: &Pending, lifecycle: Lifecycle, error: Option<&str>) {
+        if let Some(s) = state.statuses.get_mut(&p.handle) {
             s.lifecycle = lifecycle;
             s.phase_started_ms = now_ms();
             s.error = error.map(str::to_owned);
+        }
+        if let Some(app) = &p.requester {
+            state
+                .cooldown
+                .insert(app.clone(), Instant::now() + APP_COOLDOWN);
         }
     }
 
@@ -262,25 +355,45 @@ impl Engine {
         }
     }
 
-    /// Room for a new request: none pending (an expired one is cleared).
-    fn check_free(state: &mut State) -> Result<()> {
-        if let Some(p) = &state.pending {
-            if Instant::now() < p.deadline {
+    /// Room for a new request from `requester` (None: the owner). An expired
+    /// request is cleared; the owner's own request replaces an app's; an app
+    /// in its cooldown waits.
+    fn check_free(state: &mut State, requester: Option<&str>) -> Result<()> {
+        if let Some(app) = requester
+            && state.cooldown.get(app).is_some_and(|t| Instant::now() < *t)
+        {
+            return Err(Denied::err(
+                Code::RequestPending,
+                "your last request was just declined; try again shortly",
+            ));
+        }
+        if let Some(p) = state.pending.take() {
+            let (lifecycle, why) = if Instant::now() >= p.deadline {
+                (Lifecycle::Expired, "not approved in time")
+            } else if requester.is_none() && p.requester.is_some() {
+                (Lifecycle::Expired, "replaced by the wallet owner's request")
+            } else {
+                state.pending = Some(p);
                 return Err(Denied::err(
                     Code::RequestPending,
                     "a request is already open in your wallet",
                 ));
-            }
-            let handle = p.handle.clone();
-            state.pending = None;
-            Self::finish(
-                state,
-                &handle,
-                Lifecycle::Expired,
-                Some("not approved in time"),
-            );
+            };
+            Self::finish(state, &p, lifecycle, Some(why));
         }
         Ok(())
+    }
+
+    /// Refuse to store a request built under an older wallet generation.
+    fn check_epoch(state: &State, epoch: u64) -> Result<()> {
+        if state.epoch == epoch {
+            Ok(())
+        } else {
+            Err(Denied::err(
+                Code::StaleApproval,
+                "the wallet was locked or switched zones while this was prepared",
+            ))
+        }
     }
 
     // -- requests --------------------------------------------------------------
@@ -311,7 +424,11 @@ impl Engine {
                 format!("{name} isn't connected to {}", intent.from_account()),
             ));
         }
-        Self::check_free(&mut self.state())?;
+        let epoch = {
+            let mut state = self.state();
+            Self::check_free(&mut state, requester.as_deref())?;
+            state.epoch
+        };
         let private = intent.is_private();
         let large = intent.amount() >= self.config.reauth_at;
         let prepared = session.prepare(requester.as_deref(), intent).await?;
@@ -320,23 +437,10 @@ impl Engine {
         let handle = new_handle();
         let review = prepared.review.clone();
         let mut state = self.state();
-        // Checked again: another request may have arrived while we built this one.
-        Self::check_free(&mut state)?;
-        state.statuses.insert(
-            handle.clone(),
-            TxStatus {
-                handle: handle.clone(),
-                chain: review.chain.clone(),
-                lifecycle: Lifecycle::AwaitingApproval,
-                outcome: Outcome::Unknown,
-                outcome_source: OutcomeSource::None,
-                tx_hash: None,
-                block: None,
-                phase_started_ms: now_ms(),
-                error: None,
-                requester: requester.clone(),
-            },
-        );
+        // Checked again: the wallet or the slot may have changed while we built.
+        Self::check_epoch(&state, epoch)?;
+        Self::check_free(&mut state, requester.as_deref())?;
+        state.insert_status(TxStatus::new(&handle, &review.chain, requester.clone()));
         state.pending = Some(Pending {
             handle: handle.clone(),
             requester,
@@ -344,6 +448,8 @@ impl Engine {
             kind: Kind::Tx(Box::new(prepared)),
             needs_password: private || large,
             deadline: Instant::now() + REQUEST_TTL,
+            epoch,
+            zone,
         });
         Ok(Ticket {
             handle,
@@ -364,7 +470,8 @@ impl Engine {
         let requester = Self::requester_for(caller, relayed)?
             .context("a connect request needs a requesting app")
             .map_err(|e| Denied::err(Code::InvalidParams, e.to_string()))?;
-        let chain = self
+        let epoch = self.state().epoch;
+        let (chain, zone) = self
             .with_session(async |s| {
                 let mine: Vec<String> = s.accounts()?.into_iter().map(|a| a.account_id).collect();
                 for a in &accounts {
@@ -375,13 +482,15 @@ impl Engine {
                         ));
                     }
                 }
-                Ok(s.zone().chain.clone())
+                Ok((s.zone().chain.clone(), s.zone().id.clone()))
             })
             .await?;
-        let hash = connect_hash(&chain, &requester, &accounts, &capabilities);
+        let hash = connect_hash(&chain, &zone, &requester, &accounts, &capabilities);
         let handle = new_handle();
         let mut state = self.state();
-        Self::check_free(&mut state)?;
+        Self::check_epoch(&state, epoch)?;
+        Self::check_free(&mut state, Some(&requester))?;
+        state.insert_status(TxStatus::new(&handle, &chain, Some(requester.clone())));
         state.pending = Some(Pending {
             handle: handle.clone(),
             requester: Some(requester.clone()),
@@ -393,6 +502,8 @@ impl Engine {
             hash,
             needs_password: true,
             deadline: Instant::now() + REQUEST_TTL,
+            epoch,
+            zone,
         });
         Ok(Ticket {
             handle,
@@ -418,8 +529,9 @@ impl Engine {
         if !caller.is_owner() && !own {
             return Err(Denied::err(Code::UnknownHandle, "no such pending request"));
         }
-        state.pending = None;
-        Self::finish(&mut state, handle, Lifecycle::Rejected, Some("declined"));
+        if let Some(p) = state.pending.take() {
+            Self::finish(&mut state, &p, Lifecycle::Rejected, Some("declined"));
+        }
         Ok(())
     }
 
@@ -449,12 +561,17 @@ impl Engine {
     /// existing handle looks exactly like an unknown one.
     pub fn status(&self, caller: &Caller, handle: &str) -> Result<TxStatus> {
         let state = self.state();
-        state
+        let mut status = state
             .statuses
             .get(handle)
             .filter(|s| Self::may_read(caller, s))
             .cloned()
-            .ok_or_else(|| Denied::err(Code::UnknownHandle, "unknown transaction handle"))
+            .ok_or_else(|| Denied::err(Code::UnknownHandle, "unknown transaction handle"))?;
+        if !caller.is_owner() {
+            // Internal detail (nonces, RPC errors) stays in the wallet.
+            status.error = None;
+        }
+        Ok(status)
     }
 
     // -- approval ------------------------------------------------------------
@@ -490,7 +607,7 @@ impl Engine {
         if Instant::now() >= pending.deadline {
             Self::finish(
                 &mut self.state(),
-                handle,
+                &pending,
                 Lifecycle::Expired,
                 Some("not approved in time"),
             );
@@ -499,7 +616,7 @@ impl Engine {
         if !same_hash(echoed_hash, &pending.hash) {
             Self::finish(
                 &mut self.state(),
-                handle,
+                &pending,
                 Lifecycle::Rejected,
                 Some("approval did not match the request"),
             );
@@ -519,11 +636,23 @@ impl Engine {
                 })
                 .await;
             if let Err(e) = checked {
-                // A typo doesn't cost the user the request.
-                self.state().pending = Some(pending);
+                // A typo doesn't cost the user the request, unless the wallet
+                // moved on meanwhile (lock, zone switch, a newer request).
+                let mut state = self.state();
+                if state.pending.is_none() && state.epoch == pending.epoch {
+                    state.pending = Some(pending);
+                } else {
+                    Self::finish(
+                        &mut state,
+                        &pending,
+                        Lifecycle::Expired,
+                        Some("wallet changed"),
+                    );
+                }
                 return Err(e);
             }
         }
+        let (epoch, zone) = (pending.epoch, pending.zone.clone());
 
         match pending.kind {
             Kind::Connect {
@@ -532,7 +661,7 @@ impl Engine {
                 capabilities,
             } => {
                 self.with_session(async |s| {
-                    let zone = s.zone().id.clone();
+                    self.same_wallet(epoch, &zone, s)?;
                     let mut grants = s.grants().to_vec();
                     for account in &accounts {
                         for cap in &capabilities {
@@ -550,24 +679,25 @@ impl Engine {
                     s.set_grants(grants)
                 })
                 .await?;
-                let chain = self
-                    .with_session(async |s| Ok(s.zone().chain.clone()))
-                    .await?;
-                Ok(TxStatus {
-                    handle: handle.to_owned(),
-                    chain,
-                    lifecycle: Lifecycle::Included,
-                    outcome: Outcome::Success,
-                    outcome_source: OutcomeSource::None,
-                    tx_hash: None,
-                    block: None,
-                    phase_started_ms: now_ms(),
-                    error: None,
-                    requester: Some(requester),
-                })
+                Ok(self.update(handle, progress, |s| {
+                    s.lifecycle = Lifecycle::Included;
+                    s.outcome = Outcome::Success;
+                    s.phase_started_ms = now_ms();
+                }))
             }
-            Kind::Tx(prepared) => self.run_tx(handle, *prepared, progress).await,
+            Kind::Tx(prepared) => self.run_tx(handle, *prepared, epoch, &zone, progress).await,
         }
+    }
+
+    /// The session is still the one the request was built for.
+    fn same_wallet(&self, epoch: u64, zone: &str, s: &Session) -> Result<()> {
+        if self.state().epoch != epoch || s.zone().id != zone {
+            return Err(Denied::err(
+                Code::StaleApproval,
+                "the wallet was locked or switched zones since you approved",
+            ));
+        }
+        Ok(())
     }
 
     fn update(
@@ -607,10 +737,12 @@ impl Engine {
         e: anyhow::Error,
         progress: &mut (dyn FnMut(&TxStatus) + Send),
     ) -> anyhow::Error {
+        let code = policy::code_of(&e) as i64;
         self.update(handle, progress, |s| {
             s.lifecycle = lifecycle;
             s.phase_started_ms = now_ms();
             s.error = Some(format!("{e:#}"));
+            s.error_code = Some(code);
         });
         e
     }
@@ -619,6 +751,8 @@ impl Engine {
         &self,
         handle: &str,
         prepared: Prepared,
+        epoch: u64,
+        zone: &str,
         progress: &mut (dyn FnMut(&TxStatus) + Send),
     ) -> Result<TxStatus> {
         let shield = match &prepared.review.intent {
@@ -626,7 +760,8 @@ impl Engine {
             Intent::Transfer { .. } => None,
         };
         let tx_hash = if prepared.needs_proof() {
-            {
+            let (job, _review, signer, nonce) = prepared.into_proving()?;
+            let slot = {
                 let mut state = self.state();
                 if state.proving.is_some() {
                     drop(state);
@@ -635,21 +770,21 @@ impl Engine {
                     return Err(self.fail(handle, Lifecycle::Dropped, e, progress));
                 }
                 state.proving = Some(handle.to_owned());
-            }
+                ProvingSlot {
+                    engine: self,
+                    handle: handle.to_owned(),
+                }
+            };
             let before = match &shield {
                 Some((to, _)) => self.with_session(async |s| s.balance(to).await).await.ok(),
                 None => None,
             };
-            let (job, _review, signer, nonce) = prepared.into_proving()?;
             self.phase(handle, Lifecycle::Proving, progress);
             let proved = tokio::task::spawn_blocking(move || job.run()).await;
-            let cancelled = {
-                let mut state = self.state();
-                state.proving = None;
-                let hit = state.cancelled.iter().any(|h| h == handle);
-                state.cancelled.retain(|h| h != handle);
-                hit
-            };
+            let cancelled = self.state().cancelled.iter().any(|h| h == handle);
+            drop(slot);
+            // The user sat through the proof: that counts as use.
+            self.wallet.lock().await.touch();
             if cancelled {
                 let e = Denied::err(Code::UserRejected, "cancelled before signing");
                 return Err(self.fail(handle, Lifecycle::Dropped, e, progress));
@@ -663,7 +798,10 @@ impl Engine {
             };
             self.phase(handle, Lifecycle::Signing, progress);
             let sent = self
-                .with_session(async |s| s.submit_proved(signer, nonce, proved).await)
+                .with_session(async |s| {
+                    self.same_wallet(epoch, zone, s)?;
+                    s.submit_proved(signer, nonce, proved).await
+                })
                 .await;
             match sent {
                 Ok(h) => (h, before),
@@ -672,7 +810,10 @@ impl Engine {
         } else {
             self.phase(handle, Lifecycle::Signing, progress);
             match self
-                .with_session(async |s| s.submit_public(prepared).await)
+                .with_session(async |s| {
+                    self.same_wallet(epoch, zone, s)?;
+                    s.submit_public(prepared).await
+                })
                 .await
             {
                 Ok(h) => (h, None),
@@ -686,12 +827,19 @@ impl Engine {
             s.phase_started_ms = now_ms();
             s.tx_hash = Some(tx_hash_hex(&tx_hash));
         });
-        let block = self
+        // A poll that gives up leaves the outcome unknown, not failed: the
+        // transaction may still land (retrying could send it twice).
+        let included = self
             .with_session(async |s| s.wait_included(&tx_hash).await)
             .await
-            .map_err(|e| Denied::err(Code::SubmissionFailed, format!("{e:#}")));
-        let block = match block {
-            Ok(b) => b,
+            .map_err(|e| {
+                Denied::err(
+                    Code::Timeout,
+                    format!("sent, not seen in a block yet: {e:#}"),
+                )
+            });
+        let (block, warning) = match included {
+            Ok(done) => done,
             Err(e) => return Err(self.fail(handle, Lifecycle::Submitted, e, progress)),
         };
         // Own-account invariant: a shield must have landed in our private account.
@@ -713,12 +861,14 @@ impl Engine {
             s.phase_started_ms = now_ms();
             s.block = Some(block);
             (s.outcome, s.outcome_source) = outcome;
+            s.error = warning;
         }))
     }
 }
 
 fn connect_hash(
     chain: &str,
+    zone: &str,
     requester: &str,
     accounts: &[String],
     caps: &[Capability],
@@ -727,7 +877,7 @@ fn connect_hash(
     let mut h = Sha256::new();
     h.update(b"logos-kit/connect/v1\0");
     let body = serde_json::json!({
-        "chain": chain, "requester": requester, "accounts": accounts, "capabilities": caps,
+        "chain": chain, "zone": zone, "requester": requester, "accounts": accounts, "capabilities": caps,
     });
     h.update(body.to_string().as_bytes());
     h.finalize().into()

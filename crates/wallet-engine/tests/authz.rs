@@ -314,3 +314,32 @@ async fn e2e_status_is_private_and_stale_approvals_are_refused() {
         Lifecycle::Dropped
     );
 }
+
+#[tokio::test]
+async fn a_declined_app_waits_before_asking_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, account) = engine_with_account(dir.path(), Zone::local());
+    let app = dapp();
+    let ask = || {
+        engine.request_connect(
+            &app,
+            None,
+            vec![account.clone()],
+            vec![Capability::Accounts],
+        )
+    };
+    let ticket = ask().await.unwrap();
+    engine.reject(&Caller::WalletUi, &ticket.handle).unwrap();
+    // The slot is free, but this app is cooling down (no request spam).
+    assert_eq!(code_of(&ask().await.unwrap_err()), Code::RequestPending);
+    // Another app is not affected.
+    engine
+        .request_connect(
+            &Caller::Module("other_dapp".into()),
+            None,
+            vec![account.clone()],
+            vec![Capability::Accounts],
+        )
+        .await
+        .unwrap();
+}

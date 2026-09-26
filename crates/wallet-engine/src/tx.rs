@@ -266,12 +266,23 @@ impl Session {
                         base_fee_exec: None,
                     },
                 );
-                if let Some(max) = message.fee.as_ref().map(|f| f.max_fee) {
-                    ensure!(
-                        from_balance >= intent.amount().saturating_add(max),
-                        "not enough to cover {} plus a fee of up to {max}",
-                        intent.amount()
-                    );
+                if let Some(f) = message.fee.as_ref() {
+                    if f.payer == from {
+                        ensure!(
+                            from_balance >= intent.amount().saturating_add(f.max_fee),
+                            "not enough to cover {} plus a fee of up to {}",
+                            intent.amount(),
+                            f.max_fee
+                        );
+                    } else {
+                        let payer = core.get_account_balance(f.payer).await?;
+                        ensure!(
+                            payer >= f.max_fee,
+                            "fee payer {} can't cover a fee of up to {}",
+                            f.payer,
+                            f.max_fee
+                        );
+                    }
                 }
                 // The message commits to program, accounts, nonces, data and fee.
                 let bound = message.hash().to_vec();
@@ -324,7 +335,9 @@ impl Session {
                 .ok()
                 .map(|q| q.base_fee_exec);
         }
-        let hash = request_hash(&chain, requester, &intent, &bound);
+        // Chain and zone id: two zones never share an approval.
+        let scope = format!("{chain}|{}", self.zone().id);
+        let hash = request_hash(&scope, requester, &intent, &bound);
         Ok(Prepared {
             review: Review {
                 chain,
@@ -397,11 +410,14 @@ impl Session {
 
     /// Wait until the transaction is in a block. For a private transaction
     /// sent from here, also record its note so the balance shows at once.
-    pub async fn wait_included(&mut self, tx_hash: &str) -> Result<u64> {
+    /// Returns the block, plus a warning if that local bookkeeping failed
+    /// (the transaction is included either way; the next sync repairs it).
+    pub async fn wait_included(&mut self, tx_hash: &str) -> Result<(u64, Option<String>)> {
         let hash = tx_hash.parse().context("tx hash")?;
         let pending = self.pending_note.take();
         let core = self.core_mut().context("not connected")?;
         let (tx, block) = core.poll_transaction(hash).await?;
+        let mut warning = None;
         if let (common::transaction::LeeTransaction::PrivacyPreserving(tx), Some((h, secrets, to))) =
             (&tx, pending)
             && h == hash
@@ -411,10 +427,16 @@ impl Session {
                 .take(1)
                 .map(|s| AccDecodeData::Decode(s, to))
                 .collect();
-            core.decode_insert_privacy_preserving_transaction_results(tx, &mask)?;
+            if let Err(e) = core.decode_insert_privacy_preserving_transaction_results(tx, &mask) {
+                warning = Some(format!(
+                    "included; note not recorded yet ({e:#}); sync to see it"
+                ));
+            }
         }
-        self.persist_now()?;
-        Ok(block)
+        if let Err(e) = self.persist_now() {
+            warning = Some(format!("included; saving the wallet failed ({e:#})"));
+        }
+        Ok((block, warning))
     }
 
     /// Native balance of one of this wallet's accounts (public: from the
