@@ -1,0 +1,13 @@
+{
+  // Type-check gate for packages whose code is also shipped into Basecamp's QML JS engine (Qt 6.9 V4).
+  // ES2017 lib/target means: no BigInt, no bigint literals, no ES2018+ regex features, no Intl.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017"],
+    "noEmit": true,
+    "isolatedDeclarations": false,
+    "declaration": false
+  },
+  "include": []
+}

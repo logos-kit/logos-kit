@@ -1,0 +1,33 @@
+# Nix
+result
+result-*
+.direnv/
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.next/
+.expo/
+.vercel/
+coverage/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local runtime data
+/.lk-data/
+/tmp/
+*.log

@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    // Type checking
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+    "exactOptionalPropertyTypes": false,
+
+    // Public API must be explicitly typed: enables the fast oxc .d.ts generator in tsdown.
+    "isolatedDeclarations": true,
+    "declaration": true,
+
+    // Modules
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Language
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+
+    "skipLibCheck": true,
+    "noErrorTruncation": true
+  }
+}

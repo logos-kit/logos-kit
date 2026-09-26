@@ -1,0 +1,39 @@
+{
+  "name": "logos-kit-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter './protocol' --filter './packages/*' build",
+    "check": "biome check --write",
+    "check:ci": "biome ci",
+    "check:repo": "sherif",
+    "check:types": "pnpm -r --parallel check:types",
+    "check:unused": "knip",
+    "test": "vitest",
+    "changeset": "changeset",
+    "changeset:version": "changeset version && pnpm check",
+    "changeset:publish": "pnpm build && changeset publish",
+    "prepare": "simple-git-hooks"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@svitejs/changesets-changelog-github-compact": "catalog:",
+    "@types/node": "catalog:",
+    "knip": "catalog:",
+    "publint": "catalog:",
+    "sherif": "catalog:",
+    "simple-git-hooks": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm biome check --staged --no-errors-on-unmatched"
+  }
+}
