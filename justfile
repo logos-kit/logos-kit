@@ -44,3 +44,12 @@ e2e:
 e2e-cli:
     e2e/standalone.sh
     e2e/cli.sh; status=$?; e2e/standalone.sh stop; exit $status
+
+# S4 exit proof: faucet, demo token on every route, private payment to another wallet, backup.
+e2e-tokens:
+    e2e/standalone.sh
+    e2e/tokens.sh; status=$?; e2e/standalone.sh stop; exit $status
+
+# Rebuild the LEZ builtins in the pinned docker builder; refresh the evidence file.
+verify-builtins:
+    cargo run -q -p logos-kit-cli -- verify-program --builtins > registry/builtins.json

@@ -26,9 +26,11 @@ use serde::Serialize;
 
 use crate::{
     auto_lock::AutoLock,
+    faucet::{FaucetBackend, FundOutcome},
     policy::{self, Caller, Capability, Code, Denied, Grant},
+    session::AccountKind,
     session::Session,
-    tx::{Intent, Prepared, Review},
+    tx::{self, Intent, Prepared, Review},
 };
 
 /// How long a request waits for the user.
@@ -123,21 +125,39 @@ impl TxStatus {
     }
 }
 
+/// `request_funds` result.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Funds {
+    #[serde(flatten)]
+    pub outcome: FundOutcome,
+    /// Which backend paid (shown in the UI).
+    pub faucet: String,
+    /// The public account the faucet paid.
+    pub funded_account: String,
+    /// For a private target: the shield waiting for approval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shield: Option<Ticket>,
+}
+
 /// What `request_*` hands the approving UI.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ticket {
     pub handle: String,
     pub request: RequestView,
-    /// The approval must carry the password (private spend, large amount, connect).
+    /// The approval must carry the password (private route, large amount,
+    /// token authority, connect).
     pub needs_password: bool,
+    /// The wallet can't decode what this does: approving must acknowledge that.
+    pub needs_acknowledgement: bool,
     pub expires_in_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RequestView {
-    Transaction(Review),
+    Transaction(Box<Review>),
     #[serde(rename_all = "camelCase")]
     Connect {
         requester: String,
@@ -163,6 +183,7 @@ struct Pending {
     kind: Kind,
     hash: [u8; 32],
     needs_password: bool,
+    needs_ack: bool,
     deadline: Instant,
     /// The wallet/zone generation it was built in, and its zone.
     epoch: u64,
@@ -429,10 +450,13 @@ impl Engine {
             Self::check_free(&mut state, requester.as_deref())?;
             state.epoch
         };
-        let private = intent.is_private();
-        let large = intent.amount() >= self.config.reauth_at;
         let prepared = session.prepare(requester.as_deref(), intent).await?;
         drop(wallet);
+        let review = &prepared.review;
+        let needs_password = review.route.is_some_and(tx::Route::is_private)
+            || review.native_outflow() >= self.config.reauth_at
+            || !review.summary.authorities.is_empty();
+        let needs_ack = review.summary.unknown;
 
         let handle = new_handle();
         let review = prepared.review.clone();
@@ -446,16 +470,113 @@ impl Engine {
             requester,
             hash: *prepared.hash(),
             kind: Kind::Tx(Box::new(prepared)),
-            needs_password: private || large,
+            needs_password,
+            needs_ack,
             deadline: Instant::now() + REQUEST_TTL,
             epoch,
             zone,
         });
         Ok(Ticket {
             handle,
-            request: RequestView::Transaction(review),
-            needs_password: private || large,
+            request: RequestView::Transaction(Box::new(review)),
+            needs_password,
+            needs_acknowledgement: needs_ack,
             expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
+        })
+    }
+
+    /// `lez_requestFunds`: testnet funds for one of this wallet's accounts.
+    /// A private target is funded through a public account of ours (`via`,
+    /// else the first), and the shield into it is queued for approval (its
+    /// ticket is returned). Takes as long as the faucet does; holds no lock.
+    pub async fn request_funds<F: FaucetBackend>(
+        &self,
+        caller: &Caller,
+        relayed: Option<&str>,
+        account: &str,
+        via: Option<&str>,
+        faucet: &F,
+        request_key: &str,
+    ) -> Result<Funds> {
+        let requester = Self::requester_for(caller, relayed)?;
+        let (target_private, via) = {
+            let mut wallet = self.wallet.lock().await;
+            let session = wallet.session()?;
+            let zone = session.zone().id.clone();
+            if let (Caller::Module(name), false) = (
+                caller,
+                policy::allows(
+                    session.grants(),
+                    &zone,
+                    requester.as_deref().unwrap_or(""),
+                    account,
+                    Capability::Accounts,
+                ),
+            ) {
+                return Err(Denied::err(
+                    Code::Unauthorized,
+                    format!("{name} isn't connected to {account}"),
+                ));
+            }
+            let accounts = session.accounts()?;
+            let kind = accounts
+                .iter()
+                .find(|a| a.account_id == account)
+                .map(|a| a.kind)
+                .ok_or_else(|| {
+                    Denied::err(
+                        Code::InvalidParams,
+                        format!("{account} is not in this wallet"),
+                    )
+                })?;
+            let private = kind == AccountKind::Private;
+            let via = if private {
+                let v = match via {
+                    Some(v) => accounts
+                        .iter()
+                        .find(|a| a.account_id == v && a.kind == AccountKind::Public),
+                    None => accounts.iter().find(|a| a.kind == AccountKind::Public),
+                };
+                Some(
+                    v.ok_or_else(|| {
+                        Denied::err(
+                            Code::InvalidParams,
+                            "funding a private account needs a public account to shield from",
+                        )
+                    })?
+                    .account_id
+                    .clone(),
+                )
+            } else {
+                None
+            };
+            (private, via)
+        };
+        let public = via.as_deref().unwrap_or(account);
+        let id = crate::decode::account_id(public)?;
+        let outcome = faucet.fund(id, request_key).await?;
+        let shield = match (&outcome, target_private) {
+            (FundOutcome::Funded { amount, .. }, true) => Some(
+                self.request_tx(
+                    caller,
+                    relayed,
+                    Intent::Transfer {
+                        from: public.to_owned(),
+                        to: Some(account.to_owned()),
+                        amount: *amount,
+                        token: None,
+                        to_keys: None,
+                    },
+                )
+                .await?,
+            ),
+            _ => None,
+        };
+        Ok(Funds {
+            outcome,
+            faucet: faucet.name().to_owned(),
+            funded_account: public.to_owned(),
+            shield,
         })
     }
 
@@ -501,6 +622,7 @@ impl Engine {
             },
             hash,
             needs_password: true,
+            needs_ack: false,
             deadline: Instant::now() + REQUEST_TTL,
             epoch,
             zone,
@@ -515,6 +637,7 @@ impl Engine {
                 request_hash: hex::encode(hash),
             },
             needs_password: true,
+            needs_acknowledgement: false,
             expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
         })
     }
@@ -577,7 +700,8 @@ impl Engine {
     // -- approval ------------------------------------------------------------
 
     /// Approve the pending request `handle`. `echoed_hash` must be the hash
-    /// the UI was given; `password` is required when the ticket said so.
+    /// the UI was given; `password` is required when the ticket said so, and
+    /// `acknowledged_unknown` when it said the wallet can't decode the request.
     /// `progress` sees every status change (proving can take minutes).
     pub async fn approve(
         &self,
@@ -585,6 +709,7 @@ impl Engine {
         handle: &str,
         echoed_hash: &str,
         password: Option<&str>,
+        acknowledged_unknown: bool,
         progress: &mut (dyn FnMut(&TxStatus) + Send),
     ) -> Result<TxStatus> {
         if !caller.is_owner() {
@@ -623,6 +748,25 @@ impl Engine {
             return Err(Denied::err(
                 Code::Unauthorized,
                 "the approval does not match the request; it was cancelled",
+            ));
+        }
+        if pending.needs_ack && !acknowledged_unknown {
+            // Not a rejection: the UI must show the warning and ask again
+            // (unless the wallet moved on meanwhile).
+            let mut state = self.state();
+            if state.pending.is_none() && state.epoch == pending.epoch {
+                state.pending = Some(pending);
+            } else {
+                Self::finish(
+                    &mut state,
+                    &pending,
+                    Lifecycle::Expired,
+                    Some("wallet changed"),
+                );
+            }
+            return Err(Denied::err(
+                Code::Unauthorized,
+                "the wallet can't read what this does; acknowledge that to approve",
             ));
         }
         if pending.needs_password {
@@ -755,12 +899,10 @@ impl Engine {
         zone: &str,
         progress: &mut (dyn FnMut(&TxStatus) + Send),
     ) -> Result<TxStatus> {
-        let shield = match &prepared.review.intent {
-            Intent::Shield { to, amount, .. } => Some((to.clone(), *amount)),
-            Intent::Transfer { .. } => None,
-        };
+        // Own-account invariant: which of our private accounts must move, by how much.
+        let watch = own_invariant(&prepared.review);
         let tx_hash = if prepared.needs_proof() {
-            let (job, _review, signer, nonce) = prepared.into_proving()?;
+            let (job, _review, pins) = prepared.into_proving()?;
             let slot = {
                 let mut state = self.state();
                 if state.proving.is_some() {
@@ -775,8 +917,11 @@ impl Engine {
                     handle: handle.to_owned(),
                 }
             };
-            let before = match &shield {
-                Some((to, _)) => self.with_session(async |s| s.balance(to).await).await.ok(),
+            let before = match &watch {
+                Some((account, token, _)) => self
+                    .with_session(async |s| s.balance_of(account, token.as_deref()).await)
+                    .await
+                    .ok(),
                 None => None,
             };
             self.phase(handle, Lifecycle::Proving, progress);
@@ -800,7 +945,7 @@ impl Engine {
             let sent = self
                 .with_session(async |s| {
                     self.same_wallet(epoch, zone, s)?;
-                    s.submit_proved(signer, nonce, proved).await
+                    s.submit_proved(&pins, proved).await
                 })
                 .await;
             match sent {
@@ -842,12 +987,20 @@ impl Engine {
             Ok(done) => done,
             Err(e) => return Err(self.fail(handle, Lifecycle::Submitted, e, progress)),
         };
-        // Own-account invariant: a shield must have landed in our private account.
-        let outcome = match (shield, before) {
-            (Some((to, amount)), Some(before)) => {
-                let after = self.with_session(async |s| s.balance(&to).await).await.ok();
+        // Own-account invariant: our private account moved by exactly the amount.
+        let outcome = match (watch, before) {
+            (Some((account, token, delta)), Some(before)) => {
+                let after = self
+                    .with_session(async |s| s.balance_of(&account, token.as_deref()).await)
+                    .await
+                    .ok();
+                let expected = if delta >= 0 {
+                    before.checked_add(delta.unsigned_abs())
+                } else {
+                    before.checked_sub(delta.unsigned_abs())
+                };
                 match after {
-                    Some(after) if after == before.saturating_add(amount) => {
+                    Some(after) if Some(after) == expected => {
                         (Outcome::Success, OutcomeSource::OwnAccountInvariant)
                     }
                     Some(_) => (Outcome::Failure, OutcomeSource::OwnAccountInvariant),
@@ -863,6 +1016,26 @@ impl Engine {
             (s.outcome, s.outcome_source) = outcome;
             s.error = warning;
         }))
+    }
+}
+
+/// For private routes: the private account of ours whose balance must change,
+/// the asset, and the signed change (a shield credits, a spend debits).
+fn own_invariant(review: &Review) -> Option<(String, Option<String>, i128)> {
+    let Intent::Transfer {
+        from,
+        amount,
+        token,
+        ..
+    } = &review.intent
+    else {
+        return None;
+    };
+    let amount = i128::try_from(*amount).ok()?;
+    match review.route? {
+        tx::Route::Shield => Some((review.recipient.clone()?, token.clone(), amount)),
+        tx::Route::Unshield | tx::Route::Private => Some((from.clone(), token.clone(), -amount)),
+        tx::Route::Public => None,
     }
 }
 

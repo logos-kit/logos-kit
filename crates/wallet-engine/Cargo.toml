@@ -24,6 +24,11 @@ lee_core.workspace = true
 key_protocol.workspace = true
 common.workspace = true
 sequencer_service_rpc.workspace = true
+programs.workspace = true
+token_core.workspace = true
+token_program.workspace = true
+associated_token_account_core.workspace = true
+borsh.workspace = true
 bip39 = { version = "2.2", features = ["zeroize"] }
 # vault.v1 (versions already in the lockfile via LEZ: aead 0.5 line)
 argon2 = { version = "0.5.3", features = ["zeroize"] }
@@ -32,9 +37,9 @@ chacha20poly1305 = "0.10.1"
 tempfile = "3"
 zeroize = { version = "1.9", features = ["derive"] }
 sha2 = "0.10"
-tokio = { version = "1", features = ["sync", "rt"] }
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+ureq.workspace = true
 hex = "0.4.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-borsh = "1.5.7"

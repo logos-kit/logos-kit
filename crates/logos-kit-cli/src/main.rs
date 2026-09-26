@@ -16,11 +16,13 @@ use std::{
 use anyhow::{Context as _, Result, bail, ensure};
 use clap::{Parser, Subcommand};
 use wallet_engine::{
-    engine::{Config, Engine, Lifecycle, RequestView, TxStatus},
+    engine::{Config, Engine, Lifecycle, RequestView, Ticket, TxStatus},
+    faucet::{HttpFaucet, KeyFaucet},
     policy::{Caller, code_of},
     session::{AccountKind, Birthday, DataDir, Session, Zone},
-    tx::Intent,
+    tx::{CallAccount, Intent, RecipientKeys, Review, Route},
     vault::KdfCost,
+    verify,
 };
 
 #[derive(Parser)]
@@ -46,6 +48,9 @@ struct Cli {
     /// Print results as JSON.
     #[arg(long, global = true)]
     json: bool,
+    /// With --yes: also approve a call the wallet can't decode.
+    #[arg(long, global = true)]
+    ack_unknown: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -66,28 +71,80 @@ enum Command {
     /// Accounts.
     #[command(subcommand)]
     Account(AccountCmd),
-    /// Native balance of an account (public, or private as synced).
-    Balance { account: String },
+    /// Balance of an account (public, or private as synced); `--token` for a token.
+    Balance {
+        account: String,
+        #[arg(long)]
+        token: Option<String>,
+    },
     /// Catch up with the chain.
     Sync,
-    /// Send native tokens, public to public.
-    Send {
+    /// Send native tokens or a token. The route follows from the accounts:
+    /// public → public, into your private account (shield), out of it
+    /// (unshield), or private → private (proves locally, minutes).
+    Send(SendArgs),
+    /// Send from a public account into one of your private accounts.
+    Shield(SendArgs),
+    /// Send from one of your private accounts to a public account.
+    #[command(alias = "unshield")]
+    Deshield(SendArgs),
+    /// Tokens.
+    #[command(subcommand)]
+    Token(TokenCmd),
+    /// Get testnet funds into one of your accounts (a private one is funded
+    /// through a public account, then shielded).
+    Faucet {
+        account: String,
+        /// Public account to fund first when the target is private.
+        #[arg(long)]
+        via: Option<String>,
+        /// Drip service URL (the zone's faucet).
+        #[arg(long, env = "LOGOS_KIT_FAUCET_URL", conflicts_with = "key_env")]
+        url: Option<String>,
+        /// Name of an env var holding a funded key to pay from (local/demo).
+        #[arg(long)]
+        key_env: Option<String>,
+        /// Base units per claim when paying from a key.
+        #[arg(long, default_value_t = 1_000_000)]
+        drop: u128,
+    },
+    /// Show a program's header and verification status (address, or a builtin's name).
+    Program { account: String },
+    /// Rebuild a program from source (docker) and compare with what's deployed.
+    VerifyProgram {
+        /// Program account; its source comes from the registry unless given.
+        account: Option<String>,
+        /// Rebuild the LEZ builtins we decode (token, ATA) from vendor/lez or --repo.
+        #[arg(long, conflicts_with = "account")]
+        builtins: bool,
+        #[arg(long)]
+        repo: Option<String>,
+        #[arg(long)]
+        commit: Option<String>,
+        #[arg(long)]
+        guest_path: Option<String>,
+        #[arg(long)]
+        bin: Option<String>,
+        #[arg(long)]
+        features: Option<String>,
+        #[arg(long, default_value = "r0.1.91.1")]
+        docker_tag: String,
+    },
+    /// Call any program (what a dApp proposes). Accounts: `id[:shard][:signer]`.
+    Call {
         #[arg(long)]
         from: String,
         #[arg(long)]
-        to: String,
+        program: String,
+        #[arg(long = "account", required = true)]
+        accounts: Vec<String>,
+        /// Instruction bytes, base64.
         #[arg(long)]
-        amount: u128,
+        data: String,
     },
-    /// Move native tokens from a public account into your private account (proves locally).
-    Shield {
-        #[arg(long)]
-        from: String,
-        #[arg(long)]
-        to: String,
-        #[arg(long)]
-        amount: u128,
-    },
+    /// Encrypted backups (needs the password they were made with to restore).
+    #[command(subcommand)]
+    Backup(BackupCmd),
     /// Zone, sync and network state.
     Status,
     /// Zones this wallet knows.
@@ -98,6 +155,56 @@ enum Command {
     Password,
     /// Lock after this many seconds without use (60–86400).
     AutoLock { seconds: u32 },
+}
+
+#[derive(clap::Args, Clone)]
+struct SendArgs {
+    #[arg(long)]
+    from: String,
+    /// Recipient account (yours or public). For someone else's private
+    /// account use --to-keys (or --to-npk/--to-vpk).
+    #[arg(long)]
+    to: Option<String>,
+    #[arg(long)]
+    amount: u128,
+    /// Token definition account; omit for the native token.
+    #[arg(long)]
+    token: Option<String>,
+    #[arg(long, requires = "to_vpk")]
+    to_npk: Option<String>,
+    #[arg(long, requires = "to_npk")]
+    to_vpk: Option<String>,
+    /// Keys file from `wallet account show-keys` (npk, vpk lines).
+    #[arg(long, conflicts_with_all = ["to_npk", "to_vpk"])]
+    to_keys: Option<PathBuf>,
+    #[arg(long)]
+    to_identifier: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum TokenCmd {
+    /// Tokens in your accounts (own slot and associated token accounts).
+    List,
+    /// Look for this token's associated token accounts too.
+    Track { definition: String },
+    /// Create a fungible token; all supply goes to --holder (a public account
+    /// whose token slot is empty). A new account becomes the definition.
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        supply: u128,
+        #[arg(long)]
+        holder: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum BackupCmd {
+    /// Write an encrypted backup of this wallet.
+    Export { file: PathBuf },
+    /// Restore a backup into an empty data dir (checks the password).
+    Import { file: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -114,6 +221,11 @@ enum AccountCmd {
     },
     /// Import a public account by private key (asked on the terminal).
     Import,
+    /// Keys others need to pay a private account privately (npk, vpk lines;
+    /// save to a file and share it; it holds no secret).
+    Keys {
+        account: String,
+    },
 }
 
 fn data_dir(cli: &Cli) -> Result<DataDir> {
@@ -260,7 +372,64 @@ fn describe(status: &TxStatus, started: Instant) -> String {
     format!("[{:>4}s] {what}", started.elapsed().as_secs())
 }
 
-async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
+fn show_review(review: &Review) {
+    let sum = &review.summary;
+    let route = match review.route {
+        Some(Route::Public) | None => "",
+        Some(Route::Shield) => "  (public → your private account; proves locally)",
+        Some(Route::Unshield) => "  (private → public; proves locally)",
+        Some(Route::Private) => "  (private; proves locally)",
+    };
+    println!("{} on {}{route}", sum.title, review.chain);
+    if let Some(app) = &review.requester {
+        println!("  asked by {app}");
+    }
+    println!(
+        "  from      {}  (balance {})",
+        review.intent.from_account(),
+        review.from_balance
+    );
+    if let Some(to) = &review.recipient {
+        println!("  to        {to}");
+    }
+    for line in &sum.lines {
+        println!("  · {line}");
+    }
+    for a in &sum.authorities {
+        println!("  ⚠ AUTHORITY  {a}");
+    }
+    if sum.unknown {
+        println!("  ⚠ UNKNOWN  the wallet can't read what this call does");
+    }
+    if let Some(p) = &review.program {
+        println!(
+            "  program   {} [{:?}] {}",
+            p.name.as_deref().unwrap_or(&p.account),
+            p.status,
+            p.note
+        );
+    }
+    for e in &review.expected_effects {
+        println!(
+            "  public    {}",
+            serde_json::to_string(e).unwrap_or_default()
+        );
+    }
+    match (&review.fee.max_fee, &review.fee.payer) {
+        (Some(max), Some(payer)) => {
+            println!("  fee       up to {max}, paid by {payer}");
+            if let Some(base) = review.fee.base_fee_exec {
+                println!("            network base fee now {base} per gas");
+            }
+        }
+        _ => println!("  fee       none (private transactions are fee-exempt)"),
+    }
+    println!("  request   {}", review.request_hash);
+}
+
+/// Review, confirm, approve and follow one request. `expect` refuses a
+/// request whose route isn't the one the command promised.
+async fn transact(cli: &Cli, intent: Intent, expect: Option<Route>) -> Result<()> {
     // JSON output leaves no room for the review; scripts confirm with --yes.
     ensure!(
         !cli.json || cli.yes,
@@ -270,39 +439,50 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
     let ticket = engine.request_tx(&owner, None, intent).await?;
+    approve_ticket(cli, &engine, &pw, ticket, expect).await?;
+    engine.lock().await
+}
+
+async fn approve_ticket(
+    cli: &Cli,
+    engine: &Engine,
+    pw: &str,
+    ticket: Ticket,
+    expect: Option<Route>,
+) -> Result<TxStatus> {
+    let owner = Caller::LocalOwner;
     let RequestView::Transaction(review) = &ticket.request else {
         bail!("unexpected request type");
     };
-    if !cli.json {
-        let i = &review.intent;
-        let kind = if i.is_private() {
-            "Shield (public → your private account)"
-        } else {
-            "Send"
-        };
-        println!("{kind} on {}", review.chain);
-        println!(
-            "  from    {}  (balance {})",
-            i.from_account(),
-            review.from_balance
+    if let Some(want) = expect
+        && review.route != Some(want)
+    {
+        engine.reject(&owner, &ticket.handle)?;
+        bail!(
+            "these accounts make this a {:?} transfer, not {want:?}; use `logos-kit send`",
+            review.route
         );
-        println!("  to      {}", i.to_account());
-        println!("  amount  {}", i.amount());
-        match (&review.fee.max_fee, &review.fee.payer) {
-            (Some(max), Some(payer)) => {
-                println!("  fee     up to {max}, paid by {payer}");
-                if let Some(base) = review.fee.base_fee_exec {
-                    println!("          network base fee now {base} per gas");
-                }
-            }
-            _ => println!("  fee     none (private transactions are fee-exempt)"),
-        }
-        println!("  request {}", review.request_hash);
+    }
+    if !cli.json {
+        show_review(review);
     }
     if !confirm(cli, "Approve?")? {
         engine.reject(&owner, &ticket.handle)?;
         bail!("declined");
     }
+    let acknowledged = if ticket.needs_acknowledgement {
+        if cli.yes {
+            ensure!(
+                cli.ack_unknown,
+                "this calls a program the wallet can't read; add --ack-unknown to approve it"
+            );
+            true
+        } else {
+            confirm(cli, "The wallet can't tell what this does. Approve anyway?")?
+        }
+    } else {
+        false
+    };
     let started = Instant::now();
     let json = cli.json;
     let mut progress = move |s: &TxStatus| {
@@ -315,7 +495,8 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
             &owner,
             &ticket.handle,
             &review.request_hash,
-            Some(&pw),
+            Some(pw),
+            acknowledged,
             &mut progress,
         )
         .await;
@@ -327,6 +508,9 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
                 && let Some(hash) = &s.tx_hash
             {
                 eprintln!("tx {hash} was submitted; check it before sending again");
+            }
+            if !acknowledged && ticket.needs_acknowledgement {
+                let _ = engine.reject(&owner, &ticket.handle);
             }
             return Err(e);
         }
@@ -342,7 +526,322 @@ async fn transact(cli: &Cli, intent: Intent) -> Result<()> {
             status.outcome
         );
     });
+    Ok(status)
+}
+
+fn transfer(args: &SendArgs) -> Result<Intent> {
+    let to_keys = match (&args.to_keys, &args.to_npk, &args.to_vpk) {
+        (Some(path), _, _) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("keys file {}", path.display()))?;
+            let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+            Some(RecipientKeys {
+                npk: lines
+                    .next()
+                    .context("keys file: npk line missing")?
+                    .to_owned(),
+                vpk: lines
+                    .next()
+                    .context("keys file: vpk line missing")?
+                    .to_owned(),
+                identifier: args.to_identifier.clone(),
+            })
+        }
+        (None, Some(npk), Some(vpk)) => Some(RecipientKeys {
+            npk: npk.clone(),
+            vpk: vpk.clone(),
+            identifier: args.to_identifier.clone(),
+        }),
+        _ => None,
+    };
+    Ok(Intent::Transfer {
+        from: args.from.clone(),
+        to: args.to.clone(),
+        amount: args.amount,
+        token: args.token.clone(),
+        to_keys,
+    })
+}
+
+fn call_account(spec: &str) -> Result<CallAccount> {
+    let mut parts = spec.split(':');
+    let account = parts.next().context("empty account")?.to_owned();
+    let mut shard = None;
+    let mut signer = false;
+    for p in parts {
+        if p == "signer" {
+            signer = true;
+        } else {
+            ensure!(shard.is_none(), "{spec}: more than one shard");
+            shard = Some(p.to_owned());
+        }
+    }
+    Ok(CallAccount {
+        account,
+        shard,
+        signer,
+    })
+}
+
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .with_context(|| format!("{} (it must not exist yet)", path.display()))?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    Ok(())
+}
+
+async fn token(cli: &Cli, cmd: &TokenCmd) -> Result<()> {
+    match cmd {
+        TokenCmd::List => {
+            let (mut session, _) = open(cli).await?;
+            let holdings = session.holdings().await?;
+            print(cli, &serde_json::to_value(&holdings)?, || {
+                if holdings.is_empty() {
+                    println!("no tokens");
+                }
+                for h in &holdings {
+                    println!(
+                        "{:<46} {:>20} {:<16} {} {}",
+                        h.account,
+                        h.amount,
+                        h.name.as_deref().unwrap_or("?"),
+                        h.definition,
+                        if h.private { "(private)" } else { "" }
+                    );
+                }
+            });
+            session.lock()
+        }
+        TokenCmd::Track { definition } => {
+            let (mut session, _) = open(cli).await?;
+            wallet_engine::decode::account_id(definition)?;
+            session.track_token(definition)?;
+            session.lock()
+        }
+        TokenCmd::Create {
+            name,
+            supply,
+            holder,
+        } => {
+            ensure!(
+                !cli.json || cli.yes,
+                "--json needs --yes (run without --json to review first)"
+            );
+            let (mut session, pw) = open(cli).await?;
+            let definition = session.new_account(AccountKind::Public)?.account_id;
+            let intent =
+                wallet_engine::tokens::create_token_intent(holder, &definition, name, *supply)?;
+            let engine = Engine::new(session, Config::default());
+            let owner = Caller::LocalOwner;
+            let ticket = engine.request_tx(&owner, None, intent).await?;
+            let status = approve_ticket(cli, &engine, &pw, ticket, None).await?;
+            engine
+                .with_session(async |s| s.track_token(&definition))
+                .await?;
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "definition": definition, "status": status })
+                );
+            } else {
+                println!("token definition {definition}");
+            }
+            engine.lock().await
+        }
+    }
+}
+
+async fn faucet(
+    cli: &Cli,
+    account: &str,
+    via: Option<&str>,
+    url: Option<&str>,
+    key_env: Option<&str>,
+    drop: u128,
+) -> Result<()> {
+    let (session, pw) = open(cli).await?;
+    let sequencer = session.zone().sequencer.clone();
+    let engine = Engine::new(session, Config::default());
+    let owner = Caller::LocalOwner;
+    let mut key = [0u8; 16];
+    getrandom::fill(&mut key).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let request_key = hex::encode(key);
+    let funds = match (url, key_env) {
+        (Some(url), _) => {
+            let f = HttpFaucet::new("Logos Kit drip", url)?;
+            engine
+                .request_funds(&owner, None, account, via, &f, &request_key)
+                .await?
+        }
+        (None, Some(var)) => {
+            let secret = std::env::var(var).with_context(|| format!("{var} is not set"))?;
+            let f = KeyFaucet::new(
+                "Local funded key",
+                &sequencer,
+                &secret,
+                drop,
+                std::time::Duration::from_secs(60),
+            )?;
+            engine
+                .request_funds(&owner, None, account, via, &f, &request_key)
+                .await?
+        }
+        (None, None) => bail!(
+            "this zone has no faucet configured: pass --url <drip service> (or --key-env for a local funded key)"
+        ),
+    };
+    let shield = funds.shield.clone();
+    print(cli, &serde_json::to_value(&funds)?, || {
+        println!(
+            "{}: {}",
+            funds.faucet,
+            serde_json::to_string(&funds.outcome).unwrap_or_default()
+        );
+    });
+    if let Some(ticket) = shield {
+        if !cli.json {
+            println!(
+                "funded {}; now shielding into {account}",
+                funds.funded_account
+            );
+        }
+        approve_ticket(cli, &engine, &pw, ticket, Some(Route::Shield)).await?;
+    }
     engine.lock().await
+}
+
+/// Rebuild the LEZ builtins we decode and print the evidence JSON
+/// (`registry/builtins.json`).
+fn verify_builtins(repo: Option<&str>, docker_tag: &str) -> Result<()> {
+    let source = verify::Source {
+        repo: repo
+            .unwrap_or("https://github.com/logos-blockchain/logos-execution-zone")
+            .to_owned(),
+        commit: wallet_engine::LEZ_REV.to_owned(),
+        guest_path: "lez/programs".to_owned(),
+        bin: String::new(),
+        docker_tag: docker_tag.to_owned(),
+        features: Some("programs".to_owned()),
+    };
+    let work = std::env::temp_dir().join("logos-kit-verify-builtins");
+    let out = verify::build(&source, &work)?;
+    let today = today();
+    let mut evidence = Vec::new();
+    for (name, _, compiled) in verify::builtins() {
+        let built = verify::image_in(&out, &format!("{name}.bin"))?;
+        ensure!(
+            built == compiled,
+            "builtin {name}: source builds {} but the pinned artifact is {}",
+            verify::image_hex(&built),
+            verify::image_hex(&compiled)
+        );
+        eprintln!("{name}: reproduced {}", verify::image_hex(&built));
+        evidence.push(verify::BuiltinEvidence {
+            name: name.to_owned(),
+            image_id: verify::image_hex(&built),
+            source: verify::Source {
+                bin: format!("{name}.bin"),
+                ..source.clone()
+            },
+            reproduced: today.clone(),
+        });
+    }
+    println!("{}", serde_json::to_string_pretty(&evidence)?);
+    Ok(())
+}
+
+fn today() -> String {
+    let days = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() / 86_400);
+    // civil-from-days (H. Hinnant)
+    let z = i64::try_from(days).unwrap_or(0) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Rebuild one program from its source and compare with what's deployed.
+async fn verify_program(cli: &Cli, account: &str, flags: verify::Source) -> Result<()> {
+    let source = if flags.repo.is_empty() {
+        verify::registry_source(account)
+            .map(|(_, s)| s)
+            .with_context(|| {
+                format!("{account} isn't in the registry; pass --repo --commit --guest-path --bin")
+            })?
+    } else {
+        ensure!(
+            !flags.commit.is_empty() && !flags.guest_path.is_empty() && !flags.bin.is_empty(),
+            "--repo needs --commit, --guest-path and --bin"
+        );
+        flags
+    };
+    let (mut session, _) = open(cli).await?;
+    let zone = session.zone().id.clone();
+    session.connect().await?;
+    let program = wallet_engine::decode::account_id(account)?;
+    let header = {
+        let core = session.core().context("not connected")?;
+        verify::read_header(core, program)
+            .await?
+            .with_context(|| format!("no program is deployed at {account}"))?
+    };
+    let work = std::env::temp_dir().join(format!("logos-kit-verify-{account}"));
+    eprintln!(
+        "building {} @ {} in docker {} …",
+        source.repo,
+        &source.commit[..source.commit.len().min(12)],
+        source.docker_tag
+    );
+    let s2 = source.clone();
+    let built = tokio::task::spawn_blocking(move || verify::build_image_id(&s2, &work)).await??;
+    let (live, built_hex) = (
+        verify::image_hex(&header.image_id),
+        verify::image_hex(&built),
+    );
+    let matched = built == header.image_id;
+    if matched {
+        verify::save_cache(
+            session.data_dir().root(),
+            verify::Verified {
+                zone,
+                account: account.to_owned(),
+                image_id: live.clone(),
+                source,
+            },
+        )?;
+    }
+    let result = serde_json::json!({
+        "account": account, "deployed": live, "built": built_hex,
+        "status": if matched { "verified_local" } else { "mismatch" },
+        "immutable": header.immutable,
+    });
+    print(cli, &result, || {
+        println!("deployed {live}\nbuilt    {built_hex}");
+        println!(
+            "{}",
+            if matched {
+                "verified: the deployed program is this source"
+            } else {
+                "MISMATCH: the deployed program is not this source"
+            }
+        );
+    });
+    session.lock()?;
+    ensure!(matched, "source doesn't match the deployed program");
+    Ok(())
 }
 
 async fn run(cli: Cli) -> Result<()> {
@@ -417,6 +916,12 @@ async fn run(cli: Cli) -> Result<()> {
                 AccountCmd::Label { account, name } => {
                     session.set_label(account, name.as_deref())?;
                 }
+                AccountCmd::Keys { account } => {
+                    let (npk, vpk) = session.receive_keys(account)?;
+                    print(&cli, &serde_json::json!({ "npk": npk, "vpk": vpk }), || {
+                        println!("{npk}\n{vpk}");
+                    });
+                }
                 AccountCmd::Import => {
                     let key = match std::env::var("LOGOS_KIT_IMPORT_KEY") {
                         Ok(k) => k,
@@ -430,9 +935,9 @@ async fn run(cli: Cli) -> Result<()> {
             }
             session.lock()
         }
-        Command::Balance { account } => {
+        Command::Balance { account, token } => {
             let (mut session, _) = open(&cli).await?;
-            let balance = session.balance(account).await?;
+            let balance = session.balance_of(account, token.as_deref()).await?;
             print(
                 &cli,
                 &serde_json::json!({ "balance": balance.to_string() }),
@@ -452,27 +957,127 @@ async fn run(cli: Cli) -> Result<()> {
             });
             session.lock()
         }
-        Command::Send { from, to, amount } => {
-            transact(
+        Command::Send(args) => transact(&cli, transfer(args)?, None).await,
+        Command::Shield(args) => transact(&cli, transfer(args)?, Some(Route::Shield)).await,
+        Command::Deshield(args) => transact(&cli, transfer(args)?, Some(Route::Unshield)).await,
+        Command::Token(cmd) => token(&cli, cmd).await,
+        Command::Faucet {
+            account,
+            via,
+            url,
+            key_env,
+            drop,
+        } => {
+            faucet(
                 &cli,
-                Intent::Transfer {
-                    from: from.clone(),
-                    to: to.clone(),
-                    amount: *amount,
-                },
+                account,
+                via.as_deref(),
+                url.as_deref(),
+                key_env.as_deref(),
+                *drop,
             )
             .await
         }
-        Command::Shield { from, to, amount } => {
+        Command::Program { account } => {
+            let (mut session, _) = open(&cli).await?;
+            let zone = session.zone().id.clone();
+            let cache = verify::load_cache(session.data_dir().root());
+            session.connect().await?;
+            let core = session.core().context("not connected")?;
+            // A builtin may be named instead of its address.
+            let id = match verify::builtins()
+                .into_iter()
+                .find(|(n, _, _)| n == account)
+            {
+                Some((_, id, _)) => id,
+                None => wallet_engine::decode::account_id(account)?,
+            };
+            let check = verify::check_cached(core, id, &zone, &cache).await?;
+            print(&cli, &serde_json::to_value(&check)?, || {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&check).unwrap_or_default()
+                );
+            });
+            session.lock()
+        }
+        Command::VerifyProgram {
+            account,
+            builtins,
+            repo,
+            commit,
+            guest_path,
+            bin,
+            features,
+            docker_tag,
+        } => {
+            let flags = verify::Source {
+                repo: repo.clone().unwrap_or_default(),
+                commit: commit.clone().unwrap_or_default(),
+                guest_path: guest_path.clone().unwrap_or_default(),
+                bin: bin.clone().unwrap_or_default(),
+                docker_tag: docker_tag.clone(),
+                features: features.clone(),
+            };
+            if *builtins {
+                verify_builtins(repo.as_deref(), docker_tag)
+            } else {
+                let account = account
+                    .as_deref()
+                    .context("give a program account (or --builtins)")?;
+                verify_program(&cli, account, flags).await
+            }
+        }
+        Command::Call {
+            from,
+            program,
+            accounts,
+            data,
+        } => {
+            let accounts = accounts
+                .iter()
+                .map(|a| call_account(a))
+                .collect::<Result<Vec<_>>>()?;
             transact(
                 &cli,
-                Intent::Shield {
+                Intent::Call {
                     from: from.clone(),
-                    to: to.clone(),
-                    amount: *amount,
+                    program: program.clone(),
+                    accounts,
+                    data: data.clone(),
                 },
+                None,
             )
             .await
+        }
+        Command::Backup(BackupCmd::Export { file }) => {
+            let (session, _) = open(&cli).await?;
+            let bundle = session.export_backup()?;
+            write_private(file, &bundle)?;
+            println!("wrote an encrypted backup to {}", file.display());
+            session.lock()
+        }
+        Command::Backup(BackupCmd::Import { file }) => {
+            let data = data_dir(&cli)?;
+            let zone = zone(&cli, &data)?;
+            let bundle = std::fs::read(file).with_context(|| file.display().to_string())?;
+            data.import_backup(&bundle)?;
+            let pw = password("Password of the backup: ")?;
+            match Session::unlock(data.clone(), &pw, zone) {
+                Ok(s) => {
+                    s.lock()?;
+                    println!("Restored from {}.", file.display());
+                    Ok(())
+                }
+                Err(e) => {
+                    // Leave no half-restored wallet behind.
+                    for p in ["keys", "zones"] {
+                        let _ = std::fs::remove_dir_all(data.root().join(p));
+                    }
+                    let _ = std::fs::remove_file(data.root().join("zones.json"));
+                    Err(e.context("the backup didn't open with that password"))
+                }
+            }
         }
         Command::Status => {
             let (session, _) = open(&cli).await?;
