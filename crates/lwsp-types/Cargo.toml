@@ -1,0 +1,12 @@
+[package]
+name = "lwsp-types"
+description = "LWS-0 (Logos Kit wallet protocol) types, generated from the canonical JSON Schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "std"] }
+regress = "0.10"
+serde.workspace = true
+serde_json.workspace = true

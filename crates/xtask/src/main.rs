@@ -5,7 +5,9 @@
 //!   There is no version RPC; v0.3 exposes `getFeeState`, v0.2.x has `pinata`
 //!   in `getProgramIds`.
 //! - `vectors`: regenerate `protocol/vectors/*.json` from LEZ code (see vectors.rs).
+//! - `types`: regenerate `crates/lwsp-types/src/generated.rs` from the LWS-0 JSON Schema.
 
+mod types;
 mod vectors;
 
 use std::{path::Path, time::Duration};
@@ -25,12 +27,16 @@ fn main() -> Result<()> {
             let url = args.get(1).map_or(DEFAULT_SEQUENCER, String::as_str);
             fingerprint(url)
         }
+        Some("types") => {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            types::run(&root)
+        }
         Some("vectors") => {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
             vectors::run(&root)
         }
         _ => {
-            eprintln!("usage: cargo xtask <fingerprint [sequencer-url] | vectors>");
+            eprintln!("usage: cargo xtask <fingerprint [sequencer-url] | vectors | types>");
             std::process::exit(2);
         }
     }

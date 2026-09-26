@@ -28,12 +28,33 @@ for (const mod of [Prim, Sess, Tx, Msg]) {
   }
 }
 
+// Nested schemas identical to a named definition become `$ref`s, so consumers
+// (typify for crates/lwsp-types, docs) see one named type instead of a copy.
+const plainDefs: Record<string, unknown> = plain(defs)
+const byShape = new Map<string, string>()
+for (const [name, schema] of Object.entries(plainDefs)) {
+  const key = JSON.stringify(schema)
+  if (!byShape.has(key)) byShape.set(key, name)
+}
+const refify = (node: unknown, self: string, depth: number): unknown => {
+  if (Array.isArray(node)) return node.map((n) => refify(n, self, depth + 1))
+  if (node === null || typeof node !== 'object') return node
+  if (depth > 0) {
+    const name = byShape.get(JSON.stringify(node))
+    if (name && name !== self) return { $ref: `#/$defs/${name}` }
+  }
+  return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, refify(v, self, depth + 1)]))
+}
+const refDefs = Object.fromEntries(
+  Object.entries(plainDefs).map(([name, schema]) => [name, refify(schema, name, 0)]),
+)
+
 write('lws0.schema.json', {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://logos-kit.dev/schema/lws0.schema.json',
   title: 'LWS-0: Logos Kit wallet protocol',
   version: LWS_VERSION,
-  $defs: defs,
+  $defs: refDefs,
 })
 
 write('methods.json', {

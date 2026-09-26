@@ -23,3 +23,7 @@ sha2 = "0.10.8"
 lee_core.workspace = true
 key_protocol.workspace = true
 common.workspace = true
+prettyplease = "0.2"
+schemars = "0.8.22"
+syn = { version = "2", features = ["full"] }
+typify = "0.8"
