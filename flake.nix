@@ -16,6 +16,12 @@
     # Same revs LEZ pins for Cargo.lock's circuits v0.5.7 and rapidsnark e91187f8.
     logos-blockchain-circuits.url = "github:logos-blockchain/logos-blockchain-circuits/2846ee7a4cfa24458bb8063412ab2e753b344d2f";
     rust-rapidsnark.url = "github:logos-blockchain/logos-blockchain-rust-rapidsnark/e91187f8ccb5bbfc7bb00dac88169112428da78f";
+    # LEZ at LEZ_REV (crates/wallet-engine/src/lib.rs). Patched below with
+    # vendor/lez-patches into the same tree `cargo xtask lez-vendor` produces.
+    lez-src = {
+      url = "github:logos-blockchain/logos-execution-zone/f7fda38a4428b9989f1db1dbf5d2411484848fd4";
+      flake = false;
+    };
   };
 
   outputs =
@@ -27,6 +33,7 @@
       crane,
       logos-blockchain-circuits,
       rust-rapidsnark,
+      lez-src,
       ...
     }:
     let
@@ -53,14 +60,30 @@
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
           cargoLock = builtins.fromTOML (builtins.readFile ./Cargo.lock);
 
-          # Only what cargo needs: manifests, lockfile, Rust sources, the C header.
-          src = lib.cleanSourceWith {
+          # Our Rust sources (manifests, lockfile, .rs, the C header) plus the
+          # patched LEZ tree at vendor/lez, which the workspace path-depends on.
+          ownSrc = lib.cleanSourceWith {
             src = ./.;
             name = "logos-kit-rust";
             filter =
               path: type:
               (craneLib.filterCargoSources path type) || (lib.hasSuffix ".h" path) || (lib.hasInfix "/.cargo/" path);
           };
+          lezPatched = pkgs.applyPatches {
+            name = "lez-patched";
+            src = lez-src;
+            patches = lib.sort (a: b: a < b) (
+              map (f: ./vendor/lez-patches + "/${f}") (
+                builtins.filter (f: lib.hasSuffix ".patch" f) (builtins.attrNames (builtins.readDir ./vendor/lez-patches))
+              )
+            );
+          };
+          src = pkgs.runCommand "logos-kit-src" { } ''
+            cp -R ${ownSrc} $out
+            chmod -R u+w $out
+            mkdir -p $out/vendor
+            cp -R ${lezPatched} $out/vendor/lez
+          '';
 
           # risc0-circuit-recursion downloads a zkr zip from its build script;
           # pre-fetch it (hash read from the locked crate, as LEZ does).
@@ -121,22 +144,9 @@
           '';
 
           # LEZ's build_utils finds `artifacts/` by walking up from the crate
-          # dir. Crane vendors each git crate on its own, so give the two crates
-          # that need it (lee, lez/programs) their own copy.
-          cargoVendorDir = craneLib.vendorCargoDeps {
-            inherit src;
-            overrideVendorGitCheckout =
-              ps: drv:
-              if lib.any (p: lib.hasPrefix "git+https://github.com/logos-blockchain/logos-execution-zone" p.source) ps then
-                drv.overrideAttrs (old: {
-                  postPatch = (old.postPatch or "") + ''
-                    cp -R artifacts lee/state_machine/artifacts
-                    cp -R artifacts lez/programs/artifacts
-                  '';
-                })
-              else
-                drv;
-          };
+          # dir; with the whole patched tree at vendor/lez it finds
+          # vendor/lez/artifacts, so no vendoring override is needed.
+          cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
 
           commonArgs = {
             inherit src cargoVendorDir;

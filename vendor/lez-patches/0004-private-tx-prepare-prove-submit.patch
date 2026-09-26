@@ -1,0 +1,216 @@
+From 996ec1090ba563bf0a9125bb4e7791b956712fe1 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 18:25:42 +0100
+Subject: [PATCH 4/5] wallet: split privacy-preserving sending into prepare,
+ prove and submit
+
+`send_privacy_preserving_tx_with_pre_check` gathers inputs, proves on a
+tokio blocking thread, signs and submits in one call. Callers cannot
+choose where proving runs, cannot cancel between proving and submission,
+and cannot inspect the proved message (its public effects) before it is
+signed and broadcast.
+
+Split it into three steps:
+
+- `WalletCore::prepare_private` -> `PreparedPrivateTx` (proving input,
+  program, nonces, ordered `TxSigner`s, note shared secrets);
+- `PreparedPrivateTx::prove` -> `ProvedPrivateTx`, a plain blocking call
+  the caller runs on whatever worker it likes; `ProvedPrivateTx::message`
+  exposes the exact message to be signed so it can be compared with what
+  the user approved, and dropping it cancels the transaction;
+- `WalletCore::sign_and_submit_private` -> `(HashType, Vec<SharedSecretKey>)`.
+
+The old function is the composition of the three, still proving under
+`spawn_blocking`, so its behaviour and errors are unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lez/wallet/src/lib.rs | 128 ++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 105 insertions(+), 23 deletions(-)
+
+diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
+index 1999edb..a286621 100644
+--- a/lez/wallet/src/lib.rs
++++ b/lez/wallet/src/lib.rs
+@@ -23,7 +23,7 @@ use key_protocol::key_management::key_tree::chain_index::ChainIndex;
+ use lee::{
+     Account, AccountId, PrivacyPreservingTransaction, ProgramId, ProvingInput,
+     privacy_preserving_transaction::{
+-        circuit::ProgramWithDependencies,
++        circuit::{ProgramWithDependencies, Proof},
+         message::{EncryptedAccountData, Message},
+     },
+ };
+@@ -97,6 +97,27 @@ pub struct PreparedPublicTx {
+     keycard_pin: Option<String>,
+ }
+ 
++/// A privacy-preserving transaction built by [`WalletCore::prepare_private`], ready to prove.
++pub struct PreparedPrivateTx {
++    input: ProvingInput,
++    program: ProgramWithDependencies,
++    public_account_nonces: Vec<Nonce>,
++    signers: Vec<TxSigner>,
++    keycard_pin: Option<String>,
++    shared_secrets: Vec<SharedSecretKey>,
++}
++
++/// A proved privacy-preserving transaction, not yet signed or submitted.
++///
++/// Dropping it instead of passing it to [`WalletCore::sign_and_submit_private`] cancels it.
++pub struct ProvedPrivateTx {
++    message: Message,
++    proof: Proof,
++    signers: Vec<TxSigner>,
++    keycard_pin: Option<String>,
++    shared_secrets: Vec<SharedSecretKey>,
++}
++
+ #[derive(Debug, thiserror::Error)]
+ pub enum ExecutionFailureKind {
+     #[error("Failed to get data from sequencer")]
+@@ -862,6 +883,22 @@ impl WalletCore {
+         program: &ProgramWithDependencies,
+         tx_pre_check: impl FnOnce(&[SelectedShard]) -> Result<(), ExecutionFailureKind>,
+     ) -> Result<(HashType, Vec<SharedSecretKey>), ExecutionFailureKind> {
++        let prepared = self
++            .prepare_private(accounts, instruction_data, program, tx_pre_check)
++            .await?;
++        let proved = tokio::task::spawn_blocking(move || prepared.prove()).await??;
++        self.sign_and_submit_private(proved).await
++    }
++
++    /// Gathers everything [`Self::send_privacy_preserving_tx_with_pre_check`] needs to prove the
++    /// transaction; see [`PreparedPrivateTx::prove`].
++    pub async fn prepare_private(
++        &self,
++        accounts: Vec<AccountMention>,
++        instruction_data: InstructionData,
++        program: &ProgramWithDependencies,
++        tx_pre_check: impl FnOnce(&[SelectedShard]) -> Result<(), ExecutionFailureKind>,
++    ) -> Result<PreparedPrivateTx, ExecutionFailureKind> {
+         let acc_manager = account_manager::AccountManager::new(self, accounts).await?;
+ 
+         tx_pre_check(&acc_manager.selected_shards())?;
+@@ -873,7 +910,6 @@ impl WalletCore {
+             );
+         }
+ 
+-        let private_account_keys = acc_manager.private_account_keys();
+         let input = ProvingInput {
+             shard_selectors: acc_manager.shard_selectors(),
+             signers: acc_manager.signers(),
+@@ -883,24 +919,36 @@ impl WalletCore {
+             ciphertext_padding: Some(CIPHERTEXT_PAD_SIZE),
+         };
+ 
+-        let program = program.clone();
+-        let (output, proof) = tokio::task::spawn_blocking(move || {
+-            lee::privacy_preserving_transaction::circuit::execute_and_prove(input, &program)
++        Ok(PreparedPrivateTx {
++            input,
++            program: program.clone(),
++            public_account_nonces: acc_manager.public_account_nonces(),
++            signers: acc_manager.tx_signers(),
++            keycard_pin: acc_manager.keycard_pin(),
++            shared_secrets: acc_manager
++                .private_account_keys()
++                .into_iter()
++                .map(|keys| keys.ssk)
++                .collect(),
+         })
+-        .await??;
+-
+-        let message = lee::privacy_preserving_transaction::message::Message::from_circuit_output(
+-            acc_manager.public_account_nonces(),
+-            output,
+-        );
++    }
+ 
+-        let signatures_public_keys = account_manager::sign_message(
+-            self,
+-            &acc_manager.tx_signers(),
+-            acc_manager.keycard_pin().as_deref(),
+-            message.hash(),
+-        )
+-        .map_err(ExecutionFailureKind::SignError)?;
++    /// Signs a [`ProvedPrivateTx`] and submits it to the sequencers. Returns the transaction hash
++    /// and the shared secrets of its private accounts' notes.
++    pub async fn sign_and_submit_private(
++        &self,
++        proved: ProvedPrivateTx,
++    ) -> Result<(HashType, Vec<SharedSecretKey>), ExecutionFailureKind> {
++        let ProvedPrivateTx {
++            message,
++            proof,
++            signers,
++            keycard_pin,
++            shared_secrets,
++        } = proved;
++        let signatures_public_keys =
++            account_manager::sign_message(self, &signers, keycard_pin.as_deref(), message.hash())
++                .map_err(ExecutionFailureKind::SignError)?;
+ 
+         let witness_set =
+             lee::privacy_preserving_transaction::witness_set::WitnessSet::from_raw_parts(
+@@ -910,11 +958,6 @@ impl WalletCore {
+ 
+         let tx = PrivacyPreservingTransaction::new(message, witness_set);
+ 
+-        let shared_secrets: Vec<_> = private_account_keys
+-            .into_iter()
+-            .map(|keys| keys.ssk)
+-            .collect();
+-
+         let call_res = first_success_or_error(
+             self.multi_sequencer_client
+                 .metered_send_transaction(LeeTransaction::PrivacyPreserving(tx))
+@@ -1306,6 +1349,45 @@ impl PreparedPublicTx {
+     }
+ }
+ 
++impl PreparedPrivateTx {
++    /// Executes and proves the transaction. CPU-heavy and blocking: run it on a worker thread.
++    pub fn prove(self) -> Result<ProvedPrivateTx, ExecutionFailureKind> {
++        let Self {
++            input,
++            program,
++            public_account_nonces,
++            signers,
++            keycard_pin,
++            shared_secrets,
++        } = self;
++        let (output, proof) =
++            lee::privacy_preserving_transaction::circuit::execute_and_prove(input, &program)?;
++
++        Ok(ProvedPrivateTx {
++            message: Message::from_circuit_output(public_account_nonces, output),
++            proof,
++            signers,
++            keycard_pin,
++            shared_secrets,
++        })
++    }
++}
++
++impl ProvedPrivateTx {
++    /// The exact message, with the transaction's public effects, that
++    /// [`WalletCore::sign_and_submit_private`] signs.
++    #[must_use]
++    pub const fn message(&self) -> &Message {
++        &self.message
++    }
++
++    /// The public accounts that will sign [`Self::message`], in signature order.
++    #[must_use]
++    pub fn signers(&self) -> &[TxSigner] {
++        &self.signers
++    }
++}
++
+ /// Sizes a fee cap for a given gas limit: a wallet that raises its gas limit
+ /// must raise its fee cap in step, or the reservation cannot cover the gas.
+ #[must_use]
+-- 
+2.55.0
+

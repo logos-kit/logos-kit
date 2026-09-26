@@ -28,13 +28,22 @@ fn hex_field(v: &Value, key: &str) -> Vec<u8> {
 }
 
 #[test]
-fn vectors_rev_matches_engine_and_lockfile() {
-    let lock_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
-    let lock = fs::read_to_string(lock_path).expect("Cargo.lock");
-    let pinned = format!("logos-execution-zone?rev={}#", wallet_engine::LEZ_REV);
+fn vectors_rev_matches_engine_and_vendored_lez() {
+    let tree = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/lez");
+    let based = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&tree)
+        .args([
+            "merge-base",
+            "--is-ancestor",
+            wallet_engine::LEZ_REV,
+            "HEAD",
+        ])
+        .status()
+        .expect("git in vendor/lez");
     assert!(
-        lock.contains(&pinned),
-        "Cargo.lock doesn't resolve LEZ at LEZ_REV"
+        based.success(),
+        "vendor/lez is not based on wallet_engine::LEZ_REV"
     );
     for name in ["public_tx.json", "keys.json"] {
         assert_eq!(

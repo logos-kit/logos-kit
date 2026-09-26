@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 # Basecamp module crates are standalone (builder convention) and RISC Zero
 # guests build with cargo-risczero, so neither joins this workspace.
-exclude = ["modules", "programs"]
+exclude = ["modules", "programs", "vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,12 +18,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "3", features = ["json"] }
 
-# LEZ at the pinned rev (docs/dev/pins.md). Re-pin all together.
-wallet = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
-lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
-lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
-key_protocol = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
-common = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+# LEZ at the pinned rev + our patch series (vendor/lez-patches), materialized
+# by `cargo xtask lez-vendor` into vendor/lez (docs/dev/pins.md). Every LEZ
+# crate comes from this tree, so there is never a git copy next to a path copy.
+wallet = { path = "vendor/lez/lez/wallet", default-features = false }
+lee = { path = "vendor/lez/lee/state_machine" }
+lee_core = { path = "vendor/lez/lee/state_machine/core" }
+key_protocol = { path = "vendor/lez/lee/key_protocol" }
+common = { path = "vendor/lez/lez/common" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

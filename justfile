@@ -12,7 +12,7 @@ check:
 
 # Rust: fmt + clippy
 check-rust:
-    cargo fmt --all --check
+    cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
 
 # Identify the LEZ protocol version a sequencer runs (default: public testnet)

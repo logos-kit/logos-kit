@@ -54,17 +54,19 @@ pub fn run(repo_root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `LEZ_REV` must be the rev Cargo actually resolved, or `meta.lezRev` lies.
+/// `LEZ_REV` must be the base of the tree Cargo builds (vendor/lez), or
+/// `meta.lezRev` lies.
 fn check_lez_rev(root: &Path) -> Result<()> {
-    let lock = fs::read_to_string(root.join("Cargo.lock"))?;
-    let marker = "logos-execution-zone?rev=";
-    let revs: std::collections::BTreeSet<&str> = lock
-        .match_indices(marker)
-        .filter_map(|(i, _)| lock.get(i + marker.len()..i + marker.len() + 40))
-        .collect();
+    let tree = root.join("vendor/lez");
+    let ok = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&tree)
+        .args(["merge-base", "--is-ancestor", crate::LEZ_REV, "HEAD"])
+        .status()
+        .context("git merge-base in vendor/lez (run `cargo xtask lez-vendor`)")?;
     ensure!(
-        revs.len() == 1 && revs.contains(crate::LEZ_REV),
-        "Cargo.lock resolves LEZ at {revs:?}, but xtask LEZ_REV is {}",
+        ok.success(),
+        "vendor/lez is not based on LEZ_REV {}",
         crate::LEZ_REV
     );
     Ok(())

@@ -1,0 +1,263 @@
+From 1ceef799135f18ea94fe8796990c956f71c57f9c Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 18:23:43 +0100
+Subject: [PATCH 1/5] wallet: persist storage through a pluggable
+ StorageBackend
+
+`Storage` is hard-wired to a plaintext JSON file and `WalletCore` writes
+that file directly (including once per synced block). Embedders that want
+to encrypt the wallet at rest, keep it in a platform keystore, or debounce
+the per-block writes currently have to fork the crate.
+
+Introduce a small `StorageBackend` trait (`load`/`save` of opaque bytes)
+together with `Storage::{to_bytes, from_bytes, load_from, save_to}`. The
+existing behaviour moves into the default `FileBackend`, which
+`Storage::{from_path, save_to_path}` and `WalletCore` keep using, so the
+on-disk format, error messages and save cadence are unchanged.
+
+`WalletCore` gains `new_with_storage_backend` and `set_storage_backend`;
+every save, including the per-block save during sync, goes through the
+configured backend.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lez/wallet/src/lib.rs     |  35 +++++++++++-
+ lez/wallet/src/storage.rs | 114 +++++++++++++++++++++++++++-----------
+ 2 files changed, 115 insertions(+), 34 deletions(-)
+
+diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
+index 5d03fc0..8aa7611 100644
+--- a/lez/wallet/src/lib.rs
++++ b/lez/wallet/src/lib.rs
+@@ -32,7 +32,7 @@ use lee_core::{
+ };
+ use log::warn;
+ use sequencer_service_rpc::{RpcClient as _, SequencerClient};
+-use storage::Storage;
++use storage::{FileBackend, Storage, StorageBackend};
+ use tokio::io::AsyncWriteExt as _;
+ use url::Url;
+ 
+@@ -128,6 +128,7 @@ pub struct WalletCore {
+ 
+     storage: Storage,
+     storage_path: PathBuf,
++    storage_backend: Box<dyn StorageBackend>,
+ 
+     statistics_path: PathBuf,
+     statistics: HashMap<Url, Statistics>,
+@@ -184,6 +185,30 @@ impl WalletCore {
+         Ok((wallet, mnemonic))
+     }
+ 
++    /// Construct wallet persisting `storage` through `storage_backend` instead of the plaintext
++    /// file. `storage` is usually [`Storage::load_from`] the same backend, or a fresh
++    /// [`Storage::new`]; `storage_path` is only reported by [`Self::storage_path`] and in messages.
++    pub async fn new_with_storage_backend(
++        config_path: PathBuf,
++        storage_path: PathBuf,
++        statistics_path: PathBuf,
++        config_overrides: Option<WalletConfigOverrides>,
++        storage: Storage,
++        storage_backend: Box<dyn StorageBackend>,
++    ) -> Result<Self> {
++        let mut wallet = Self::new(
++            config_path,
++            storage_path,
++            statistics_path,
++            config_overrides,
++            storage,
++        )
++        .await?;
++        wallet.storage_backend = storage_backend;
++
++        Ok(wallet)
++    }
++
+     async fn new(
+         config_path: PathBuf,
+         storage_path: PathBuf,
+@@ -216,6 +241,7 @@ impl WalletCore {
+             config_overrides,
+             config,
+             storage,
++            storage_backend: Box::new(FileBackend::new(storage_path.clone())),
+             storage_path,
+             statistics_path,
+             statistics,
+@@ -279,10 +305,15 @@ impl WalletCore {
+         self.storage.restore(mnemonic, password)
+     }
+ 
++    /// Replace the medium that [`Self::store_persistent_data`] writes storage to.
++    pub fn set_storage_backend(&mut self, storage_backend: Box<dyn StorageBackend>) {
++        self.storage_backend = storage_backend;
++    }
++
+     /// Store persistent data at home.
+     pub fn store_persistent_data(&self) -> Result<()> {
+         self.storage
+-            .save_to_path(&self.storage_path)
++            .save_to(self.storage_backend.as_ref())
+             .with_context(|| {
+                 format!(
+                     "Failed to store persistent accounts at {}",
+diff --git a/lez/wallet/src/storage.rs b/lez/wallet/src/storage.rs
+index df0e2d6..020830e 100644
+--- a/lez/wallet/src/storage.rs
++++ b/lez/wallet/src/storage.rs
+@@ -1,7 +1,7 @@
+ use std::{
+     collections::{BTreeMap, btree_map::Entry},
+-    io::{BufReader, Write as _},
+-    path::Path,
++    io::Write as _,
++    path::{Path, PathBuf},
+ };
+ 
+ use anyhow::{Context as _, Result};
+@@ -21,6 +21,24 @@ use crate::{
+ pub mod key_chain;
+ mod persistent;
+ 
++/// Persistence medium for the serialized wallet [`Storage`].
++///
++/// [`FileBackend`] keeps the historical plaintext JSON file. Embedders can plug in their own
++/// backend (e.g. encrypting at rest or debouncing writes) via
++/// [`crate::WalletCore::new_with_storage_backend`] or [`crate::WalletCore::set_storage_backend`].
++pub trait StorageBackend: Send + Sync {
++    /// Returns the stored bytes, or `None` if nothing has been stored yet.
++    fn load(&self) -> Result<Option<Vec<u8>>>;
++
++    /// Durably replaces the stored bytes.
++    fn save(&self, bytes: &[u8]) -> Result<()>;
++}
++
++/// Default [`StorageBackend`]: a plaintext file at a fixed path.
++pub struct FileBackend {
++    path: PathBuf,
++}
++
+ #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
+ pub struct Storage {
+     key_chain: UserKeyChain,
+@@ -48,40 +66,33 @@ impl Storage {
+     }
+ 
+     pub fn from_path(path: &Path) -> Result<Self> {
+-        #[expect(
+-            clippy::wildcard_enum_match_arm,
+-            reason = "We want to provide a specific error message for not found case"
+-        )]
+-        match std::fs::File::open(path) {
+-            Ok(file) => {
+-                let storage_content = BufReader::new(file);
+-                let persistent: persistent::PersistentStorage =
+-                    serde_json::from_reader(storage_content)
+-                        .context("Failed to parse storage file")?;
+-                Self::from_persistent(persistent)
+-            }
+-            Err(err) => match err.kind() {
+-                std::io::ErrorKind::NotFound => {
+-                    anyhow::bail!(
+-                        "Storage not found, please setup roots from config command beforehand"
+-                    );
+-                }
+-                _ => {
+-                    anyhow::bail!("IO error {err:#?}");
+-                }
+-            },
+-        }
++        Self::load_from(&FileBackend::new(path.to_path_buf()))
+     }
+ 
+     pub fn save_to_path(&self, path: &Path) -> Result<()> {
+-        let persistent = self.to_persistent();
+-        let storage_serialized = serde_json::to_vec_pretty(&persistent)?;
+-        let mut file = std::fs::File::create(path).context("Failed to create file")?;
+-        file.write_all(&storage_serialized)
+-            .context("Failed to write to file")?;
+-        file.sync_all().context("Failed to sync file")?;
++        self.save_to(&FileBackend::new(path.to_path_buf()))
++    }
+ 
+-        Ok(())
++    pub fn load_from(backend: &dyn StorageBackend) -> Result<Self> {
++        let bytes = backend
++            .load()?
++            .context("Storage not found, please setup roots from config command beforehand")?;
++        Self::from_bytes(&bytes)
++    }
++
++    pub fn save_to(&self, backend: &dyn StorageBackend) -> Result<()> {
++        backend.save(&self.to_bytes()?)
++    }
++
++    /// Serializes the storage into the format understood by [`Self::from_bytes`].
++    pub fn to_bytes(&self) -> Result<Vec<u8>> {
++        Ok(serde_json::to_vec_pretty(&self.to_persistent())?)
++    }
++
++    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
++        let persistent: PersistentStorage =
++            serde_json::from_slice(bytes).context("Failed to parse storage file")?;
++        Self::from_persistent(persistent)
+     }
+ 
+     /// Restore storage from an existing mnemonic phrase.
+@@ -184,6 +195,42 @@ impl Storage {
+     }
+ }
+ 
++impl FileBackend {
++    #[must_use]
++    pub const fn new(path: PathBuf) -> Self {
++        Self { path }
++    }
++
++    #[must_use]
++    pub fn path(&self) -> &Path {
++        &self.path
++    }
++}
++
++impl StorageBackend for FileBackend {
++    fn load(&self) -> Result<Option<Vec<u8>>> {
++        #[expect(
++            clippy::wildcard_enum_match_arm,
++            reason = "We want to provide a specific error message for not found case"
++        )]
++        match std::fs::read(&self.path) {
++            Ok(bytes) => Ok(Some(bytes)),
++            Err(err) => match err.kind() {
++                std::io::ErrorKind::NotFound => Ok(None),
++                _ => anyhow::bail!("IO error {err:#?}"),
++            },
++        }
++    }
++
++    fn save(&self, bytes: &[u8]) -> Result<()> {
++        let mut file = std::fs::File::create(&self.path).context("Failed to create file")?;
++        file.write_all(bytes).context("Failed to write to file")?;
++        file.sync_all().context("Failed to sync file")?;
++
++        Ok(())
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use lee_core::Identifier;
+@@ -230,6 +277,9 @@ mod tests {
+         let loaded_store = Storage::from_path(&storage_path).unwrap();
+ 
+         assert_eq!(loaded_store, storage);
++
++        let from_bytes = Storage::from_bytes(&storage.to_bytes().unwrap()).unwrap();
++        assert_eq!(from_bytes, storage);
+     }
+ 
+     #[test]
+-- 
+2.55.0
+
