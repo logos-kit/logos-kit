@@ -95,7 +95,13 @@ pub fn export(repo_root: &Path) -> Result<()> {
     );
     let out = root.join("vendor/lez-patches");
     fs::create_dir_all(&out)?;
+    // Keep each patch's existing file name (matched by its `NNNN-` number), so
+    // a re-export only changes contents, not names the README links to.
+    let mut names = std::collections::BTreeMap::new();
     for old in patches(&root)? {
+        if let Some(name) = old.file_name().and_then(|n| n.to_str()) {
+            names.insert(name[..name.len().min(4)].to_owned(), name.to_owned());
+        }
         fs::remove_file(old)?;
     }
     let range = format!("{}..HEAD", crate::LEZ_REV);
@@ -111,6 +117,14 @@ pub fn export(repo_root: &Path) -> Result<()> {
             &range,
         ],
     )?;
+    for new in patches(&root)? {
+        let Some(name) = new.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if let Some(kept) = names.get(&name[..name.len().min(4)]) {
+            fs::rename(&new, out.join(kept))?;
+        }
+    }
     println!(
         "exported {} patch(es) to vendor/lez-patches",
         patches(&root)?.len()

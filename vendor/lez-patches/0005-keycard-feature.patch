@@ -1,7 +1,7 @@
-From 6e86a861735c503743c64ab0410dd85dbcb413ad Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:31:10 +0100
-Subject: [PATCH 5/5] wallet: put keycard support behind a default-on `keycard`
+Subject: [PATCH 5/6] wallet: put keycard support behind a default-on `keycard`
  feature
 
 `keycard_wallet` pulls in keycard-rs and PC/SC (pcsc), which needs a
@@ -131,6 +131,3 @@ index 648728a..2fb6b4f 100644
          Command::Keycard(keycard_subcommand) => {
              keycard_subcommand.handle_subcommand(wallet_core).await?
          }
--- 
-2.55.0
-

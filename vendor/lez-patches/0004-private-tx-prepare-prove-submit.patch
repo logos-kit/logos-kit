@@ -1,7 +1,7 @@
-From 996ec1090ba563bf0a9125bb4e7791b956712fe1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:25:42 +0100
-Subject: [PATCH 4/5] wallet: split privacy-preserving sending into prepare,
+Subject: [PATCH 4/6] wallet: split privacy-preserving sending into prepare,
  prove and submit
 
 `send_privacy_preserving_tx_with_pre_check` gathers inputs, proves on a
@@ -211,6 +211,3 @@ index 1999edb..a286621 100644
  /// Sizes a fee cap for a given gas limit: a wallet that raises its gas limit
  /// must raise its fee cap in step, or the reservation cannot cover the gas.
  #[must_use]
--- 
-2.55.0
-

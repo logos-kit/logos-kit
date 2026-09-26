@@ -21,6 +21,7 @@ git am /path/to/logos-kit/vendor/lez-patches/*.patch
 | 3 | `0003-public-tx-prepare-sign.patch` | `account_manager.rs`, `lib.rs` | +163 / -62 |
 | 4 | `0004-private-tx-prepare-prove-submit.patch` | `lib.rs` | +105 / -23 |
 | 5 | `0005-keycard-feature.patch` | `Cargo.toml`, `account_manager.rs`, `cli/mod.rs` | +20 / -4 |
+| 6 | `0006-storage-remove-label.patch` | `storage.rs` | +5 / -0 |
 
 Most of the lines in patches 3 and 4 are existing function bodies moved into the new
 functions. The series adds no new dependencies.

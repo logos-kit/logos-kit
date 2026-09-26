@@ -1,7 +1,7 @@
-From 8c1716a86f548728bb12575ca23a5ae92795486f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:24:59 +0100
-Subject: [PATCH 3/5] wallet: split public transaction sending into prepare and
+Subject: [PATCH 3/6] wallet: split public transaction sending into prepare and
  sign+submit
 
 `send_pub_tx_with_pre_check` resolves accounts, builds the message, signs
@@ -376,6 +376,3 @@ index 181e70a..1999edb 100644
  /// Sizes a fee cap for a given gas limit: a wallet that raises its gas limit
  /// must raise its fee cap in step, or the reservation cannot cover the gas.
  #[must_use]
--- 
-2.55.0
-

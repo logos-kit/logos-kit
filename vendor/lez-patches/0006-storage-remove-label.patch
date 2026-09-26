@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 20:59:33 +0100
+Subject: [PATCH 6/6] wallet: add Storage::remove_label
+
+Renaming an account in an embedding wallet needs to drop the old label;
+the label map is private, so add the inverse of add_label.
+---
+ lez/wallet/src/storage.rs | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lez/wallet/src/storage.rs b/lez/wallet/src/storage.rs
+index 020830e..e88e2e0 100644
+--- a/lez/wallet/src/storage.rs
++++ b/lez/wallet/src/storage.rs
+@@ -140,6 +140,11 @@ impl Storage {
+         }
+     }
+ 
++    /// Removes `label`, returning the account it pointed to (if any).
++    pub fn remove_label(&mut self, label: &Label) -> Option<AccountIdWithPrivacy> {
++        self.labels.remove(label)
++    }
++
+     #[must_use]
+     pub fn resolve_label(&self, label: &Label) -> Option<AccountIdWithPrivacy> {
+         self.labels.get(label).copied()

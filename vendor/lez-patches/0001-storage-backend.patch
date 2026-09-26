@@ -1,7 +1,7 @@
-From 1ceef799135f18ea94fe8796990c956f71c57f9c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:23:43 +0100
-Subject: [PATCH 1/5] wallet: persist storage through a pluggable
+Subject: [PATCH 1/6] wallet: persist storage through a pluggable
  StorageBackend
 
 `Storage` is hard-wired to a plaintext JSON file and `WalletCore` writes
@@ -258,6 +258,3 @@ index df0e2d6..020830e 100644
      }
  
      #[test]
--- 
-2.55.0
-
