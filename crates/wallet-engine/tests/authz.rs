@@ -92,7 +92,7 @@ async fn only_the_wallet_approves_and_only_once() {
 
     // The dApp can't approve its own request, even with the right hash.
     let e = engine
-        .approve(&dapp(), &ticket.handle, &hash, Some(PW), &mut noop())
+        .approve(&dapp(), &ticket.handle, &hash, Some(PW), false, &mut noop())
         .await
         .unwrap_err();
     assert_eq!(code_of(&e), Code::Unauthorized);
@@ -104,6 +104,7 @@ async fn only_the_wallet_approves_and_only_once() {
             &ticket.handle,
             &hash,
             Some("wrong"),
+            false,
             &mut noop(),
         )
         .await
@@ -117,6 +118,7 @@ async fn only_the_wallet_approves_and_only_once() {
             &ticket.handle,
             &hash,
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -135,6 +137,7 @@ async fn only_the_wallet_approves_and_only_once() {
             &ticket.handle,
             &hash,
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -162,6 +165,7 @@ async fn a_wrong_echoed_hash_cancels_the_request() {
             &ticket.handle,
             &"00".repeat(32),
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -174,6 +178,7 @@ async fn a_wrong_echoed_hash_cancels_the_request() {
             &ticket.handle,
             &hash_of(&ticket.request),
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -218,6 +223,7 @@ async fn a_restart_drops_pending_requests() {
             &ticket.handle,
             &hash_of(&ticket.request),
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -235,8 +241,10 @@ async fn a_dapp_without_a_grant_cannot_propose() {
             None,
             Intent::Transfer {
                 from: account.clone(),
-                to: account,
+                to: Some(account),
                 amount: 1,
+                token: None,
+                to_keys: None,
             },
         )
         .await
@@ -269,8 +277,10 @@ async fn e2e_status_is_private_and_stale_approvals_are_refused() {
     let owner = Caller::LocalOwner;
     let send = |to: &str| Intent::Transfer {
         from: from.clone(),
-        to: to.to_owned(),
+        to: Some(to.to_owned()),
         amount: 7,
+        token: None,
+        to_keys: None,
     };
 
     let ticket_a = a.request_tx(&owner, None, send(&to_a)).await.unwrap();
@@ -291,6 +301,7 @@ async fn e2e_status_is_private_and_stale_approvals_are_refused() {
             &ticket_b.handle,
             &hash_of(&ticket_b.request),
             Some(PW),
+            false,
             &mut noop(),
         )
         .await
@@ -304,6 +315,7 @@ async fn e2e_status_is_private_and_stale_approvals_are_refused() {
             &ticket_a.handle,
             &hash_of(&ticket_a.request),
             Some(PW),
+            false,
             &mut noop(),
         )
         .await

@@ -5077,6 +5077,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "getrandom 0.3.4",
+ "hex",
  "rpassword",
  "serde_json",
  "tokio",
@@ -8330,6 +8332,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "token_program"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "lee_core",
+ "token_core",
+]
+
+[[package]]
 name = "tokio"
 version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9125,6 +9136,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "associated_token_account_core",
  "base64 0.22.1",
  "bip39",
  "borsh",
@@ -9134,12 +9146,16 @@ dependencies = [
  "key_protocol",
  "lee",
  "lee_core",
+ "programs",
  "sequencer_service_rpc",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "token_core",
+ "token_program",
  "tokio",
+ "ureq",
  "wallet",
  "zeroize",
 ]

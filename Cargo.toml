@@ -27,6 +27,11 @@ lee_core = { path = "vendor/lez/lee/state_machine/core" }
 key_protocol = { path = "vendor/lez/lee/key_protocol" }
 common = { path = "vendor/lez/lez/common" }
 sequencer_service_rpc = { path = "vendor/lez/lez/sequencer/service/rpc", features = ["client"] }
+programs = { path = "vendor/lez/lez/programs", default-features = false, features = ["artifacts"] }
+token_core = { path = "vendor/lez/lez/programs/token/core" }
+token_program = { path = "vendor/lez/lez/programs/token" }
+associated_token_account_core = { path = "vendor/lez/lez/programs/associated_token_account/core" }
+borsh = "1.5.7"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

@@ -252,6 +252,9 @@ struct Meta {
     /// What connected apps may do (see `policy`).
     #[serde(default)]
     grants: Vec<crate::policy::Grant>,
+    /// zone id → token definitions to look for (ATAs, token list).
+    #[serde(default)]
+    tokens: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -401,11 +404,7 @@ pub struct ZoneStatus {
     pub auto_lock_secs: u32,
 }
 
-pub(crate) type PendingNote = (
-    common::HashType,
-    Vec<lee_core::SharedSecretKey>,
-    lee::AccountId,
-);
+pub(crate) type PendingNote = (common::HashType, crate::tx::NoteSecrets);
 
 enum Failure {
     Network(anyhow::Error),
@@ -912,6 +911,22 @@ impl Session {
         })
     }
 
+    /// What someone needs to pay this private account privately: its
+    /// nullifier and viewing public keys, hex (LEZ `show-keys` format). Not
+    /// secret; the sender picks a fresh identifier per payment.
+    pub fn receive_keys(&self, account_id: &str) -> Result<(String, String)> {
+        let id: lee::AccountId = crate::decode::account_id(account_id)?;
+        let entry = self
+            .storage()?
+            .key_chain()
+            .private_account(id)
+            .context("not a private account of this wallet")?;
+        Ok((
+            hex::encode(entry.key_chain.nullifier_public_key.0),
+            hex::encode(entry.key_chain.viewing_public_key.to_bytes()),
+        ))
+    }
+
     /// Name an account (`None` clears it). One label per account; names are
     /// unique within the wallet. Stored in LEZ's own label map, so the
     /// official CLI sees it too.
@@ -1131,6 +1146,24 @@ impl Session {
     /// Replace the grant list (stored encrypted in the keys vault).
     pub fn set_grants(&mut self, grants: Vec<crate::policy::Grant>) -> Result<()> {
         self.update_meta(|meta| meta.grants = grants)
+    }
+
+    /// Token definitions this wallet tracks in the current zone.
+    pub fn tracked_tokens(&self) -> Vec<String> {
+        self.meta
+            .tokens
+            .get(&self.zone().id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn track_token(&mut self, definition: &str) -> Result<()> {
+        let zone = self.zone().id.clone();
+        if self.tracked_tokens().iter().any(|t| t == definition) {
+            return Ok(());
+        }
+        let definition = definition.to_owned();
+        self.update_meta(|meta| meta.tokens.entry(zone).or_default().push(definition))
     }
 
     /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be

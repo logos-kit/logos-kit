@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S4 on `stage/04-decoders`: decoders, tokens, source verification, faucet. Storybook run stays queued before S7.
+**Next action:** finish S4's builtin evidence (`just verify-builtins` → `registry/builtins.json`, docker image pull in progress), then merge S4 and start S5 (testimonial program). Storybook run stays queued before S7.
 
 ---
 
@@ -189,3 +189,34 @@ The single place to resume from after a context clear.
 - 2026-09-26: Approvals run the pipeline inline in `approve()` (progress via a callback) with proving outside the wallet lock. S7's module shim calls it from a worker thread and serves status reads meanwhile.
 - 2026-09-26: LEZ still prints a few connect notices ("Statistics not found…") on stdout; JSON consumers read the last line. To silence at the source before S7 (another small LEZ patch).
 - 2026-09-26: Imported public keys live in one zone's storage (not derived from the phrase, so not replayed on new zones).
+
+---
+
+## Stage S4 · Decoders, tokens, source verification, faucet, branch `stage/04-decoders`
+
+**Status:** done (2026-09-26)
+
+- [x] `decode.rs`: `Summary{title, program, lines, outflows, inflows, authorities, signers, unknown}` decoded from the signed message for native, token (all 7 instructions) and ATA (create/transfer/burn). Token authority use (create → mint authority, mint, print) is flagged; any row selecting an unexpected shard, trailing bytes, or an ATA instruction naming a non-builtin token program → `unknown`, which needs an explicit acknowledgement (`approve(.., acknowledged_unknown)`, CLI `--ack-unknown`) and the password. `(program account, decoder)` list is configurable (`Decoders::with`). Testimonial decoder lands with the program in S5
+- [x] Private-tx public effects decoded (`private_effects`: native Debit/Credit, token Withdraw/Deposit, else raw `Other`). **Closes the S3 deviation**: the proved message must have exactly the approved effects, nonces and program-image claims (count bounded; disclosed claims must name the pinned program)
+- [x] One `Transfer` intent, route from the accounts (public / shield / unshield / private), native or `token`; foreign private recipients via `toKeys` (npk/vpk, LEZ `show-keys` format) with a random identifier chosen at prepare and bound in the request hash; tokens held in an ATA are sent through the ATA program. Generic `Call` intent for dApps (every signing account needs the app's grant)
+- [x] Preflight per program: native balance; token holding amount, recipient token slot (empty or same definition); fee payer vs `max_fee`. Sign-time re-check of signer nonces and of an upgradeable program's header (`StaleApproval`)
+- [x] Tokens (`tokens.rs`): holdings in each account's own token shard (public live, private synced) + ATAs of tracked definitions (`token track`, auto-tracked on `token create`); names from definition accounts. `logos-kit token create` makes the demo token (replaces the planned `xtask demo-token`)
+- [x] Source verification (`verify.rs`): live header at the program account's loader shard (`0xFE…`); builtin → compare with the image compiled from pinned LEZ (+ evidence file), registry-lite `registry/programs.json` → `claimed`, local rebuild cache `verified.json` by (zone, account, image) → `verified_local`, else `unknown`; `mismatch` when the live image differs. `logos-kit verify-program` clones the exact commit and runs `cargo risczero build` in docker `r0.1.91.1` (needs `rzup install rust`); `logos-kit program <addr|builtin name>`
+- [x] Builtin evidence: `just verify-builtins` → `registry/builtins.json`. All 13 builtins rebuilt from LEZ `f7fda38a` in docker `r0.1.91.1` reproduce the pinned images (35 min incl. the 1.5 GB image pull). `e2e/tokens.sh` now requires the token program to be `verified_local` (was `claimed`); `just e2e-tokens` passes (5 min). Fixes found on the way: cargo-risczero printed image ids on stdout into the evidence JSON (build stdout now goes to stderr); `e2e/standalone.sh` reported "up" when a leftover sequencer held the port, and the run used its stale chain (faucet `outcome_unknown`). It now stops its previous instance and refuses a port someone else answers on
+- [x] Faucet (`faucet.rs`): `FaucetBackend` → `funded | rate_limited | rejected | outcome_unknown` (protocol `RequestFundsResult` shape). `KeyFaucet` (funded key; per-account rate limit, idempotent request keys, one drop in flight, balance-attributed outcome à la `lez-faucet-ffi` `classify()`) = e2e `GenesisSupply` and the core of a self-hosted drip; `HttpFaucet` client. `Engine::request_funds`: private target = fund a public account of ours, then queue the shield for approval
+- [x] Backup (`backup.rs`): `backup export|import`, the encrypted vault files byte for byte (nothing decrypted), import validated up front into an empty dir, password checked, partial writes removed
+- [x] CLI: `send|shield|deshield` (`--token`, `--to-keys`/`--to-npk --to-vpk`), `token list|track|ata|create`, `faucet`, `program`, `verify-program`, `call`, `backup`, `account keys`, `balance --token`
+- [x] Exit proof `just e2e-tokens` (`e2e/tokens.sh`, dev-mode proofs, standalone LEZ 0.3): faucet `funded` (public) and faucet → shield (private 5000); DEMO token created (1,000,000), public send 100, token shield 50, private token send 20, token unshield 5, native unshield 1234, **private payment to another wallet's keys (B finds 700 by syncing)**, ATA send 3, holdings 6, token program header `claimed`, backup restores (999843). `OK: S4 faucet + demo token on every route + backup`
+- [x] Regression: `just e2e-cli` OK; engine tests with the sequencer: 10 unit + authz 7 + e2e_sync 2 + keystore 7 + session 6 + vectors 4 pass; clippy `-D warnings` clean
+- [x] Security review (1 high, 4 medium, 6 low, 2 info) + code review (12): all fixed or documented in `7e0949e`. High: a dApp `Call` could make another wallet account sign (grant only checked on `from`)
+
+### Faucet decision (plan decision tree, recorded 2026-09-26)
+- LEZ 0.3 code has no faucet: no piñata program, `authenticated_transfer` gone; `lez-faucet-ffi` (pinned v0.2.2) and `token_mint_authority` FaucetMint (v0.2.4) target 0.2 and fail 0.3's fingerprint/account shape. The official faucet is public-only.
+- **Launch-day action:** run `xtask fingerprint` on the 0.3 testnet. If an official faucet exists → an `HttpFaucet`-style backend for it; otherwise option 4: the disclosed drip service = `KeyFaucet` behind `POST /fund` on agari-box, funded from our testnet account. Every option sits behind `FaucetBackend`; the mini-app doesn't change.
+
+### Decisions and deviations
+- 2026-09-26: **Transfers are one route-aware intent** (the S3 `Shield` variant is gone): the route follows from which accounts are ours and private; `shield`/`deshield` CLI commands refuse a request whose route differs. Request-hash domain bumped to `approval/v2`.
+- 2026-09-26: Re-auth now also for any token outflow and any undecodable call (security review), besides private routes, native ≥ threshold and authority use.
+- 2026-09-26: A private payment to foreign keys lands under a fresh account id (npk, vpk, random identifier); the receiver's sync finds it as a new private account (LEZ's own behaviour). Surfacing that as "received" in the UI is S7 work.
+- 2026-09-26: Program `image_id` hex = the 8 u32 words little-endian (`verify::image_hex`).
+- Tracked: `Undisclosed` image claims are accepted (count-bounded) only when the approved program is immutable; binding them to the pinned image needs the mirror-commitment membership check. The drip-service HTTP server itself is launch-day work.
