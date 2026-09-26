@@ -67,6 +67,7 @@ The single place to resume from after a context clear.
 - 2026-09-26: the brand is Logos Kit (D12). The repo-local git identity is `Blockchain-Oracle <blockchainoracle.dev@gmail.com>`.
 - 2026-09-26: **pnpm 12.6 and TypeScript 7.0.2** (the latest majors, verified in Context7). pnpm 11+ settings live in `pnpm-workspace.yaml`, and `allowBuilds` replaces `onlyBuiltDependencies`. tsdown uses tsgo/oxc for `.d.ts`. The docs app may need TS 6 for twoslash; check in S8.
 - 2026-09-26: `minimumReleaseAge` blocked `@types/node@26.6.3` (under 24h old), so the range was widened to `^26.0.0` rather than weakening the guard.
+- 2026-09-26: **Design direction locked: Tray, light + dark (D14).** Tokens in `docs/design/brand.md`; reference implementation `apps/design-lab`. PLAN.md updated (rule 6, QML design system, S6 theme, S7 UI, S11 presets).
 - 2026-09-26: Intent `params` types accepted by the shell are exactly `string | number | bool | object | array` (`IntentBroker.cpp:470-485`). Note it's **`bool`, not `boolean`**.
 
 ### Probe results
