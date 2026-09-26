@@ -38,6 +38,14 @@ if [[ ! -x "$BIN" ]]; then
   (cd "$LEZ" && CARGO_TARGET_DIR="$TARGET" cargo build --release --features standalone -p sequencer_service)
 fi
 
+# A previous run's sequencer would keep the port, and the health check below
+# would then pass against its stale chain: stop ours, refuse anyone else's.
+[[ -f "$STATE/pid" ]] && kill "$(cat "$STATE/pid")" 2>/dev/null && sleep 1
+if curl -fsS -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"getLastBlockId","params":[]}' "$URL" >/dev/null 2>&1; then
+  echo "something already answers on $URL (a leftover sequencer? pkill -f sequencer_service)" >&2
+  exit 1
+fi
 rm -rf "$STATE"
 mkdir -p "$STATE/home"
 cd "$LEZ/lez/sequencer/service"

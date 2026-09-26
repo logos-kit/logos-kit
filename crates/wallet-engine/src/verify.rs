@@ -406,7 +406,9 @@ pub fn build(source: &Source, work: &Path) -> Result<PathBuf> {
         .args(["risczero", "build", "--manifest-path"])
         .arg(&manifest)
         .env("RISC0_DOCKER_CONTAINER_TAG", &source.docker_tag)
-        .env("CARGO_TARGET_DIR", &target);
+        .env("CARGO_TARGET_DIR", &target)
+        // cargo-risczero prints image ids on stdout; ours carries only JSON.
+        .stdout(std::io::stderr());
     if let Some(f) = &source.features {
         build.args(["--no-default-features", "--features", f]);
     }
