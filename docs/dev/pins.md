@@ -9,7 +9,7 @@ Recorded 2026-09-26 (S0).
 | Component | Repo | Rev | Date | Notes |
 |---|---|---|---|---|
 | LEZ | `logos-blockchain/logos-execution-zone` | `f7fda38a4428b9989f1db1dbf5d2411484848fd4` | 2026-09-26 | `dev`, one merge after `v0.3.0-rc1`. **Re-pin to `v0.3.0` final when it is tagged** |
-| Basecamp | `logos-co/logos-basecamp` | `2c2022762b397e5c5657a480bab9981466211e35` | 2026-09-22 | Tag `0.3.0`. Pinned because some public releases did not discover user modules |
+| Basecamp | `logos-co/logos-basecamp` | `2c2022762b397e5c5657a480bab9981466211e35` | 2026-09-22 | Tag `0.3.0`. Pinned because some public releases did not discover user modules. **Installed locally:** release asset `LogosBasecamp-Desktop-v0.3.0-bbe5da-aarch64.dmg` (sha256 `82ea4cbdf6b32a7a04610a422f1326347b994984d5a07ef474c4968d2edd6d53`) at `~/Applications/LogosBasecamp.app`. The QML Inspector needs a source dev build at the same rev |
 | logos-module-builder | `logos-co/logos-module-builder` | `4b7998272c5ec014bcac4bf1c7dbe7602c63a3c1` | 2026-09-23 | `mkLogosModule` / `mkLogosQmlModule` |
 | logos-rust-sdk | `logos-co/logos-rust-sdk` | `bcc36420d7a15fb39cbf8079c85a18650cdae968` | 2026-09-24 | `current_caller()`, codegen trait |
 | logos-modules-release-base | `logos-co/logos-modules-release-base` | `33fb564d2069be388ef53724bd5b0a6d026b2250` | 2026-09-21 | Our catalog (`logos-kit-modules`) is a fork of this |

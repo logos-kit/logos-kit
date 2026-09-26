@@ -31,3 +31,6 @@ coverage/
 /.lk-data/
 /tmp/
 *.log
+
+# Logos AI skills are copied locally from refs/tooling/logos-ai-skills (no licence upstream): never commit them
+/.claude/skills/logos-*

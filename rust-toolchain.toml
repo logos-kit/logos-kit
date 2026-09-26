@@ -1,0 +1,4 @@
+# Matches LEZ (logos-execution-zone/rust-toolchain.toml). See docs/dev/pins.md.
+[toolchain]
+channel = "1.98.1"
+profile = "default"

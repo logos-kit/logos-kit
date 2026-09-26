@@ -1,0 +1,31 @@
+{
+  "name": "logos_kit_wallet_ui",
+  "display_name": "Logos Kit Wallet",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "category": "wallet",
+  "description": "Logos Kit wallet for the Logos Execution Zone",
+  "view": "qml/Main.qml",
+  "icon": "src/icons/icon.png",
+  "dependencies": ["logos_kit_wallet"],
+  "provides": [
+    {
+      "intent": "lez.wallet.connect",
+      "params": [
+        { "name": "chains", "type": "array", "required": false },
+        { "name": "accountKinds", "type": "array", "required": false }
+      ]
+    }
+  ],
+  "uses": [],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
