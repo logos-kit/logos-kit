@@ -8,6 +8,12 @@ license.workspace = true
 [lints]
 workspace = true
 
+# rlib for the CLI and tests; cdylib is the C ABI the Basecamp module links
+# (include/wallet_engine.h). A dynamic library, so the engine's Rust std never
+# collides with the module shim's.
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
@@ -17,9 +23,9 @@ lee = { workspace = true, features = ["prove"] }
 lee_core.workspace = true
 key_protocol.workspace = true
 common.workspace = true
+bip39 = "2.2"
 
 [dev-dependencies]
 base64 = "0.22"
-bip39 = "2.2"
 borsh = "1.5.7"
 hex = "0.4.3"
