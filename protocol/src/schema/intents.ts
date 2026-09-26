@@ -1,0 +1,88 @@
+/**
+ * Basecamp `provides` entries for the Logos Kit wallet UI, generated into
+ * schema/intents.json and copied into modules/logos_kit_wallet_ui/metadata.json.
+ *
+ * The shell enforces these param types before our handler runs
+ * (IntentBroker::specViolation). Valid types: string | number | bool | object | array.
+ * Payload limits: ≤8 levels, ≤1000 nodes, strings ≤64 KB, integers within ±2^53,
+ * so amounts are always decimal strings.
+ */
+export type IntentParamSpec = {
+  name: string
+  type: 'string' | 'number' | 'bool' | 'object' | 'array'
+  required: boolean
+}
+
+export type IntentSpec = {
+  intent: string
+  method: string
+  params: IntentParamSpec[]
+  handoff?: boolean
+  web?: boolean
+  description: string
+}
+
+export const Intents: IntentSpec[] = [
+  {
+    intent: 'lez.wallet.connect',
+    method: 'lez_connect',
+    description: 'Connect: pick accounts to share with the requesting app.',
+    params: [
+      { name: 'chains', type: 'array', required: true },
+      { name: 'accountKinds', type: 'array', required: false },
+      { name: 'capabilities', type: 'array', required: false },
+      { name: 'signIn', type: 'object', required: false },
+    ],
+  },
+  {
+    intent: 'lez.transaction.send',
+    method: 'lez_signAndSendTransaction',
+    description: 'Review and approve a transaction proposal. Answers at acceptance with a handle.',
+    params: [
+      { name: 'chain', type: 'string', required: true },
+      { name: 'account', type: 'string', required: true },
+      { name: 'instructions', type: 'array', required: true },
+      { name: 'id', type: 'string', required: false },
+      { name: 'atomicRequired', type: 'bool', required: false },
+    ],
+  },
+  {
+    intent: 'lez.message.sign',
+    method: 'lez_signMessage',
+    description: 'Sign a message with a public account (BIP-340, tag LEZ/message/v1).',
+    params: [
+      { name: 'account', type: 'string', required: true },
+      { name: 'message', type: 'string', required: true },
+    ],
+  },
+  {
+    intent: 'lez.wallet.sign_in',
+    method: 'lez_signIn',
+    description: 'Sign in with a LEZ account (SIWE-shaped, tag LEZ/signin/v1).',
+    params: [
+      { name: 'domain', type: 'string', required: true },
+      { name: 'uri', type: 'string', required: true },
+      { name: 'nonce', type: 'string', required: true },
+      { name: 'issuedAt', type: 'string', required: true },
+    ],
+  },
+  {
+    intent: 'lez.wallet.request_funds',
+    method: 'lez_requestFunds',
+    description:
+      'Get testnet funds into the chosen account (faucet; private targets are funded then shielded).',
+    params: [
+      { name: 'chain', type: 'string', required: true },
+      { name: 'account', type: 'string', required: true },
+    ],
+  },
+  {
+    intent: 'lez.wallet.open',
+    method: '',
+    description:
+      'Bring the wallet forward (e.g. from a web link). Hand-off: the user stays in the wallet.',
+    params: [],
+    handoff: true,
+    web: true,
+  },
+]

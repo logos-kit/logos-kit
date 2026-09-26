@@ -1,0 +1,6 @@
+{
+  // QML gate: the runtime entry (errors, constants, helpers) must stay ES2017-clean.
+  // Schemas (TypeBox) are not part of the QML bundle, so they are excluded.
+  "extends": "../tsconfig.qml.json",
+  "include": ["src/errors.ts", "src/constants.ts", "src/caip.ts", "src/exports/index.ts"]
+}

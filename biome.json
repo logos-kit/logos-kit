@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "**",
@@ -8,7 +12,12 @@
       "!**/pnpm-lock.yaml",
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
-      "!docs/dev/PLAN.md"
+      "!docs/dev/PLAN.md",
+      "!assets/logos",
+      "!protocol/vectors",
+      "!docs/design/*.html",
+      "!apps/design-lab/src/components/ui",
+      "!apps/design-lab/src/hooks"
     ]
   },
   "formatter": {
@@ -18,7 +27,11 @@
     "lineWidth": 100
   },
   "javascript": {
-    "formatter": { "quoteStyle": "single", "trailingCommas": "all", "semicolons": "asNeeded" }
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "semicolons": "asNeeded"
+    }
   },
   "linter": {
     "enabled": true,
@@ -37,15 +50,31 @@
         "noNonNullAssertion": "off",
         "noParameterAssign": "error",
         "useAsConstAssertion": "error",
-        "useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } }
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        }
       },
       "suspicious": {
         "noExplicitAny": "warn",
-        "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } }
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
       }
     }
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "overrides": [
     {
       "includes": [
@@ -57,6 +86,9 @@
       ],
       "linter": {
         "rules": {
+          "complexity": {
+            "useOptionalChain": "off"
+          },
           "style": {
             "noRestrictedGlobals": {
               "level": "error",
@@ -72,8 +104,14 @@
       }
     },
     {
-      "includes": ["scripts/**", "e2e/**"],
-      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+      "includes": ["**/scripts/**", "e2e/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

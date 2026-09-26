@@ -1,0 +1,52 @@
+{
+  "name": "@logos-kit/protocol",
+  "version": "0.0.0",
+  "description": "LWS-0: the Logos Kit wallet protocol for the Logos Execution Zone. Types, JSON Schema, errors, constants.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logos-kit/logos-kit.git",
+    "directory": "protocol"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "schema",
+    "vectors",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    },
+    "./schema.json": "./schema/lws0.schema.json",
+    "./methods.json": "./schema/methods.json",
+    "./intents.json": "./schema/intents.json",
+    "./vectors/*": "./vectors/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "emit": "node scripts/emit-schema.ts && biome format --write schema ../modules/logos_kit_wallet_ui/metadata.json",
+    "check:types": "tsc --noEmit && tsc --noEmit -p tsconfig.qml.json",
+    "check:qml": "node scripts/check-qml.ts",
+    "test:build": "publint --strict && attw --pack --profile esm-only"
+  },
+  "dependencies": {
+    "typebox": "catalog:"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "acorn": "catalog:",
+    "publint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

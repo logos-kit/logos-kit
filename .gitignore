@@ -31,3 +31,12 @@ coverage/
 /.lk-data/
 /tmp/
 *.log
+
+# Logos AI skills are copied locally from refs/tooling/logos-ai-skills (no licence upstream): never commit them
+/.claude/skills/logos-*
+
+# Linux lgx builds (from agari-box)
+/dist-linux/
+
+# Generated: LEZ at the pinned rev + vendor/lez-patches (cargo xtask lez-vendor)
+/vendor/lez/

@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 18:31:10 +0100
+Subject: [PATCH 5/6] wallet: put keycard support behind a default-on `keycard`
+ feature
+
+`keycard_wallet` pulls in keycard-rs and PC/SC (pcsc), which needs a
+system PC/SC library and is not wanted in every build that embeds the
+wallet (e.g. sandboxed desktop modules or mobile targets).
+
+Make `keycard_wallet` optional behind a new `keycard` feature, enabled by
+default so the CLI is unchanged. Without it the `keycard` subcommand is
+not compiled in, `m/...` key-path account mentions and keycard signers
+fail with "Keycard support is not enabled in this build", and the crate
+builds and passes clippy with `--no-default-features`. `keycard-debug`
+now implies `keycard`.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lez/wallet/Cargo.toml             | 7 +++++--
+ lez/wallet/src/account_manager.rs | 8 ++++++++
+ lez/wallet/src/cli/mod.rs         | 9 +++++++--
+ 3 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/lez/wallet/Cargo.toml b/lez/wallet/Cargo.toml
+index bf64c70..eeecbd2 100644
+--- a/lez/wallet/Cargo.toml
++++ b/lez/wallet/Cargo.toml
+@@ -17,7 +17,7 @@ amm_core.workspace = true
+ testnet_initial_state.workspace = true
+ token_core.workspace = true
+ bridge_core.workspace = true
+-keycard_wallet.workspace = true
++keycard_wallet = { workspace = true, optional = true }
+ programs.workspace = true
+ system_accounts.workspace = true
+ associated_token_account_core.workspace = true
+@@ -50,9 +50,12 @@ url.workspace = true
+ derive_more = { workspace = true, features = ["display"] }
+ 
+ [features]
++default = ["keycard"]
++# Keycard hardware wallet support (links against PC/SC).
++keycard = ["dep:keycard_wallet"]
+ # Enables `keycard get-private-keys` command that prints sensitive secret keys to terminal.
+ # Never enable in production builds.
+-keycard-debug = []
++keycard-debug = ["keycard"]
+ 
+ [dev-dependencies]
+ lee = { workspace = true, features = ["test-utils"] }
+diff --git a/lez/wallet/src/account_manager.rs b/lez/wallet/src/account_manager.rs
+index 309c434..1af128b 100644
+--- a/lez/wallet/src/account_manager.rs
++++ b/lez/wallet/src/account_manager.rs
+@@ -5,6 +5,7 @@ use std::{
+ };
+ 
+ use anyhow::{Context as _, Result};
++#[cfg(feature = "keycard")]
+ use keycard_wallet::KeycardWallet;
+ use lee::{AccountId, PrivateKey, PublicKey, Signature};
+ use lee_core::{
+@@ -660,6 +661,7 @@ pub fn sign_message(
+     keycard_pin: Option<&str>,
+     message_hash: [u8; 32],
+ ) -> Result<Vec<(Signature, PublicKey)>> {
++    #[cfg(feature = "keycard")]
+     let mut keycard: Option<KeycardWallet> = None;
+     let mut sigs = Vec::with_capacity(signers.len());
+     for signer in signers {
+@@ -673,6 +675,12 @@ pub fn sign_message(
+                     PublicKey::new_from_private_key(key),
+                 )
+             }
++            #[cfg(not(feature = "keycard"))]
++            TxSigner::Keycard { .. } => {
++                let _ = keycard_pin;
++                anyhow::bail!("Keycard support is not enabled in this build")
++            }
++            #[cfg(feature = "keycard")]
+             TxSigner::Keycard { key_path, .. } => {
+                 if keycard.is_none() {
+                     let pin = keycard_pin.context("Keycard PIN is required to sign")?;
+diff --git a/lez/wallet/src/cli/mod.rs b/lez/wallet/src/cli/mod.rs
+index 648728a..2fb6b4f 100644
+--- a/lez/wallet/src/cli/mod.rs
++++ b/lez/wallet/src/cli/mod.rs
+@@ -18,7 +18,6 @@ use crate::{
+         chain::ChainSubcommand,
+         config::ConfigSubcommand,
+         group::GroupSubcommand,
+-        keycard::KeycardSubcommand,
+         network::NetworkAlias,
+         programs::{
+             amm::AmmProgramAgnosticSubcommand, ata::AtaSubcommand, bridge::BridgeSubcommand,
+@@ -35,6 +34,7 @@ pub mod account;
+ pub mod chain;
+ pub mod config;
+ pub mod group;
++#[cfg(feature = "keycard")]
+ pub mod keycard;
+ pub mod network;
+ pub mod programs;
+@@ -96,8 +96,9 @@ pub enum Command {
+         depth: u32,
+     },
+     /// Keycard hardware wallet management.
++    #[cfg(feature = "keycard")]
+     #[command(subcommand)]
+-    Keycard(KeycardSubcommand),
++    Keycard(keycard::KeycardSubcommand),
+     /// Metrics management.
+     #[command(subcommand)]
+     Statistics(StatisticsSubcommand),
+@@ -146,6 +147,9 @@ impl CliAccountMention {
+             Self::Label(label) => storage
+                 .resolve_label(label)
+                 .ok_or_else(|| anyhow::anyhow!("No account found for label `{label}`")),
++            #[cfg(not(feature = "keycard"))]
++            Self::KeyPath(_) => anyhow::bail!("Keycard support is not enabled in this build"),
++            #[cfg(feature = "keycard")]
+             Self::KeyPath(path) => {
+                 let pin = read_pin()?;
+                 let id_str =
+@@ -270,6 +274,7 @@ pub async fn execute_subcommand(
+                 .await?
+         }
+         Command::Group(group_subcommand) => group_subcommand.handle_subcommand(wallet_core).await?,
++        #[cfg(feature = "keycard")]
+         Command::Keycard(keycard_subcommand) => {
+             keycard_subcommand.handle_subcommand(wallet_core).await?
+         }

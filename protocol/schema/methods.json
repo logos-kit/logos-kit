@@ -1,0 +1,2289 @@
+{
+  "version": "0.1.0",
+  "methods": {
+    "lez_connect": {
+      "userFacing": true,
+      "params": {
+        "type": "object",
+        "required": ["chains"],
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+            },
+            "minItems": 1
+          },
+          "accountKinds": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "public"
+                },
+                {
+                  "type": "string",
+                  "const": "private"
+                }
+              ]
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "accounts"
+                },
+                {
+                  "type": "string",
+                  "const": "read_public"
+                },
+                {
+                  "type": "string",
+                  "const": "read_private"
+                },
+                {
+                  "type": "string",
+                  "const": "propose_tx"
+                },
+                {
+                  "type": "string",
+                  "const": "sign_message"
+                },
+                {
+                  "type": "string",
+                  "const": "request_proof"
+                }
+              ]
+            }
+          },
+          "silent": {
+            "type": "boolean"
+          },
+          "signIn": {
+            "type": "object",
+            "required": ["domain", "uri", "nonce", "issuedAt"],
+            "properties": {
+              "domain": {
+                "type": "string",
+                "maxLength": 253
+              },
+              "statement": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "uri": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "nonce": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 64
+              },
+              "issuedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expirationTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "notBefore": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "requestId": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["sessionId", "origin", "chains", "accounts", "capabilities"],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "origin": {
+            "type": "string"
+          },
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+            }
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["address", "kind", "chain", "capabilities"],
+              "properties": {
+                "address": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                      "description": "Base58-encoded 32-byte LEZ account id"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                      "description": "Opaque per-origin private account handle"
+                    }
+                  ]
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "public"
+                    },
+                    {
+                      "type": "string",
+                      "const": "private"
+                    }
+                  ]
+                },
+                "chain": {
+                  "type": "string",
+                  "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                  "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                },
+                "publicKey": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                  "maxLength": 65000
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "accounts"
+                      },
+                      {
+                        "type": "string",
+                        "const": "read_public"
+                      },
+                      {
+                        "type": "string",
+                        "const": "read_private"
+                      },
+                      {
+                        "type": "string",
+                        "const": "propose_tx"
+                      },
+                      {
+                        "type": "string",
+                        "const": "sign_message"
+                      },
+                      {
+                        "type": "string",
+                        "const": "request_proof"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "expiry": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "capabilities": {
+            "type": "object",
+            "required": [
+              "accountKinds",
+              "signTransaction",
+              "batch",
+              "outcomeVerification",
+              "signMessage",
+              "signIn",
+              "requestFunds"
+            ],
+            "properties": {
+              "accountKinds": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "public"
+                    },
+                    {
+                      "type": "string",
+                      "const": "private"
+                    }
+                  ]
+                }
+              },
+              "signTransaction": {
+                "type": "boolean"
+              },
+              "batch": {
+                "type": "object",
+                "required": ["maxInstructions", "atomic"],
+                "properties": {
+                  "maxInstructions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16
+                  },
+                  "atomic": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "supported"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unsupported"
+                      }
+                    ]
+                  }
+                }
+              },
+              "proving": {
+                "type": "object",
+                "required": ["location"],
+                "properties": {
+                  "location": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "local"
+                      },
+                      {
+                        "type": "string",
+                        "const": "paired"
+                      },
+                      {
+                        "type": "string",
+                        "const": "user-owned"
+                      },
+                      {
+                        "type": "string",
+                        "const": "tee"
+                      }
+                    ]
+                  },
+                  "typicalSeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "outcomeVerification": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "own-account-invariant"
+                    },
+                    {
+                      "type": "string",
+                      "const": "program-event"
+                    },
+                    {
+                      "type": "string",
+                      "const": "node"
+                    }
+                  ]
+                }
+              },
+              "signMessage": {
+                "type": "boolean"
+              },
+              "signIn": {
+                "type": "boolean"
+              },
+              "requestFunds": {
+                "type": "boolean"
+              }
+            }
+          },
+          "signIn": {
+            "type": "object",
+            "required": ["account", "signedMessage", "signature"],
+            "properties": {
+              "account": {
+                "type": "object",
+                "required": ["address", "kind", "chain", "capabilities"],
+                "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                        "description": "Base58-encoded 32-byte LEZ account id"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                        "description": "Opaque per-origin private account handle"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "public"
+                      },
+                      {
+                        "type": "string",
+                        "const": "private"
+                      }
+                    ]
+                  },
+                  "chain": {
+                    "type": "string",
+                    "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                    "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                    "maxLength": 65000
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "accounts"
+                        },
+                        {
+                          "type": "string",
+                          "const": "read_public"
+                        },
+                        {
+                          "type": "string",
+                          "const": "read_private"
+                        },
+                        {
+                          "type": "string",
+                          "const": "propose_tx"
+                        },
+                        {
+                          "type": "string",
+                          "const": "sign_message"
+                        },
+                        {
+                          "type": "string",
+                          "const": "request_proof"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "signedMessage": {
+                "type": "string"
+              },
+              "signature": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "maxLength": 65000
+              }
+            }
+          }
+        }
+      }
+    },
+    "lez_disconnect": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "required": ["sessionId"],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "lez_getSession": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "result": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["sessionId", "origin", "chains", "accounts", "capabilities"],
+            "properties": {
+              "sessionId": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 128
+              },
+              "origin": {
+                "type": "string"
+              },
+              "chains": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                  "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                }
+              },
+              "accounts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["address", "kind", "chain", "capabilities"],
+                  "properties": {
+                    "address": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                          "description": "Base58-encoded 32-byte LEZ account id"
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                          "description": "Opaque per-origin private account handle"
+                        }
+                      ]
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "public"
+                        },
+                        {
+                          "type": "string",
+                          "const": "private"
+                        }
+                      ]
+                    },
+                    "chain": {
+                      "type": "string",
+                      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                      "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                    },
+                    "publicKey": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                      "maxLength": 65000
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "accounts"
+                          },
+                          {
+                            "type": "string",
+                            "const": "read_public"
+                          },
+                          {
+                            "type": "string",
+                            "const": "read_private"
+                          },
+                          {
+                            "type": "string",
+                            "const": "propose_tx"
+                          },
+                          {
+                            "type": "string",
+                            "const": "sign_message"
+                          },
+                          {
+                            "type": "string",
+                            "const": "request_proof"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "expiry": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "capabilities": {
+                "type": "object",
+                "required": [
+                  "accountKinds",
+                  "signTransaction",
+                  "batch",
+                  "outcomeVerification",
+                  "signMessage",
+                  "signIn",
+                  "requestFunds"
+                ],
+                "properties": {
+                  "accountKinds": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "public"
+                        },
+                        {
+                          "type": "string",
+                          "const": "private"
+                        }
+                      ]
+                    }
+                  },
+                  "signTransaction": {
+                    "type": "boolean"
+                  },
+                  "batch": {
+                    "type": "object",
+                    "required": ["maxInstructions", "atomic"],
+                    "properties": {
+                      "maxInstructions": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 16
+                      },
+                      "atomic": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "supported"
+                          },
+                          {
+                            "type": "string",
+                            "const": "unsupported"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "proving": {
+                    "type": "object",
+                    "required": ["location"],
+                    "properties": {
+                      "location": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "local"
+                          },
+                          {
+                            "type": "string",
+                            "const": "paired"
+                          },
+                          {
+                            "type": "string",
+                            "const": "user-owned"
+                          },
+                          {
+                            "type": "string",
+                            "const": "tee"
+                          }
+                        ]
+                      },
+                      "typicalSeconds": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  "outcomeVerification": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "own-account-invariant"
+                        },
+                        {
+                          "type": "string",
+                          "const": "program-event"
+                        },
+                        {
+                          "type": "string",
+                          "const": "node"
+                        }
+                      ]
+                    }
+                  },
+                  "signMessage": {
+                    "type": "boolean"
+                  },
+                  "signIn": {
+                    "type": "boolean"
+                  },
+                  "requestFunds": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "signIn": {
+                "type": "object",
+                "required": ["account", "signedMessage", "signature"],
+                "properties": {
+                  "account": {
+                    "type": "object",
+                    "required": ["address", "kind", "chain", "capabilities"],
+                    "properties": {
+                      "address": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                            "description": "Base58-encoded 32-byte LEZ account id"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                            "description": "Opaque per-origin private account handle"
+                          }
+                        ]
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "public"
+                          },
+                          {
+                            "type": "string",
+                            "const": "private"
+                          }
+                        ]
+                      },
+                      "chain": {
+                        "type": "string",
+                        "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                        "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                      },
+                      "publicKey": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                        "maxLength": 65000
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "capabilities": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "accounts"
+                            },
+                            {
+                              "type": "string",
+                              "const": "read_public"
+                            },
+                            {
+                              "type": "string",
+                              "const": "read_private"
+                            },
+                            {
+                              "type": "string",
+                              "const": "propose_tx"
+                            },
+                            {
+                              "type": "string",
+                              "const": "sign_message"
+                            },
+                            {
+                              "type": "string",
+                              "const": "request_proof"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "signedMessage": {
+                    "type": "string"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                    "maxLength": 65000
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "lez_getAccounts": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "result": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["address", "kind", "chain", "capabilities"],
+          "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                  "description": "Base58-encoded 32-byte LEZ account id"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                  "description": "Opaque per-origin private account handle"
+                }
+              ]
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "public"
+                },
+                {
+                  "type": "string",
+                  "const": "private"
+                }
+              ]
+            },
+            "chain": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+            },
+            "publicKey": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "maxLength": 65000
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "accounts"
+                  },
+                  {
+                    "type": "string",
+                    "const": "read_public"
+                  },
+                  {
+                    "type": "string",
+                    "const": "read_private"
+                  },
+                  {
+                    "type": "string",
+                    "const": "propose_tx"
+                  },
+                  {
+                    "type": "string",
+                    "const": "sign_message"
+                  },
+                  {
+                    "type": "string",
+                    "const": "request_proof"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "lez_getCapabilities": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "accountKinds",
+          "signTransaction",
+          "batch",
+          "outcomeVerification",
+          "signMessage",
+          "signIn",
+          "requestFunds"
+        ],
+        "properties": {
+          "accountKinds": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "public"
+                },
+                {
+                  "type": "string",
+                  "const": "private"
+                }
+              ]
+            }
+          },
+          "signTransaction": {
+            "type": "boolean"
+          },
+          "batch": {
+            "type": "object",
+            "required": ["maxInstructions", "atomic"],
+            "properties": {
+              "maxInstructions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16
+              },
+              "atomic": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "supported"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unsupported"
+                  }
+                ]
+              }
+            }
+          },
+          "proving": {
+            "type": "object",
+            "required": ["location"],
+            "properties": {
+              "location": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "local"
+                  },
+                  {
+                    "type": "string",
+                    "const": "paired"
+                  },
+                  {
+                    "type": "string",
+                    "const": "user-owned"
+                  },
+                  {
+                    "type": "string",
+                    "const": "tee"
+                  }
+                ]
+              },
+              "typicalSeconds": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "outcomeVerification": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "own-account-invariant"
+                },
+                {
+                  "type": "string",
+                  "const": "program-event"
+                },
+                {
+                  "type": "string",
+                  "const": "node"
+                }
+              ]
+            }
+          },
+          "signMessage": {
+            "type": "boolean"
+          },
+          "signIn": {
+            "type": "boolean"
+          },
+          "requestFunds": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "lez_getBalance": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "required": ["chain", "account"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "description": "Base58-encoded 32-byte LEZ account id"
+              },
+              {
+                "type": "string",
+                "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                "description": "Opaque per-origin private account handle"
+              }
+            ]
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+            "description": "Base58-encoded 32-byte LEZ account id"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["asset", "amount", "synced"],
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "native"
+              },
+              {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "description": "Base58-encoded 32-byte LEZ account id"
+              }
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
+          },
+          "synced": {
+            "type": "boolean"
+          },
+          "asOfBlock": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        }
+      }
+    },
+    "lez_signAndSendTransaction": {
+      "userFacing": true,
+      "params": {
+        "type": "object",
+        "required": ["chain", "account", "instructions"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "description": "Base58-encoded 32-byte LEZ account id"
+              },
+              {
+                "type": "string",
+                "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                "description": "Opaque per-origin private account handle"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["program", "accounts", "data"],
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                  "description": "Base58-encoded 32-byte LEZ account id"
+                },
+                "accounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["account", "writable", "signer"],
+                    "properties": {
+                      "account": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                            "description": "Base58-encoded 32-byte LEZ account id"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                            "description": "Opaque per-origin private account handle"
+                          }
+                        ]
+                      },
+                      "writable": {
+                        "type": "boolean"
+                      },
+                      "signer": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "maxItems": 64
+                },
+                "data": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                  "maxLength": 65000
+                },
+                "display": {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "args": {
+                      "type": "object",
+                      "patternProperties": {
+                        "^.*$": {}
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "minItems": 1,
+            "maxItems": 16
+          },
+          "atomicRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["handle"],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "txHash": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "lez_getTransactionStatus": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "required": ["handle"],
+        "properties": {
+          "handle": {
+            "type": "string"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["handle", "chain", "lifecycle", "outcome", "outcomeSource"],
+        "properties": {
+          "handle": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "txHash": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "lifecycle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "awaiting_approval"
+              },
+              {
+                "type": "string",
+                "const": "building"
+              },
+              {
+                "type": "string",
+                "const": "proving"
+              },
+              {
+                "type": "string",
+                "const": "signing"
+              },
+              {
+                "type": "string",
+                "const": "submitted"
+              },
+              {
+                "type": "string",
+                "const": "included"
+              },
+              {
+                "type": "string",
+                "const": "finalized"
+              },
+              {
+                "type": "string",
+                "const": "rejected"
+              },
+              {
+                "type": "string",
+                "const": "dropped"
+              },
+              {
+                "type": "string",
+                "const": "expired"
+              }
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "success"
+              },
+              {
+                "type": "string",
+                "const": "failure"
+              },
+              {
+                "type": "string",
+                "const": "unknown"
+              }
+            ]
+          },
+          "outcomeSource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "own-account-invariant"
+              },
+              {
+                "type": "string",
+                "const": "program-event"
+              },
+              {
+                "type": "string",
+                "const": "node"
+              },
+              {
+                "type": "string",
+                "const": "none"
+              }
+            ]
+          },
+          "block": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "expectedEffects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["account", "field"],
+              "properties": {
+                "account": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                      "description": "Base58-encoded 32-byte LEZ account id"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                      "description": "Opaque per-origin private account handle"
+                    }
+                  ]
+                },
+                "field": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "balance"
+                    },
+                    {
+                      "type": "string",
+                      "const": "token_balance"
+                    },
+                    {
+                      "type": "string",
+                      "const": "data"
+                    },
+                    {
+                      "type": "string",
+                      "const": "authority"
+                    },
+                    {
+                      "type": "string",
+                      "const": "nonce"
+                    }
+                  ]
+                },
+                "asset": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "observedEffects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["account", "field"],
+              "properties": {
+                "account": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                      "description": "Base58-encoded 32-byte LEZ account id"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                      "description": "Opaque per-origin private account handle"
+                    }
+                  ]
+                },
+                "field": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "balance"
+                    },
+                    {
+                      "type": "string",
+                      "const": "token_balance"
+                    },
+                    {
+                      "type": "string",
+                      "const": "data"
+                    },
+                    {
+                      "type": "string",
+                      "const": "authority"
+                    },
+                    {
+                      "type": "string",
+                      "const": "nonce"
+                    }
+                  ]
+                },
+                "asset": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "fee": {
+            "type": "object",
+            "properties": {
+              "estimatedMax": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,38})$",
+                "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
+              },
+              "used": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,38})$",
+                "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
+              },
+              "gasLimit": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            }
+          },
+          "proving": {
+            "type": "object",
+            "required": ["phase"],
+            "properties": {
+              "phase": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "preparing"
+                  },
+                  {
+                    "type": "string",
+                    "const": "proving"
+                  },
+                  {
+                    "type": "string",
+                    "const": "submitting"
+                  },
+                  {
+                    "type": "string",
+                    "const": "waiting_for_block"
+                  }
+                ]
+              },
+              "progress": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "etaSeconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              },
+              "data": {}
+            }
+          }
+        }
+      }
+    },
+    "lez_signMessage": {
+      "userFacing": true,
+      "params": {
+        "type": "object",
+        "required": ["account", "message"],
+        "properties": {
+          "account": {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+            "description": "Base58-encoded 32-byte LEZ account id"
+          },
+          "message": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "maxLength": 65000
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["signature", "publicKey", "tag"],
+        "properties": {
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "maxLength": 65000
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "maxLength": 65000
+          },
+          "tag": {
+            "type": "string",
+            "const": "LEZ/message/v1"
+          }
+        }
+      }
+    },
+    "lez_signIn": {
+      "userFacing": true,
+      "params": {
+        "allOf": [
+          {
+            "type": "object",
+            "required": ["domain", "uri", "nonce", "issuedAt"],
+            "properties": {
+              "domain": {
+                "type": "string",
+                "maxLength": 253
+              },
+              "statement": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "uri": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "nonce": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 64
+              },
+              "issuedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expirationTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "notBefore": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "requestId": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "account": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                    "description": "Base58-encoded 32-byte LEZ account id"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                    "description": "Opaque per-origin private account handle"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "result": {
+        "type": "object",
+        "required": ["account", "signedMessage", "signature"],
+        "properties": {
+          "account": {
+            "type": "object",
+            "required": ["address", "kind", "chain", "capabilities"],
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                    "description": "Base58-encoded 32-byte LEZ account id"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                    "description": "Opaque per-origin private account handle"
+                  }
+                ]
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "public"
+                  },
+                  {
+                    "type": "string",
+                    "const": "private"
+                  }
+                ]
+              },
+              "chain": {
+                "type": "string",
+                "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+              },
+              "publicKey": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "maxLength": 65000
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "accounts"
+                    },
+                    {
+                      "type": "string",
+                      "const": "read_public"
+                    },
+                    {
+                      "type": "string",
+                      "const": "read_private"
+                    },
+                    {
+                      "type": "string",
+                      "const": "propose_tx"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sign_message"
+                    },
+                    {
+                      "type": "string",
+                      "const": "request_proof"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "signedMessage": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "maxLength": 65000
+          }
+        }
+      }
+    },
+    "lez_requestFunds": {
+      "userFacing": true,
+      "params": {
+        "type": "object",
+        "required": ["chain", "account"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "description": "Base58-encoded 32-byte LEZ account id"
+              },
+              {
+                "type": "string",
+                "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                "description": "Opaque per-origin private account handle"
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "funded"
+              },
+              {
+                "type": "string",
+                "const": "rate_limited"
+              },
+              {
+                "type": "string",
+                "const": "rejected"
+              },
+              {
+                "type": "string",
+                "const": "outcome_unknown"
+              }
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "txHash": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "shieldHandle": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "lez_switchChain": {
+      "userFacing": true,
+      "params": {
+        "type": "object",
+        "required": ["chain"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          }
+        }
+      },
+      "result": {
+        "type": "null"
+      }
+    }
+  },
+  "notifications": {
+    "lez_accountsChanged": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["address", "kind", "chain", "capabilities"],
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "description": "Base58-encoded 32-byte LEZ account id"
+              },
+              {
+                "type": "string",
+                "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                "description": "Opaque per-origin private account handle"
+              }
+            ]
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "public"
+              },
+              {
+                "type": "string",
+                "const": "private"
+              }
+            ]
+          },
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "maxLength": 65000
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "accounts"
+                },
+                {
+                  "type": "string",
+                  "const": "read_public"
+                },
+                {
+                  "type": "string",
+                  "const": "read_private"
+                },
+                {
+                  "type": "string",
+                  "const": "propose_tx"
+                },
+                {
+                  "type": "string",
+                  "const": "sign_message"
+                },
+                {
+                  "type": "string",
+                  "const": "request_proof"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "lez_chainChanged": {
+      "type": "string",
+      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+      "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+    },
+    "lez_sessionChanged": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["sessionId", "origin", "chains", "accounts", "capabilities"],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "origin": {
+              "type": "string"
+            },
+            "chains": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+              }
+            },
+            "accounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["address", "kind", "chain", "capabilities"],
+                "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                        "description": "Base58-encoded 32-byte LEZ account id"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                        "description": "Opaque per-origin private account handle"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "public"
+                      },
+                      {
+                        "type": "string",
+                        "const": "private"
+                      }
+                    ]
+                  },
+                  "chain": {
+                    "type": "string",
+                    "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                    "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                    "maxLength": 65000
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "accounts"
+                        },
+                        {
+                          "type": "string",
+                          "const": "read_public"
+                        },
+                        {
+                          "type": "string",
+                          "const": "read_private"
+                        },
+                        {
+                          "type": "string",
+                          "const": "propose_tx"
+                        },
+                        {
+                          "type": "string",
+                          "const": "sign_message"
+                        },
+                        {
+                          "type": "string",
+                          "const": "request_proof"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "expiry": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "capabilities": {
+              "type": "object",
+              "required": [
+                "accountKinds",
+                "signTransaction",
+                "batch",
+                "outcomeVerification",
+                "signMessage",
+                "signIn",
+                "requestFunds"
+              ],
+              "properties": {
+                "accountKinds": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "public"
+                      },
+                      {
+                        "type": "string",
+                        "const": "private"
+                      }
+                    ]
+                  }
+                },
+                "signTransaction": {
+                  "type": "boolean"
+                },
+                "batch": {
+                  "type": "object",
+                  "required": ["maxInstructions", "atomic"],
+                  "properties": {
+                    "maxInstructions": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 16
+                    },
+                    "atomic": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "supported"
+                        },
+                        {
+                          "type": "string",
+                          "const": "unsupported"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "proving": {
+                  "type": "object",
+                  "required": ["location"],
+                  "properties": {
+                    "location": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "local"
+                        },
+                        {
+                          "type": "string",
+                          "const": "paired"
+                        },
+                        {
+                          "type": "string",
+                          "const": "user-owned"
+                        },
+                        {
+                          "type": "string",
+                          "const": "tee"
+                        }
+                      ]
+                    },
+                    "typicalSeconds": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "outcomeVerification": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "own-account-invariant"
+                      },
+                      {
+                        "type": "string",
+                        "const": "program-event"
+                      },
+                      {
+                        "type": "string",
+                        "const": "node"
+                      }
+                    ]
+                  }
+                },
+                "signMessage": {
+                  "type": "boolean"
+                },
+                "signIn": {
+                  "type": "boolean"
+                },
+                "requestFunds": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "signIn": {
+              "type": "object",
+              "required": ["account", "signedMessage", "signature"],
+              "properties": {
+                "account": {
+                  "type": "object",
+                  "required": ["address", "kind", "chain", "capabilities"],
+                  "properties": {
+                    "address": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                          "description": "Base58-encoded 32-byte LEZ account id"
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+                          "description": "Opaque per-origin private account handle"
+                        }
+                      ]
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "public"
+                        },
+                        {
+                          "type": "string",
+                          "const": "private"
+                        }
+                      ]
+                    },
+                    "chain": {
+                      "type": "string",
+                      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                      "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+                    },
+                    "publicKey": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                      "maxLength": 65000
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "accounts"
+                          },
+                          {
+                            "type": "string",
+                            "const": "read_public"
+                          },
+                          {
+                            "type": "string",
+                            "const": "read_private"
+                          },
+                          {
+                            "type": "string",
+                            "const": "propose_tx"
+                          },
+                          {
+                            "type": "string",
+                            "const": "sign_message"
+                          },
+                          {
+                            "type": "string",
+                            "const": "request_proof"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "signedMessage": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                  "maxLength": 65000
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lez_disconnected": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "lez_transactionUpdated": {
+      "type": "object",
+      "required": ["handle"],
+      "properties": {
+        "handle": {
+          "type": "string"
+        }
+      }
+    },
+    "lez_capabilitiesChanged": {
+      "type": "object",
+      "required": [
+        "accountKinds",
+        "signTransaction",
+        "batch",
+        "outcomeVerification",
+        "signMessage",
+        "signIn",
+        "requestFunds"
+      ],
+      "properties": {
+        "accountKinds": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "public"
+              },
+              {
+                "type": "string",
+                "const": "private"
+              }
+            ]
+          }
+        },
+        "signTransaction": {
+          "type": "boolean"
+        },
+        "batch": {
+          "type": "object",
+          "required": ["maxInstructions", "atomic"],
+          "properties": {
+            "maxInstructions": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "atomic": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "supported"
+                },
+                {
+                  "type": "string",
+                  "const": "unsupported"
+                }
+              ]
+            }
+          }
+        },
+        "proving": {
+          "type": "object",
+          "required": ["location"],
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "local"
+                },
+                {
+                  "type": "string",
+                  "const": "paired"
+                },
+                {
+                  "type": "string",
+                  "const": "user-owned"
+                },
+                {
+                  "type": "string",
+                  "const": "tee"
+                }
+              ]
+            },
+            "typicalSeconds": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "outcomeVerification": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "own-account-invariant"
+              },
+              {
+                "type": "string",
+                "const": "program-event"
+              },
+              {
+                "type": "string",
+                "const": "node"
+              }
+            ]
+          }
+        },
+        "signMessage": {
+          "type": "boolean"
+        },
+        "signIn": {
+          "type": "boolean"
+        },
+        "requestFunds": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

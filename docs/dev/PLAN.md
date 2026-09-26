@@ -30,7 +30,7 @@ This plan went through four passes: exploration, two design agents, 21st.dev and
    - So we **compose wallet screens from 21st primitives**, following RainbowKit, ConnectKit and Privy behaviour.
    - Verified: `21st add` uses shadcn, and shadcn auto-applies `components.json` `tailwind.prefix`.
 5. **Real brand/token logos, never glyph icons.** Sources: `21st logo`/svgl plus the official Logos assets.
-6. **Colours and design follow RainbowKit/wagmi**, not Logos' site.
+6. **Colours and design follow RainbowKit/wagmi**, not Logos' site. **Design direction locked 2026-09-26: Tray** (D14): Family-style content-height trays, keypad-first send, huge numerals, account chips, a background proof island, and **both a light and a dark set**. RainbowKit colour roles: `private` #7A70FF (only ever means private), `action` #3898FF. Reference implementation: `apps/design-lab` (`src/lab/tokens.ts` → `trayLight` / `trayDark`, `Wallet.tsx`, `Sheet.tsx`); rationale and sources in `docs/design/brand.md` and `docs/design/references.md`.
 7. **Docs: Next.js via Fumadocs 16 + Next 16**, with product fidelity against the wagmi, RainbowKit and Privy docs.
 8. **Libraries freely, but Context7 first.** Firecrawl for anything current. Install tools via their official methods.
 9. **Never self-block.** Escalate only for access (see Inputs).
@@ -272,7 +272,8 @@ e2e/           standalone scripts + e2e/rust
 - Designed controls: Button, Checkbox, ComboBox, IconButton, Paginator, SearchBar, TabBar, Table, Text, TextField.
 - Available but less polished: Dialog, Drawer, Toast, Badge, CopyButton, CopyableText, Notice, StatCard, Tile, Spinner, ProgressBar, ToolTip.
 - Icons are generic only; there are no wallet icons.
-- We build our own **`Tokens.qml` singleton**. It wraps `Theme.palette` for Basecamp-native surfaces (background, surfaces, borders, typography: Public Sans, spacing 4–40, radii 4–16) and overlays **our accent and status tokens** from `@logos-kit/theme` (RainbowKit-style, per the user's colour rule): private accent (violet), proving, verified, unverified, warning.
+- We build our own **`Tokens.qml` singleton** generated from `@logos-kit/theme`'s **Tray** tokens (D14). Our views paint Tray surfaces, text, radii (tray 36, card 26, pill buttons, rows 20) and the Onest font (bundled, loaded with `FontLoader`) themselves, so the wallet looks the same in Basecamp, on the web and on phones. **Basecamp opens in Tray dark** (the shell is dark-only); a light/dark switch in Settings is stored by the core module. `Logos.Theme`/`Logos.Controls` are still imported (never bundled) and used only for behaviour the shell expects (focus, text input), restyled to our tokens.
+- **Tray patterns in QML:** content-height trays = `Behavior on height` over the measured `implicitHeight` (200 ms, `Easing.Bezier` .25,.1,.25,1) with step swaps that scale 1.08 → 1 forward and reverse on back; ✕ becomes ← after step 1; the proof island = a pill with a spring `Behavior on width` pinned to the top of the view; keypad send with per-digit enter animations; account chips in a horizontal `ListView`; balance numerals with tabular figures and the unit in `text2`.
 
 ### QML module structure (each ui module)
 ```
@@ -530,7 +531,7 @@ The strict reading of the adoption window is calendar months, ≥30 in each, ove
   - `Account = json-rpc | local`;
   - a **lossless JSON** parser (u128 → string);
   - transports: `http`, `custom`, `basecampModule`.
-- **Minimal `@logos-kit/theme`** (moved here, since S7 needs it): tokens plus `toQmlTokens()` → `Tokens.js`. S11 extends it.
+- **Minimal `@logos-kit/theme`** (moved here, since S7 needs it): the **Tray light and Tray dark** token sets (ported from `apps/design-lab/src/lab/tokens.ts`, D14) plus `toQmlTokens()` → `Tokens.js`. S11 extends it.
 - **`packages/qml-bundle`:** a port of `refs/connect-kits/_notes/artifacts/qml-transpile/pipe/{build.mjs,babel-plugin-qml-v4.cjs,src/qml-shims.js}`.
   - The `createLogosKit({callModuleAsync, openIntent})` facade exposes: connect, accounts, balance, `sendTransaction → {handle}` (the poller backs off and pauses when hidden), signMessage, signIn, requestFunds, typed errors, the **45 s intent timeout**, and the **busy guard**.
   - Output → `sdk/qml/LogosKit/logoskit.js`, target under 40 KB, plus a thin `LogosKit.qml`.
@@ -571,7 +572,8 @@ The strict reading of the adoption window is calendar months, ≥30 in each, ove
   - the button arms after 500 ms (UX only).
 - **Visual design:**
   - `Logos.Controls` for structure;
-  - `@logos-kit/theme` → `Tokens.js` (theme-clean, no hard-coded colours);
+  - `@logos-kit/theme` → `Tokens.js` (theme-clean, no hard-coded colours), **Tray** direction (D14): Tray dark by default in Basecamp, light available;
+  - screen-by-screen parity with the `apps/design-lab` Tray prototype (home with account chips, keypad send, review with the balance change first, proof sheet with the progress ring, proof island, connect request); QA screenshots compared side by side with the prototype at 360/680/1024 px;
   - real logos;
   - **narrow and touch-ready layouts** for mobile Basecamp (Qt 6.11, testnet 0.4);
   - reuse `lez-programs/apps/shared/wallet` QML where it fits.
@@ -689,7 +691,7 @@ The strict reading of the adoption window is calendar months, ≥30 in each, ove
 - **Theme:**
   - RainbowKit-style accent plus status tokens;
   - `toCssVars` (`--lk-*`), `toRnTheme`, `toQmlTokens`;
-  - presets: dark / light / midnight.
+  - presets: **`trayLight` and `trayDark`** (D14; the RainbowKit dark/light/midnight presets are not shipped). Integrators can still override any token, RainbowKit-style (`accentColor`, `borderRadius`, `fontStack`).
 - **CSS:**
   - Tailwind 4 `@import "tailwindcss/theme.css" layer(theme) prefix(lk)` plus utilities, **without preflight**, scoped under `[data-logos-kit]`;
   - a precompiled `styles.css` export;

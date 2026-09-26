@@ -1,0 +1,222 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 18:24:01 +0100
+Subject: [PATCH 2/6] wallet: report sync progress through a SyncObserver
+
+`WalletCore::sync_to_block` prints straight to stdout and drives an
+indicatif progress bar, so a GUI or an embedded module cannot show sync
+progress (and gets terminal noise instead).
+
+Add a `SyncObserver` trait with no-op default callbacks for sync start
+(the block range), per-block progress, finish and informational messages,
+plus `sync_to_block_with_observer` / `sync_to_latest_block_with_observer`.
+The existing `sync_to_block` / `sync_to_latest_block` delegate to them
+with `CliSyncObserver`, which reproduces the previous output exactly,
+including the progress bar and the per-block "Stored persistent
+accounts" line.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lez/wallet/src/lib.rs           | 64 ++++++++++++++++++++++-----------
+ lez/wallet/src/sync_observer.rs | 62 ++++++++++++++++++++++++++++++++
+ 2 files changed, 106 insertions(+), 20 deletions(-)
+ create mode 100644 lez/wallet/src/sync_observer.rs
+
+diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
+index 8aa7611..181e70a 100644
+--- a/lez/wallet/src/lib.rs
++++ b/lez/wallet/src/lib.rs
+@@ -42,6 +42,7 @@ use crate::{
+     multi_client::{MultiSequencerClient, Statistics, extract_statistics_from_path},
+     poller::{TxPoller, multi_poll},
+     storage::key_chain::{NullifierIndex, SharedAccountEntry},
++    sync_observer::{CliSyncObserver, SyncObserver},
+ };
+ 
+ pub mod account;
+@@ -53,6 +54,7 @@ pub mod multi_client;
+ pub mod poller;
+ pub mod program_facades;
+ pub mod storage;
++pub mod sync_observer;
+ 
+ pub const SUPPRESS_VERBOSE_PRINTS: &str = "SUPPRESS_VERBOSE_PRINTS";
+ 
+@@ -312,6 +314,13 @@ impl WalletCore {
+ 
+     /// Store persistent data at home.
+     pub fn store_persistent_data(&self) -> Result<()> {
++        self.save_storage()?;
++        println!("{}", self.stored_storage_message());
++
++        Ok(())
++    }
++
++    fn save_storage(&self) -> Result<()> {
+         self.storage
+             .save_to(self.storage_backend.as_ref())
+             .with_context(|| {
+@@ -319,14 +328,14 @@ impl WalletCore {
+                     "Failed to store persistent accounts at {}",
+                     self.storage_path.display()
+                 )
+-            })?;
++            })
++    }
+ 
+-        println!(
++    fn stored_storage_message(&self) -> String {
++        format!(
+             "Stored persistent accounts at {}",
+             self.storage_path.display()
+-        );
+-
+-        Ok(())
++        )
+     }
+ 
+     /// Rotates multi-client and stores metrics.
+@@ -1036,13 +1045,33 @@ impl WalletCore {
+     }
+ 
+     pub async fn sync_to_latest_block(&mut self) -> Result<u64> {
++        self.sync_to_latest_block_with_observer(&mut CliSyncObserver::default())
++            .await
++    }
++
++    pub async fn sync_to_block(&mut self, block_id: u64) -> Result<()> {
++        self.sync_to_block_with_observer(block_id, &mut CliSyncObserver::default())
++            .await
++    }
++
++    /// Like [`Self::sync_to_latest_block`], reporting to `observer` instead of stdout.
++    pub async fn sync_to_latest_block_with_observer(
++        &mut self,
++        observer: &mut dyn SyncObserver,
++    ) -> Result<u64> {
+         let latest_block_id = self.get_last_block_id().await?;
+-        println!("Latest block is {latest_block_id}");
+-        self.sync_to_block(latest_block_id).await?;
++        observer.on_message(&format!("Latest block is {latest_block_id}"));
++        self.sync_to_block_with_observer(latest_block_id, observer)
++            .await?;
+         Ok(latest_block_id)
+     }
+ 
+-    pub async fn sync_to_block(&mut self, block_id: u64) -> Result<()> {
++    /// Like [`Self::sync_to_block`], reporting to `observer` instead of stdout.
++    pub async fn sync_to_block_with_observer(
++        &mut self,
++        block_id: u64,
++        observer: &mut dyn SyncObserver,
++    ) -> Result<()> {
+         use futures::TryStreamExt as _;
+ 
+         let last_synced_block = self.storage.last_synced_block();
+@@ -1056,15 +1085,14 @@ impl WalletCore {
+             return Ok(());
+         }
+ 
+-        println!("Syncing to block {block_id}. Blocks to sync: {num_of_blocks}");
++        let first_block = last_synced_block.saturating_add(1);
++        observer.on_start(first_block..=block_id);
+ 
+         let poller = self.poller_helm();
+-        let mut blocks =
+-            std::pin::pin!(poller.poll_block_range(last_synced_block.saturating_add(1)..=block_id));
++        let mut blocks = std::pin::pin!(poller.poll_block_range(first_block..=block_id));
+ 
+         // Get the latest nullifiers for all owned accounts.
+         let mut index = self.storage.key_chain().build_latest_nullifier_index();
+-        let bar = indicatif::ProgressBar::new(num_of_blocks);
+         while let Some(block) = blocks.try_next().await? {
+             for tx in block.body.transactions {
+                 let LeeTransaction::PrivacyPreserving(pp_tx) = &tx else {
+@@ -1079,15 +1107,11 @@ impl WalletCore {
+             }
+ 
+             self.storage.set_last_synced_block(block.header.block_id);
+-            self.store_persistent_data()?;
+-            bar.inc(1);
++            self.save_storage()?;
++            observer.on_message(&self.stored_storage_message());
++            observer.on_block(block.header.block_id);
+         }
+-        bar.finish();
+-
+-        println!(
+-            "Synced to block {block_id} in {:?}",
+-            before_polling.elapsed()
+-        );
++        observer.on_finish(block_id, before_polling.elapsed());
+ 
+         Ok(())
+     }
+diff --git a/lez/wallet/src/sync_observer.rs b/lez/wallet/src/sync_observer.rs
+new file mode 100644
+index 0000000..e750529
+--- /dev/null
++++ b/lez/wallet/src/sync_observer.rs
+@@ -0,0 +1,62 @@
++//! Progress reporting for [`crate::WalletCore::sync_to_block_with_observer`].
++
++use std::{ops::RangeInclusive, time::Duration};
++
++use lee_core::BlockId;
++
++/// Receives progress of a block sync, so embedders can drive their own UI instead of stdout.
++///
++/// All methods default to doing nothing.
++pub trait SyncObserver: Send {
++    /// Sync is about to fetch and process `blocks`.
++    fn on_start(&mut self, _blocks: RangeInclusive<BlockId>) {}
++
++    /// `block_id` was processed and the storage persisted.
++    fn on_block(&mut self, _block_id: BlockId) {}
++
++    /// Sync reached `block_id` after `elapsed`.
++    fn on_finish(&mut self, _block_id: BlockId, _elapsed: Duration) {}
++
++    /// Informational message.
++    fn on_message(&mut self, _message: &str) {}
++}
++
++/// Default observer reproducing the wallet CLI output: messages on stdout and a progress bar.
++#[derive(Default)]
++pub struct CliSyncObserver {
++    bar: Option<indicatif::ProgressBar>,
++}
++
++#[expect(
++    clippy::print_stdout,
++    reason = "This observer exists to print sync progress for the CLI"
++)]
++impl SyncObserver for CliSyncObserver {
++    fn on_start(&mut self, blocks: RangeInclusive<BlockId>) {
++        let num_of_blocks = blocks
++            .end()
++            .saturating_sub(blocks.start().saturating_sub(1));
++        println!(
++            "Syncing to block {}. Blocks to sync: {num_of_blocks}",
++            blocks.end()
++        );
++        self.bar = Some(indicatif::ProgressBar::new(num_of_blocks));
++    }
++
++    fn on_block(&mut self, _block_id: BlockId) {
++        if let Some(bar) = &self.bar {
++            bar.inc(1);
++        }
++    }
++
++    fn on_finish(&mut self, block_id: BlockId, elapsed: Duration) {
++        if let Some(bar) = self.bar.take() {
++            bar.finish();
++        }
++        println!("Synced to block {block_id} in {elapsed:?}");
++    }
++
++    fn on_message(&mut self, message: &str) {
++        println!("{message}");
++    }
++}

@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# Basecamp module crates are standalone (builder convention) and RISC Zero
+# guests build with cargo-risczero, so neither joins this workspace.
+exclude = ["modules", "programs", "vendor"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/logos-kit/logos-kit"
+rust-version = "1.98"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }
+
+# LEZ at the pinned rev + our patch series (vendor/lez-patches), materialized
+# by `cargo xtask lez-vendor` into vendor/lez (docs/dev/pins.md). Every LEZ
+# crate comes from this tree, so there is never a git copy next to a path copy.
+wallet = { path = "vendor/lez/lez/wallet", default-features = false }
+lee = { path = "vendor/lez/lee/state_machine" }
+lee_core = { path = "vendor/lez/lee/state_machine/core" }
+key_protocol = { path = "vendor/lez/lee/key_protocol" }
+common = { path = "vendor/lez/lez/common" }
+sequencer_service_rpc = { path = "vendor/lez/lez/sequencer/service/rpc", features = ["client"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Mirrors LEZ's own patch (logos-execution-zone/Cargo.toml): keccak with the
+# RISC Zero-accelerated backend.
+[patch.crates-io]
+keccak = { git = "https://github.com/logos-blockchain/sponges", rev = "3a56e99771beedf04946eab21a4a62adc2951377" }

@@ -1,0 +1,23 @@
+{
+  "name": "probe_dapp",
+  "display_name": "Logos Kit Probe (dev only)",
+  "version": "0.0.1",
+  "type": "ui_qml",
+  "category": "developer",
+  "description": "S0 throwaway: identity-hop and QML sandbox probes. Never published.",
+  "view": "qml/Main.qml",
+  "icon": "src/icons/icon.png",
+  "dependencies": ["logos_kit_wallet"],
+  "provides": [],
+  "uses": [{ "intent": "lez.wallet.connect" }],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

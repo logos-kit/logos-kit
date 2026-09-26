@@ -1,0 +1,378 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 18:24:59 +0100
+Subject: [PATCH 3/6] wallet: split public transaction sending into prepare and
+ sign+submit
+
+`send_pub_tx_with_pre_check` resolves accounts, builds the message, signs
+it and submits it in one call. A wallet UI needs to show the user the
+exact message (program, accounts, nonces, fee declaration) and get an
+approval between building and signing, and must be able to drop the
+transaction instead.
+
+Split it into `prepare_public`, returning a `PreparedPublicTx` that
+exposes the exact `Message` and its ordered `TxSigner`s, and
+`sign_and_submit_public`. `PreparedPublicTx` holds no private keys: local
+signing keys are looked up in storage at signing time, keycard signers
+carry only their derivation path (and the PIN read during preparation,
+as `AccountManager` already did). `send_pub_tx_with_pre_check` is now the
+composition of the two, so signatures, their order (local, keycard, then
+an external fee co-signer) and all errors are unchanged.
+
+Signing moves from `AccountManager::sign_message` to a free
+`account_manager::sign_message` over `TxSigner`s, which the
+privacy-preserving path uses too.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lez/wallet/src/account_manager.rs | 116 +++++++++++++++++++-----------
+ lez/wallet/src/lib.rs             | 109 ++++++++++++++++++++++------
+ 2 files changed, 163 insertions(+), 62 deletions(-)
+
+diff --git a/lez/wallet/src/account_manager.rs b/lez/wallet/src/account_manager.rs
+index 723164a..309c434 100644
+--- a/lez/wallet/src/account_manager.rs
++++ b/lez/wallet/src/account_manager.rs
+@@ -4,7 +4,7 @@ use std::{
+     future::Future,
+ };
+ 
+-use anyhow::Result;
++use anyhow::{Context as _, Result};
+ use keycard_wallet::KeycardWallet;
+ use lee::{AccountId, PrivateKey, PublicKey, Signature};
+ use lee_core::{
+@@ -31,6 +31,20 @@ use crate::{ExecutionFailureKind, WalletCore};
+ /// Always on by choice: the only sender who opts out is the distinguishable one.
+ pub const CIPHERTEXT_PAD_SIZE: u32 = 512;
+ 
++/// A public account whose signature a transaction carries.
++///
++/// Holds no key material: local keys are looked up in the wallet storage at signing time.
++#[derive(Clone, PartialEq, Eq)]
++pub enum TxSigner {
++    /// Signed with the key held in the wallet storage.
++    Local(AccountId),
++    /// Signed on the keycard at `key_path`.
++    Keycard {
++        account_id: AccountId,
++        key_path: String,
++    },
++}
++
+ #[derive(Clone, PartialEq, Eq)]
+ pub enum AccountIdentity {
+     Public(AccountId),
+@@ -400,7 +414,7 @@ impl AccountManager {
+     }
+ 
+     pub fn public_account_nonces(&self) -> Vec<Nonce> {
+-        // Must match the signature order produced by sign_message(): local accounts first,
++        // Must match the signature order of tx_signers(): local accounts first,
+         // keycard accounts second.
+         let local = self.states.iter().filter_map(|state| match state {
+             State::Public { account, sk } => sk.as_ref().map(|_| account.account.nonce),
+@@ -579,7 +593,7 @@ impl AccountManager {
+         Ok(first_signer)
+     }
+ 
+-    /// Whether `account_id` is a public account whose signature [`Self::sign_message`] produces.
++    /// Whether `account_id` is a public account among [`Self::tx_signers`].
+     pub fn signs_for(&self, account_id: AccountId) -> bool {
+         self.states.iter().any(|state| match state {
+             State::Public {
+@@ -603,46 +617,28 @@ impl AccountManager {
+             .collect()
+     }
+ 
+-    pub fn public_non_keycard_account_auth(&self) -> Vec<&PrivateKey> {
+-        self.states
+-            .iter()
+-            .filter_map(|state| match state {
+-                State::Public { sk, .. } => sk.as_ref(),
+-                State::PublicKeycard { .. } | State::Private(_) => None,
+-            })
+-            .collect()
+-    }
+-
+-    pub fn sign_message(&self, message_hash: [u8; 32]) -> Result<Vec<(Signature, PublicKey)>> {
+-        let mut sigs: Vec<(Signature, PublicKey)> = self
+-            .public_non_keycard_account_auth()
+-            .into_iter()
+-            .map(|key| {
+-                (
+-                    Signature::new(key, &message_hash),
+-                    PublicKey::new_from_private_key(key),
+-                )
+-            })
+-            .collect();
+-
+-        let keycard_paths: Vec<&str> = self
+-            .states
+-            .iter()
+-            .filter_map(|state| match state {
+-                State::PublicKeycard { key_path, .. } => Some(key_path.as_str()),
+-                State::Private(_) | State::Public { .. } => None,
+-            })
+-            .collect();
+-
+-        if let Some(pin) = self.pin.clone() {
+-            let mut wallet = KeycardWallet::new()?;
+-            wallet.connect(&pin)?;
+-            for path in keycard_paths {
+-                sigs.push(wallet.sign_message_for_path(path, &message_hash)?);
++    /// The accounts signing this transaction, in signature order: local accounts first, keycard
++    /// accounts second.
++    pub fn tx_signers(&self) -> Vec<TxSigner> {
++        let local = self.states.iter().filter_map(|state| match state {
++            State::Public { account, sk } => {
++                sk.as_ref().map(|_| TxSigner::Local(account.account_id))
+             }
+-        }
++            State::PublicKeycard { .. } | State::Private(_) => None,
++        });
++        let keycard = self.states.iter().filter_map(|state| match state {
++            State::PublicKeycard { account, key_path } => Some(TxSigner::Keycard {
++                account_id: account.account_id,
++                key_path: key_path.clone(),
++            }),
++            State::Public { .. } | State::Private(_) => None,
++        });
++        local.chain(keycard).collect()
++    }
+ 
+-        Ok(sigs)
++    /// The keycard PIN read while preparing keycard accounts, if any.
++    pub fn keycard_pin(&self) -> Option<String> {
++        self.pin.clone()
+     }
+ }
+ 
+@@ -657,6 +653,44 @@ struct AccountPreparedData {
+     random_seed: [u8; 32],
+ }
+ 
++/// Signs `message_hash` for each of `signers`, in order.
++pub fn sign_message(
++    wallet: &WalletCore,
++    signers: &[TxSigner],
++    keycard_pin: Option<&str>,
++    message_hash: [u8; 32],
++) -> Result<Vec<(Signature, PublicKey)>> {
++    let mut keycard: Option<KeycardWallet> = None;
++    let mut sigs = Vec::with_capacity(signers.len());
++    for signer in signers {
++        sigs.push(match signer {
++            TxSigner::Local(account_id) => {
++                let key = wallet
++                    .get_account_public_signing_key(*account_id)
++                    .with_context(|| format!("Signing key of {account_id} not found"))?;
++                (
++                    Signature::new(key, &message_hash),
++                    PublicKey::new_from_private_key(key),
++                )
++            }
++            TxSigner::Keycard { key_path, .. } => {
++                if keycard.is_none() {
++                    let pin = keycard_pin.context("Keycard PIN is required to sign")?;
++                    let mut connected = KeycardWallet::new()?;
++                    connected.connect(pin)?;
++                    keycard = Some(connected);
++                }
++                keycard
++                    .as_mut()
++                    .expect("Keycard is connected above")
++                    .sign_message_for_path(key_path, &message_hash)?
++            }
++        });
++    }
++
++    Ok(sigs)
++}
++
+ /// Builds a witness kind from the account kind and available authorization key.
+ /// PDAs use their authority and seed instead of an authorization key.
+ const fn witness_kind(
+diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
+index 181e70a..1999edb 100644
+--- a/lez/wallet/src/lib.rs
++++ b/lez/wallet/src/lib.rs
+@@ -12,7 +12,9 @@ use std::{
+     path::PathBuf,
+ };
+ 
+-pub use account_manager::{AccountIdentity, AccountMention, CIPHERTEXT_PAD_SIZE, SelectedShard};
++pub use account_manager::{
++    AccountIdentity, AccountMention, CIPHERTEXT_PAD_SIZE, SelectedShard, TxSigner,
++};
+ use anyhow::{Context as _, Result};
+ use bip39::Mnemonic;
+ use common::{HashType, block::Block, transaction::LeeTransaction};
+@@ -86,6 +88,15 @@ pub struct SharedAccountInfo {
+     pub vpk: lee_core::encryption::ViewingPublicKey,
+ }
+ 
++/// A public transaction built by [`WalletCore::prepare_public`], awaiting approval.
++///
++/// Holds no signing keys: [`WalletCore::sign_and_submit_public`] looks local keys up in storage.
++pub struct PreparedPublicTx {
++    message: lee::public_transaction::Message,
++    signers: Vec<TxSigner>,
++    keycard_pin: Option<String>,
++}
++
+ #[derive(Debug, thiserror::Error)]
+ pub enum ExecutionFailureKind {
+     #[error("Failed to get data from sequencer")]
+@@ -883,10 +894,13 @@ impl WalletCore {
+             output,
+         );
+ 
+-        let message_hash = message.hash();
+-        let signatures_public_keys = acc_manager
+-            .sign_message(message_hash)
+-            .map_err(ExecutionFailureKind::SignError)?;
++        let signatures_public_keys = account_manager::sign_message(
++            self,
++            &acc_manager.tx_signers(),
++            acc_manager.keycard_pin().as_deref(),
++            message.hash(),
++        )
++        .map_err(ExecutionFailureKind::SignError)?;
+ 
+         let witness_set =
+             lee::privacy_preserving_transaction::witness_set::WitnessSet::from_raw_parts(
+@@ -957,6 +971,28 @@ impl WalletCore {
+         payer: Option<AccountId>,
+         tx_pre_check: impl FnOnce(&[SelectedShard]) -> Result<(), ExecutionFailureKind>,
+     ) -> Result<HashType, ExecutionFailureKind> {
++        let prepared = self
++            .prepare_public(
++                accounts,
++                instruction_data,
++                program_account_id,
++                payer,
++                tx_pre_check,
++            )
++            .await?;
++        self.sign_and_submit_public(prepared).await
++    }
++
++    /// Builds the public transaction [`Self::send_pub_tx_with_pre_check`] would send, without
++    /// signing or submitting it, so its message can be shown for approval first.
++    pub async fn prepare_public(
++        &self,
++        accounts: Vec<AccountMention>,
++        instruction_data: InstructionData,
++        program_account_id: AccountId,
++        payer: Option<AccountId>,
++        tx_pre_check: impl FnOnce(&[SelectedShard]) -> Result<(), ExecutionFailureKind>,
++    ) -> Result<PreparedPublicTx, ExecutionFailureKind> {
+         // Public transaction, all accounts must be public
+         if accounts.iter().any(|mention| mention.identity.is_private()) {
+             return Err(ExecutionFailureKind::TransactionBuildError(
+@@ -979,7 +1015,7 @@ impl WalletCore {
+                 msg.to_owned(),
+             ))
+         };
+-        let (payer, co_signer) = match payer {
++        let (payer, co_signs) = match payer {
+             None => (
+                 acc_manager
+                     .fee_payer_account_id(self)
+@@ -987,24 +1023,26 @@ impl WalletCore {
+                     .ok_or_else(|| {
+                         invalid_input("Public transaction has no signing account to pay its fees")
+                     })?,
+-                None,
++                false,
+             ),
+-            Some(payer) if acc_manager.signs_for(payer) => (payer, None),
++            Some(payer) if acc_manager.signs_for(payer) => (payer, false),
+             Some(payer) if account_ids.contains(&payer) => {
+                 return Err(invalid_input(
+                     "Fee payer is a non-signing account of this transaction",
+                 ));
+             }
+             Some(payer) => {
+-                let key = self.get_account_public_signing_key(payer).ok_or_else(|| {
+-                    invalid_input("Fee payer's signing key is not held by this wallet")
+-                })?;
++                if self.get_account_public_signing_key(payer).is_none() {
++                    return Err(invalid_input(
++                        "Fee payer's signing key is not held by this wallet",
++                    ));
++                }
+                 let account = self
+                     .get_account_view(ProgramShardSelector::native_balance(payer))
+                     .await
+                     .map_err(ExecutionFailureKind::SequencerError)?;
+                 nonces.push(account.nonce);
+-                (payer, Some(key))
++                (payer, true)
+             }
+         };
+ 
+@@ -1021,17 +1059,32 @@ impl WalletCore {
+             )),
+         );
+ 
+-        let message_hash = message.hash();
+-        let mut signatures_public_keys = acc_manager
+-            .sign_message(message_hash)
+-            .map_err(ExecutionFailureKind::SignError)?;
+-        if let Some(key) = co_signer {
+-            signatures_public_keys.push((
+-                lee::Signature::new(key, &message_hash),
+-                lee::PublicKey::new_from_private_key(key),
+-            ));
++        let mut signers = acc_manager.tx_signers();
++        if co_signs {
++            signers.push(TxSigner::Local(payer));
+         }
+ 
++        Ok(PreparedPublicTx {
++            message,
++            signers,
++            keycard_pin: acc_manager.keycard_pin(),
++        })
++    }
++
++    /// Signs a [`PreparedPublicTx`] and submits it to the sequencers.
++    pub async fn sign_and_submit_public(
++        &self,
++        prepared: PreparedPublicTx,
++    ) -> Result<HashType, ExecutionFailureKind> {
++        let PreparedPublicTx {
++            message,
++            signers,
++            keycard_pin,
++        } = prepared;
++        let signatures_public_keys =
++            account_manager::sign_message(self, &signers, keycard_pin.as_deref(), message.hash())
++                .map_err(ExecutionFailureKind::SignError)?;
++
+         let witness_set =
+             lee::public_transaction::WitnessSet::from_raw_parts(signatures_public_keys);
+ 
+@@ -1239,6 +1292,20 @@ impl WalletCore {
+     }
+ }
+ 
++impl PreparedPublicTx {
++    /// The exact message that [`WalletCore::sign_and_submit_public`] signs.
++    #[must_use]
++    pub const fn message(&self) -> &lee::public_transaction::Message {
++        &self.message
++    }
++
++    /// The accounts that will sign [`Self::message`], in signature order.
++    #[must_use]
++    pub fn signers(&self) -> &[TxSigner] {
++        &self.signers
++    }
++}
++
+ /// Sizes a fee cap for a given gas limit: a wallet that raises its gas limit
+ /// must raise its fee cap in step, or the reservation cannot cover the gas.
+ #[must_use]
