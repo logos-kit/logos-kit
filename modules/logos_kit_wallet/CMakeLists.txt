@@ -2,6 +2,9 @@
 # The module lives entirely in the Rust crate under rust-lib/. The builder
 # compiles it to a staticlib and links it into the plugin along with the
 # generated Qt glue, so there are no C++ SOURCES to list here.
+# EXTERNAL_LIBS links the LEZ wallet engine (libwallet_engine, from the root
+# flake via externalLibInputs). Without it the plugin still links, because the
+# Rust glue uses dynamic lookup, and then crashes on the first engine call.
 
 cmake_minimum_required(VERSION 3.14)
 project(LogosKitWalletModulePlugin LANGUAGES CXX)
@@ -20,4 +23,8 @@ endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
 string(JSON MODULE_NAME GET ${METADATA_JSON} name)
 
-logos_module(NAME ${MODULE_NAME})
+logos_module(
+    NAME ${MODULE_NAME}
+    EXTERNAL_LIBS
+        wallet_engine
+)
