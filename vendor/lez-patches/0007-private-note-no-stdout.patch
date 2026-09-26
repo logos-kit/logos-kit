@@ -9,33 +9,39 @@ private account to stdout unconditionally, which an embedding wallet sends to
 its logs, and unwrapped the decryption. Log it at debug level and return an
 error instead.
 ---
- lez/wallet/src/lib.rs | 12 +++++++-----
- 1 file changed, 7 insertions(+), 5 deletions(-)
+ lez/wallet/src/lib.rs | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
 
 diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
-index a286621..def3205 100644
+index a286621..f795280 100644
 --- a/lez/wallet/src/lib.rs
 +++ b/lez/wallet/src/lib.rs
-@@ -811,15 +811,17 @@ impl WalletCore {
+@@ -811,15 +811,19 @@ impl WalletCore {
                          );
                          continue;
                      };
 -                    let (kind, res_acc) =
 -                        decrypt_note_at(&tx.message, output_index, secret).unwrap();
+-
+-                    println!("Received new acc {res_acc:#?}");
+-
+-                    self.storage
+-                        .key_chain_mut()
+-                        .insert_private_account(*acc_account_id, kind, res_acc)
+-                        .expect("Account Id should exist");
 +                    let (kind, res_acc) = decrypt_note_at(&tx.message, output_index, secret)
 +                        .with_context(|| {
 +                            format!("note for {acc_account_id} does not decrypt with its secret")
 +                        })?;
- 
--                    println!("Received new acc {res_acc:#?}");
++
 +                    // Plaintext private state: debug log only, never stdout.
 +                    log::debug!("Received new acc {res_acc:#?}");
- 
-                     self.storage
-                         .key_chain_mut()
--                        .insert_private_account(*acc_account_id, kind, res_acc)
--                        .expect("Account Id should exist");
-+                        .insert_private_account(*acc_account_id, kind, res_acc)?;
++
++                    self.storage.key_chain_mut().insert_private_account(
++                        *acc_account_id,
++                        kind,
++                        res_acc,
++                    )?;
                  }
                  AccDecodeData::Skip => {}
              }
