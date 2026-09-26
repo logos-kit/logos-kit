@@ -128,3 +128,23 @@ The single place to resume from after a context clear.
 - 2026-09-26: macOS builds of `lee/prove` need the Metal Toolchain (risc0-sys always compiles Metal kernels on macOS). Installed per LEZ's `flake.nix` note. `RISC0_SKIP_BUILD_KERNELS=1` is fine for `cargo check` only.
 - 2026-09-26: vectors derive keys through LEZ's real `KeyTree` API, not our own path walk. The official wallet's layered order is `/0`, `/1`, `/0/0`, which a naive derivation would get wrong.
 - 2026-09-26: the `keys.json` private entries embed LEZ's serde form of `KeyChain`, so the shape tracks upstream. Test mnemonic only (`abandon … about`), never funded.
+
+---
+
+## Stage S2 · Keystore, accounts, zones, sync, E2E harness, branch `stage/02-keystore`
+
+**Status:** in progress (started 2026-09-26, while the S1 Linux build finishes)
+
+- [x] `vault.v1` (`crates/wallet-engine/src/vault.rs`): Argon2id (64 MiB/t3/p1; bounds on load 19 MiB–1 GiB, t 2–10, p 1–8) → XChaCha20-Poly1305, header as AAD, lock file + staged 0600 + fsync + rename + dir fsync, `Zeroizing`. `EncryptedBackend` = LEZ `StorageBackend` (patch 0001) with debounced saves + flush. Proof: `tests/keystore.rs` 5 passed (round trip, wrong password, header tamper/bounds, crash mid-write, password change, debounce) (`87db62c`)
+- [x] Session + zones (`session.rs`): `keys/` vault holds the phrase, `zones/<id>/` holds LEZ Storage per zone; offline-first (create/restore/unlock/accounts/new account without a sequencer; `connect()` builds `WalletCore`, stays offline and usable on failure). Proof: `tests/session.rs` 2 passed (`ec81a10`)
+- [x] E2E harness `e2e/standalone.sh` (standalone `sequencer_service` from vendor/lez, `RISC0_DEV_MODE=1`, debug genesis, loopback :3040; needs `r0vm` 3.0.5 via rzup). `just e2e`. Fingerprint: version 0.3
+- [x] Integration-confidence #2 (network half): `tests/e2e_sync.rs` creates public + private accounts, connects, syncs (observer `start 1..=3`, `finish 3`), sync position survives lock/unlock (`9653513`)
+- [ ] Labels, import birthday, persisted indexes, auto-lock, mnemonic reveal with re-auth (engine API), network-drop backoff + offline banner state
+- [ ] Security review (running), code review
+
+### Exit criteria
+- [x] Logos Kit creates accounts and syncs against the standalone sequencer (proof above)
+
+### Decisions and deviations
+- 2026-09-26: **Offline-first session.** `WalletCore::new` fails with "Failed to find leader" when no sequencer answers, so the session keeps LEZ `Storage` itself until `connect()`. Creating, restoring and unlocking a wallet never need the network.
+- 2026-09-26: Keys and per-zone state are separate vaults under one password: adding a zone restores the same phrase, so accounts match across zones (LP-0022).
