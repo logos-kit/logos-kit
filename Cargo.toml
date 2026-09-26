@@ -31,6 +31,10 @@ programs = { path = "vendor/lez/lez/programs", default-features = false, feature
 token_core = { path = "vendor/lez/lez/programs/token/core" }
 token_program = { path = "vendor/lez/lez/programs/token" }
 associated_token_account_core = { path = "vendor/lez/lez/programs/associated_token_account/core" }
+program_loader_core = { path = "vendor/lez/lez/programs/program_loader/core" }
+risc0-binfmt = "3.0.2"
+# Our testimonial program's shared types (the guest has its own workspace).
+testimonial_core = { path = "programs/testimonial/core" }
 borsh = "1.5.7"
 
 [workspace.lints.rust]

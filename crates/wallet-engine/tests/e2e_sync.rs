@@ -80,10 +80,19 @@ async fn e2e_restore_skips_blocks_before_birthday_and_discovers() {
         Session::create(DataDir::new(a.path()), "pw", zone.clone(), COST).unwrap();
     original.connect().await.expect("connect");
     let core = original.core().unwrap();
-    let tip = core.get_last_block_id().await.unwrap();
+    // A fresh sequencer may have only genesis: wait for a few blocks (a
+    // cached build no longer gives it that time).
+    let mut tip = core.get_last_block_id().await.unwrap();
+    for _ in 0..120 {
+        if tip >= 4 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        tip = core.get_last_block_id().await.unwrap();
+    }
     assert!(
         tip >= 4,
-        "let the sequencer produce a few blocks first (tip {tip})"
+        "the sequencer made no blocks in 2 min (tip {tip})"
     );
     let mid = tip / 2;
     let mid_ts = core.get_block(mid).await.unwrap().unwrap().header.timestamp;

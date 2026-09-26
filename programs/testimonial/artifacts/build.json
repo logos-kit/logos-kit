@@ -1,0 +1,11 @@
+{
+  "imageId": "8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e",
+  "source": {
+    "repo": "https://github.com/logos-kit/logos-kit",
+    "commit": "bb7764af54455eba33ee0a81c05cce94ab64778f",
+    "guestPath": "programs/testimonial/methods/guest",
+    "bin": "testimonial.bin",
+    "dockerTag": "r0.1.91.1"
+  },
+  "built": "2026-09-26"
+}

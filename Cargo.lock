@@ -8207,6 +8207,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "testimonial_core"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "sha2",
+]
+
+[[package]]
 name = "testnet_initial_state"
 version = "0.1.0"
 dependencies = [
@@ -9146,12 +9154,15 @@ dependencies = [
  "key_protocol",
  "lee",
  "lee_core",
+ "program_loader_core",
  "programs",
+ "risc0-binfmt",
  "sequencer_service_rpc",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "testimonial_core",
  "token_core",
  "token_program",
  "tokio",

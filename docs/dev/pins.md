@@ -110,3 +110,9 @@ The succinct proof was 225,883 B for fully private and 224,643 B for public+priv
   - Show an indeterminate spinner with an elapsed timer, and keep proving in the background (lever L10). Do not promise a figure under a minute.
   - The executor dry run (E1, under 0.1 s) is cheap. Run it first to validate inputs and get the cycle count, then scale the ETA from total cycles. At default po2 20, this machine proved about 2.1 M cycles in about 6–8 min on 10 threads; slow it down proportionally for fewer cores.
 - **Metal gives no speedup at risc0 3.0.5.** The Metal prover paths are compiled out upstream, so Apple GPU acceleration would need a risc0 upgrade or re-enablement. It is not available by just setting a flag.
+
+## Our programs
+
+| Program | Image id | Source | Built |
+|---|---|---|---|
+| testimonial | `8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e` | this repo @ `bb7764af54455eba33ee0a81c05cce94ab64778f`, `programs/testimonial/methods/guest`, docker `r0.1.91.1` | 2026-09-26 (`programs/testimonial/artifacts/build.json`; lockfile seeded from LEZ's, risc0-zkvm 3.0.5) |

@@ -1,0 +1,28 @@
+# The testimonial program's own workspace: the guest builds with
+# cargo-risczero in the pinned docker builder (`logos-kit verify-program`),
+# so it stays outside the root workspace. `Cargo.lock` is committed; the
+# builder fetches with `--locked`.
+[workspace]
+resolver = "3"
+members = ["core", "methods/guest"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+borsh = "1.5.7"
+sha2 = "0.10.8"
+testimonial_core = { path = "core" }
+# Upstream LEZ at the pinned rev (docs/dev/pins.md). Our LEZ patches touch
+# only the wallet crate, so this lee_core is the one the engine links.
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+risc0-zkvm = { version = "3.0.5", default-features = false, features = ["std"] }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Same as LEZ's workspace: keccak with the RISC Zero-accelerated backend.
+[patch.crates-io]
+keccak = { git = "https://github.com/logos-blockchain/sponges", rev = "3a56e99771beedf04946eab21a4a62adc2951377" }
