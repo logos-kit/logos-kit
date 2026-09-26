@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod ffi;
+pub mod vault;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).
 pub const LEZ_REV: &str = "f7fda38a4428b9989f1db1dbf5d2411484848fd4";

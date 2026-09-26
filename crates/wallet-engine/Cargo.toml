@@ -24,8 +24,13 @@ lee_core.workspace = true
 key_protocol.workspace = true
 common.workspace = true
 bip39 = "2.2"
+# vault.v1 (versions already in the lockfile via LEZ: aead 0.5 line)
+argon2 = "0.5.3"
+base64 = "0.22"
+chacha20poly1305 = "0.10.1"
+zeroize = "1.9"
 
 [dev-dependencies]
-base64 = "0.22"
+tempfile = "3"
 borsh = "1.5.7"
 hex = "0.4.3"
