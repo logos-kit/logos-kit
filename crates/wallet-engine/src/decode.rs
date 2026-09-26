@@ -29,6 +29,8 @@ pub enum Decoder {
     Native,
     Token,
     AssociatedToken,
+    /// Only attached to a program whose live image is our testimonial build.
+    Testimonial,
 }
 
 /// The `(program account, decoder)` list. Defaults to the 0.3 builtins; a zone
@@ -163,6 +165,9 @@ pub fn public(message: &PublicMessage, decoders: &Decoders) -> Summary {
         {
             ata(data, &accounts)
         }
+        Some(Decoder::Testimonial) if shards.iter().all(|s| *s == program) => {
+            testimonial(data, &accounts, program)
+        }
         _ => None,
     };
     let mut summary = decoded.unwrap_or_else(|| Summary {
@@ -179,6 +184,44 @@ pub fn public(message: &PublicMessage, decoders: &Decoders) -> Summary {
     });
     summary.program = program.to_string();
     summary
+}
+
+/// A post decodes only if its accounts are exactly the ones the program
+/// derives for it; otherwise the program would refuse it anyway, and the
+/// sheet shows it as unknown.
+fn testimonial(data: &[u8], accounts: &[AccountId], program: AccountId) -> Option<Summary> {
+    let testimonial_core::Instruction::Post {
+        submission,
+        username,
+        text,
+        timestamp_ms,
+    } = borsh::from_slice(data).ok()?;
+    testimonial_core::check_post(&submission, username.as_deref(), &text).ok()?;
+    let [author, stats, record] = accounts else {
+        return None;
+    };
+    let p = program.value();
+    if *stats.value() != testimonial_core::stats_account(p, &submission)
+        || *record.value() != testimonial_core::record_account(p, &submission, author.value())
+    {
+        return None;
+    }
+    let mut lines = vec![format!("Submission: {submission}")];
+    lines.push(match &username {
+        Some(u) => format!("Name: {u}"),
+        None => "Name: none".to_owned(),
+    });
+    lines.push(format!("Text: {text}"));
+    lines.push(format!("Time: {}", crate::testimonial::iso(timestamp_ms)));
+    lines.push(format!(
+        "Posted publicly and permanently from {}",
+        short(author)
+    ));
+    Some(Summary {
+        title: "Post a testimonial".to_owned(),
+        lines,
+        ..Summary::default()
+    })
 }
 
 fn native(data: &[u8], accounts: &[AccountId]) -> Option<Summary> {

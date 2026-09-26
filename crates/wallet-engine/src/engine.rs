@@ -952,6 +952,8 @@ impl Engine {
     ) -> Result<TxStatus> {
         // Own-account invariant: which of our private accounts must move, by how much.
         let watch = own_invariant(&prepared.review);
+        // A testimonial post proves itself by the record it writes.
+        let post = crate::testimonial::watch(&prepared.review);
         let tx_hash = if prepared.needs_proof() {
             let (job, pins) = prepared.into_proving()?;
             let slot = {
@@ -1064,7 +1066,21 @@ impl Engine {
                     _ => (Outcome::Unknown, OutcomeSource::None),
                 }
             }
-            _ => (Outcome::Unknown, OutcomeSource::None),
+            _ => match post {
+                Some(post) => match self
+                    .with_session(async |s| {
+                        let core = s.core().context("not connected")?;
+                        crate::testimonial::observe(core, &post).await
+                    })
+                    .await
+                {
+                    // The record is keyed by our author account.
+                    Ok(Some(true)) => (Outcome::Success, OutcomeSource::OwnAccountInvariant),
+                    Ok(Some(false)) => (Outcome::Failure, OutcomeSource::OwnAccountInvariant),
+                    _ => (Outcome::Unknown, OutcomeSource::None),
+                },
+                None => (Outcome::Unknown, OutcomeSource::None),
+            },
         };
         Ok(self.update(handle, progress, |s| {
             s.lifecycle = Lifecycle::Included;

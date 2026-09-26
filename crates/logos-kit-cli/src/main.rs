@@ -15,11 +15,13 @@ use std::{
 
 use anyhow::{Context as _, Result, bail, ensure};
 use clap::{Parser, Subcommand};
+use wallet_engine::AccountId;
 use wallet_engine::{
     engine::{Config, Engine, Lifecycle, RequestView, Ticket, TxStatus},
     faucet::{HttpFaucet, KeyFaucet},
     policy::{Caller, code_of},
     session::{AccountKind, Birthday, DataDir, Session, Zone},
+    testimonial,
     tx::{CallAccount, Intent, RecipientKeys, Review, Route},
     vault::KdfCost,
     verify,
@@ -145,6 +147,9 @@ enum Command {
     /// Encrypted backups (needs the password they were made with to restore).
     #[command(subcommand)]
     Backup(BackupCmd),
+    /// The testimonial program (LP-0021): post, list, evidence, build, deploy.
+    #[command(subcommand)]
+    Testimonial(TestimonialCmd),
     /// Zone, sync and network state.
     Status,
     /// Zones this wallet knows.
@@ -198,6 +203,69 @@ enum TokenCmd {
         supply: u128,
         #[arg(long)]
         holder: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TestimonialCmd {
+    /// Post a testimonial from one of your public accounts (it pays the fee
+    /// and is shown on-chain as the author).
+    Post {
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        username: Option<String>,
+        /// Program account (default: the registry's for this zone).
+        #[arg(long)]
+        program: Option<String>,
+        #[arg(long, default_value = testimonial::SUBMISSION)]
+        submission: String,
+    },
+    /// A submission's testimonials, in posting order.
+    List {
+        #[arg(long)]
+        program: Option<String>,
+        #[arg(long, default_value = testimonial::SUBMISSION)]
+        submission: String,
+    },
+    /// Adoption evidence from chain data: distinct authors per month, the
+    /// LP-0021 target, each author's other activity. Repeat --program for a
+    /// redeploy or a chain reset.
+    Evidence {
+        #[arg(long = "program")]
+        programs: Vec<String>,
+        #[arg(long, default_value = testimonial::SUBMISSION)]
+        submission: String,
+        /// Also write `<dir>/<submission>-<date>.json` (records + tip block).
+        #[arg(long)]
+        snapshot: Option<PathBuf>,
+    },
+    /// Build the program from a commit of this repo in the pinned docker
+    /// builder; write `testimonial.bin` and `build.json` to --out.
+    Build {
+        /// Default: HEAD.
+        #[arg(long)]
+        commit: Option<String>,
+        /// The public repo recorded as the source.
+        #[arg(long, default_value = "https://github.com/logos-kit/logos-kit")]
+        repo_url: String,
+        #[arg(long, default_value = "r0.1.91.1")]
+        docker_tag: String,
+        #[arg(long, default_value = "programs/testimonial/artifacts")]
+        out: PathBuf,
+    },
+    /// Deploy the built program (owner). New accounts of this wallet hold the
+    /// header and segments; --payer pays.
+    Deploy {
+        #[arg(long)]
+        payer: String,
+        /// Nobody can upgrade it afterwards (production).
+        #[arg(long)]
+        immutable: bool,
+        #[arg(long, default_value = "programs/testimonial/artifacts/testimonial.bin")]
+        bin: PathBuf,
     },
 }
 
@@ -769,20 +837,229 @@ fn verify_builtins(repo: Option<&str>, docker_tag: &str) -> Result<()> {
 }
 
 fn today() -> String {
-    let days = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() / 86_400);
-    // civil-from-days (H. Hinnant)
-    let z = i64::try_from(days).unwrap_or(0) + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{y:04}-{m:02}-{d:02}")
+    testimonial::iso(testimonial::now_ms())[..10].to_owned()
+}
+
+/// The program account a command names, else the registry's for the zone.
+fn testimonial_program(session: &Session, program: Option<&str>) -> Result<AccountId> {
+    let program = match program {
+        Some(p) => p.to_owned(),
+        None => testimonial::default_program(&session.zone().chain).with_context(|| {
+            format!(
+                "no testimonial program is known for {}; pass --program",
+                session.zone().chain
+            )
+        })?,
+    };
+    wallet_engine::decode::account_id(&program)
+}
+
+fn git(args: &[&str]) -> Result<String> {
+    let out = std::process::Command::new("git").args(args).output()?;
+    ensure!(out.status.success(), "git {} failed", args.join(" "));
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+}
+
+async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
+    match cmd {
+        TestimonialCmd::Post {
+            from,
+            text,
+            username,
+            program,
+            submission,
+        } => {
+            let intent = Intent::Testimonial {
+                from: from.clone(),
+                program: program.clone(),
+                submission: submission.clone(),
+                username: username.clone(),
+                text: text.clone(),
+            };
+            transact(cli, intent, None).await
+        }
+        TestimonialCmd::List {
+            program,
+            submission,
+        } => {
+            let (mut session, _) = open(cli).await?;
+            session.connect().await?;
+            let program = testimonial_program(&session, program.as_deref())?;
+            let core = session.core().context("not connected")?;
+            testimonial::check_program(core, program).await?;
+            let stats = testimonial::stats(core, program, submission).await?;
+            let mut rows = Vec::new();
+            for author in &stats.authors {
+                let author = AccountId::new(*author);
+                if let Some(t) = testimonial::record(core, program, submission, author).await? {
+                    rows.push(serde_json::json!({
+                        "author": author.to_string(), "username": t.username,
+                        "text": t.text, "timestampMs": t.timestamp_ms,
+                        "time": testimonial::iso(t.timestamp_ms),
+                    }));
+                }
+            }
+            print(cli, &serde_json::Value::Array(rows.clone()), || {
+                println!("{submission}: {} testimonial(s)", rows.len());
+                for (i, r) in rows.iter().enumerate() {
+                    println!(
+                        "#{i} {} {} ({})\n    {}",
+                        r["time"].as_str().unwrap_or(""),
+                        r["author"].as_str().unwrap_or(""),
+                        r["username"].as_str().unwrap_or("no name"),
+                        r["text"].as_str().unwrap_or("").replace('\n', "\n    ")
+                    );
+                }
+            });
+            session.lock()
+        }
+        TestimonialCmd::Evidence {
+            programs,
+            submission,
+            snapshot,
+        } => {
+            let (mut session, _) = open(cli).await?;
+            session.connect().await?;
+            let programs = if programs.is_empty() {
+                vec![testimonial_program(&session, None)?]
+            } else {
+                programs
+                    .iter()
+                    .map(|p| wallet_engine::decode::account_id(p))
+                    .collect::<Result<Vec<_>>>()?
+            };
+            let core = session.core().context("not connected")?;
+            let evidence = testimonial::evidence(core, &programs, submission).await?;
+            let value = serde_json::to_value(&evidence)?;
+            if let Some(dir) = snapshot {
+                std::fs::create_dir_all(dir)?;
+                let name = format!("{}-{}.json", submission.replace('/', "_"), today());
+                let path = dir.join(name);
+                std::fs::write(&path, serde_json::to_vec_pretty(&value)?)?;
+                eprintln!("snapshot {}", path.display());
+            }
+            print(cli, &value, || {
+                println!(
+                    "{}: {} distinct author(s), tip block {}",
+                    evidence.submission, evidence.distinct_authors, evidence.tip.block
+                );
+                println!("month     new authors");
+                for m in &evidence.months {
+                    println!("{}   {:>5}", m.month, m.count);
+                }
+                for p in &evidence.programs {
+                    if !p.consistent {
+                        println!(
+                            "WARNING: {}'s monthly tally differs from its records",
+                            p.account
+                        );
+                    }
+                }
+                let t = &evidence.target;
+                println!(
+                    "target: {} total ({}), {} per month over 2 consecutive months ({}) → {}",
+                    t.total,
+                    if t.total_met { "met" } else { "not yet" },
+                    t.per_month,
+                    if t.months_met { "met" } else { "not yet" },
+                    if t.met { "MET" } else { "not met" }
+                );
+            });
+            session.lock()
+        }
+        TestimonialCmd::Build {
+            commit,
+            repo_url,
+            docker_tag,
+            out,
+        } => {
+            let root = git(&["rev-parse", "--show-toplevel"])?;
+            let commit = match commit {
+                Some(c) => git(&["rev-parse", &format!("{c}^{{commit}}")])?,
+                None => git(&["rev-parse", "HEAD"])?,
+            };
+            let source = verify::Source {
+                repo: root,
+                commit,
+                guest_path: "programs/testimonial/methods/guest".to_owned(),
+                bin: "testimonial.bin".to_owned(),
+                docker_tag: docker_tag.clone(),
+                features: None,
+            };
+            let work = std::env::temp_dir().join("logos-kit-build-testimonial");
+            eprintln!(
+                "building testimonial @ {} in docker {docker_tag} …",
+                &source.commit[..12]
+            );
+            let dir = verify::build(&source, &work)?;
+            let bin = std::fs::read(dir.join(&source.bin))?;
+            let image = verify::image_hex(&testimonial::image_of(&bin)?);
+            let build = testimonial::Build {
+                image_id: image.clone(),
+                source: verify::Source {
+                    repo: repo_url.clone(),
+                    ..source
+                },
+                built: today(),
+            };
+            std::fs::create_dir_all(out)?;
+            std::fs::write(out.join("testimonial.bin"), &bin)?;
+            std::fs::write(
+                out.join("build.json"),
+                format!("{}\n", serde_json::to_string_pretty(&build)?),
+            )?;
+            print(cli, &serde_json::to_value(&build)?, || {
+                println!("image {image}\nwrote {}", out.display());
+            });
+            Ok(())
+        }
+        TestimonialCmd::Deploy {
+            payer,
+            immutable,
+            bin,
+        } => {
+            let elf = std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))?;
+            let image = verify::image_hex(&testimonial::image_of(&elf)?);
+            let pinned = testimonial::build()
+                .context("no build.json compiled in; run `testimonial build` and rebuild")?;
+            ensure!(
+                image == pinned.image_id,
+                "{} is image {image}, but this wallet knows the testimonial as {}",
+                bin.display(),
+                pinned.image_id
+            );
+            let (mut session, _) = open(cli).await?;
+            let payer = wallet_engine::decode::account_id(payer)?;
+            if !confirm(
+                cli,
+                &format!(
+                    "Deploy the testimonial program ({}) to {}, paid by {payer}?",
+                    if *immutable {
+                        "immutable"
+                    } else {
+                        "upgradeable"
+                    },
+                    session.zone().id
+                ),
+            )? {
+                bail!("cancelled");
+            }
+            let program = session.deploy_program(elf, payer, *immutable).await?;
+            let entry = serde_json::json!({
+                "name": "testimonial", "chain": session.zone().chain,
+                "account": program.to_string(), "imageId": image,
+                "source": pinned.source,
+            });
+            print(cli, &entry, || {
+                println!("deployed at {program}");
+                println!(
+                    "registry entry:\n{}",
+                    serde_json::to_string_pretty(&entry).unwrap_or_default()
+                );
+            });
+            session.lock()
+        }
+    }
 }
 
 /// Rebuild one program from its source and compare with what's deployed.
@@ -973,6 +1250,7 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Shield(args) => transact(&cli, transfer(args)?, Some(Route::Shield)).await,
         Command::Deshield(args) => transact(&cli, transfer(args)?, Some(Route::Unshield)).await,
         Command::Token(cmd) => token(&cli, cmd).await,
+        Command::Testimonial(cmd) => testimonial_cmd(&cli, cmd).await,
         Command::Faucet {
             account,
             via,

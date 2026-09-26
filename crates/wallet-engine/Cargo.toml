@@ -28,6 +28,9 @@ programs.workspace = true
 token_core.workspace = true
 token_program.workspace = true
 associated_token_account_core.workspace = true
+program_loader_core.workspace = true
+risc0-binfmt.workspace = true
+testimonial_core.workspace = true
 borsh.workspace = true
 bip39 = { version = "2.2", features = ["zeroize"] }
 # vault.v1 (versions already in the lockfile via LEZ: aead 0.5 line)

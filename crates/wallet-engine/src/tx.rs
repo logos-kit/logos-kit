@@ -77,6 +77,26 @@ pub enum Intent {
         /// Borsh instruction bytes, base64.
         data: String,
     },
+    /// Post to the testimonial program. The wallet adds the time and the
+    /// program's accounts. `from` signs, pays and is shown on-chain as the
+    /// author, so it must be public.
+    #[serde(rename_all = "camelCase")]
+    Testimonial {
+        from: String,
+        /// Program account; defaults to the registry's for this chain. It
+        /// must run the Logos Kit testimonial image.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        program: Option<String>,
+        #[serde(default = "default_submission")]
+        submission: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        username: Option<String>,
+        text: String,
+    },
+}
+
+fn default_submission() -> String {
+    crate::testimonial::SUBMISSION.to_owned()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,7 +143,9 @@ impl Intent {
     /// The account whose grant an app needs to propose this.
     pub fn from_account(&self) -> &str {
         match self {
-            Self::Transfer { from, .. } | Self::Call { from, .. } => from,
+            Self::Transfer { from, .. }
+            | Self::Call { from, .. }
+            | Self::Testimonial { from, .. } => from,
         }
     }
 }
@@ -533,6 +555,9 @@ impl Session {
                 intent.clone(),
                 prepare_call(core, &decoders, &intent).await?,
             ),
+            Intent::Testimonial { .. } => {
+                prepare_testimonial(core, &decoders, intent, &chain).await?
+            }
         };
         // A foreign recipient's random identifier is part of what is approved.
         if let (
@@ -1092,7 +1117,14 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
         .await
         .map_err(lez)?;
     let message = tx.message();
-    let summary = decode::public(message, decoders);
+    // The testimonial decoder follows the image, never the address.
+    let decoders = match &check {
+        Some(c) if crate::testimonial::is_image(&c.image_id_words) => {
+            decoders.clone().with(program, decode::Decoder::Testimonial)
+        }
+        _ => decoders.clone(),
+    };
+    let summary = decode::public(message, &decoders);
     let from_balance = core.get_account_balance(from).await?;
     let native_out = summary
         .outflows
@@ -1122,6 +1154,73 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
         body: Body::Public(tx),
         chosen_identifier: None,
     })
+}
+
+async fn prepare_testimonial(
+    core: &WalletCore,
+    decoders: &Decoders,
+    intent: Intent,
+    chain: &str,
+) -> Result<(Intent, Built)> {
+    use crate::testimonial;
+    let Intent::Testimonial {
+        from,
+        program,
+        submission,
+        username,
+        text,
+    } = intent
+    else {
+        unreachable!("testimonial intent");
+    };
+    // Input first: it needs no chain reads.
+    testimonial_core::check_post(&submission, username.as_deref(), &text)?;
+    let (author, marked) = parse_account(&from)?;
+    ensure!(
+        marked != Some(true) && core.get_account_public_signing_key(author).is_some(),
+        "{author} is not a public account of this wallet (the author is shown on-chain, so it must be public)"
+    );
+    let program = match program {
+        Some(p) => p,
+        None => testimonial::default_program(chain)
+            .with_context(|| format!("no testimonial program is known for {chain}; name one"))?,
+    };
+    let program_id = decode::account_id(&program)?;
+    testimonial::check_program(core, program_id).await?;
+    let stats = testimonial::stats(core, program_id, &submission).await?;
+    ensure!(
+        stats.count() < testimonial_core::MAX_AUTHORS,
+        "{submission} has reached its testimonial limit"
+    );
+    ensure!(
+        testimonial::record(core, program_id, &submission, author)
+            .await?
+            .is_none(),
+        "{author} already posted a testimonial for {submission}"
+    );
+    let call = testimonial::post_call(
+        program_id,
+        author,
+        &submission,
+        username.as_deref(),
+        &text,
+        testimonial::now_ms(),
+    )?;
+    let built = prepare_call(core, decoders, &call).await?;
+    ensure!(
+        !built.summary.unknown,
+        "the testimonial post did not decode"
+    );
+    Ok((
+        Intent::Testimonial {
+            from,
+            program: Some(program),
+            submission,
+            username,
+            text,
+        },
+        built,
+    ))
 }
 
 /// Send `def` out of `owner`'s associated token account (public route).

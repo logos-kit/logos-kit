@@ -13,10 +13,14 @@ pub mod faucet;
 pub mod ffi;
 pub mod policy;
 pub mod session;
+pub mod testimonial;
 pub mod tokens;
 pub mod tx;
 pub mod vault;
 pub mod verify;
+
+/// LEZ account id, for callers without a LEZ dependency.
+pub use lee::AccountId;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).
 pub const LEZ_REV: &str = "f7fda38a4428b9989f1db1dbf5d2411484848fd4";

@@ -83,6 +83,9 @@ pub struct Source {
 #[serde(rename_all = "camelCase")]
 struct RegistryEntry {
     name: String,
+    /// CAIP-2 chain the account lives on (a deploy is per zone).
+    #[serde(default)]
+    chain: Option<String>,
     account: String,
     image_id: String,
     source: Source,
@@ -192,6 +195,14 @@ pub fn registry_source(account: &str) -> Option<(String, Source)> {
         .map(|e| (e.name, e.source))
 }
 
+/// The account the registry names for program `name` on `chain`.
+pub fn registry_program(name: &str, chain: &str) -> Option<String> {
+    registry()
+        .into_iter()
+        .find(|e| e.name == name && e.chain.as_deref() == Some(chain))
+        .map(|e| e.account)
+}
+
 /// The live header at `program`, or `None` if nothing is deployed there.
 pub async fn read_header(core: &WalletCore, program: AccountId) -> Result<Option<ProgramHeader>> {
     let account = core
@@ -279,6 +290,22 @@ fn classify(
                 format!("builtin {name}, same image as the LEZ release we pin"),
             )
         };
+        return out;
+    }
+
+    // Our own program is known by its image wherever it is deployed; the
+    // build record says which commit and builder reproduce it.
+    if let Some(build) = crate::testimonial::build().filter(|b| b.image_id == image) {
+        out.name = Some("testimonial".to_owned());
+        out.source = Some(build.source);
+        out.status = Status::VerifiedLocal;
+        out.note = format!(
+            "Logos Kit testimonial program, the image our docker build reproduced on {}",
+            build.built
+        );
+        if !out.immutable {
+            out.note.push_str("; its owner can still upgrade it");
+        }
         return out;
     }
 

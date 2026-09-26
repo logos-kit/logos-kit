@@ -53,3 +53,12 @@ e2e-tokens:
 # Rebuild the LEZ builtins in the pinned docker builder; refresh the evidence file.
 verify-builtins:
     cargo run -q -p logos-kit-cli -- verify-program --builtins > registry/builtins.json
+
+# S5 exit proof: deploy the testimonial program, post from 3 accounts, read evidence.
+e2e-testimonial:
+    e2e/standalone.sh
+    e2e/testimonial.sh; status=$?; e2e/standalone.sh stop; exit $status
+
+# Rebuild the testimonial program at HEAD in the pinned docker builder (artifacts/).
+build-testimonial:
+    cargo run -q -p logos-kit-cli -- testimonial build
