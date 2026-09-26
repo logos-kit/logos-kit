@@ -1,9 +1,11 @@
 //! Logos Kit wallet engine.
 //!
-//! S1 scope: link the LEZ v0.3 wallet stack at the pinned rev. Keystore,
-//! policy, approvals and proving arrive in S2–S4 (see docs/dev/PLAN.md).
+//! S1 linked the LEZ v0.3 wallet stack; S2 adds the keystore, sessions,
+//! zones, sync and auto-lock. Policy, approvals and proving arrive in S3–S4
+//! (see docs/dev/PLAN.md).
 
 pub mod api;
+pub mod auto_lock;
 pub mod ffi;
 pub mod session;
 pub mod vault;

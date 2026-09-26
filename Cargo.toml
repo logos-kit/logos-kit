@@ -26,6 +26,7 @@ lee = { path = "vendor/lez/lee/state_machine" }
 lee_core = { path = "vendor/lez/lee/state_machine/core" }
 key_protocol = { path = "vendor/lez/lee/key_protocol" }
 common = { path = "vendor/lez/lez/common" }
+sequencer_service_rpc = { path = "vendor/lez/lez/sequencer/service/rpc", features = ["client"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

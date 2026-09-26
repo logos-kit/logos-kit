@@ -83,12 +83,22 @@ impl KdfCost {
     }
 }
 
+/// How the vault key is obtained, as written in the file header.
 #[derive(Serialize, Deserialize)]
-struct Kdf {
-    alg: String,
-    #[serde(flatten)]
-    cost: KdfCost,
-    salt: String,
+#[serde(tag = "alg")]
+enum Kdf {
+    /// The key is Argon2id(password, salt).
+    #[serde(rename = "argon2id")]
+    Argon2id {
+        m: u32,
+        t: u32,
+        p: u32,
+        salt: String,
+    },
+    /// The key is random and held inside another vault (the keys vault).
+    /// `context` names what this vault is for (e.g. `zone:lez-testnet`).
+    #[serde(rename = "none")]
+    Keyed { context: String },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -100,17 +110,45 @@ struct VaultFile {
     ciphertext: String,
 }
 
-/// The associated data: a fixed-order rendering of everything but the nonce
-/// and ciphertext (so it doesn't depend on a JSON serializer's key order).
-fn aad(cost: KdfCost, salt: &[u8]) -> Vec<u8> {
-    format!(
-        "{FORMAT}|argon2id|m={}|t={}|p={}|salt={}|{CIPHER}",
-        cost.m,
-        cost.t,
-        cost.p,
-        B64.encode(salt)
-    )
-    .into_bytes()
+/// How an unlocked vault was sealed.
+#[derive(Clone, Debug)]
+enum Seal {
+    Password { cost: KdfCost, salt: [u8; 16] },
+    Keyed { context: String },
+}
+
+impl Seal {
+    /// The associated data: a fixed-order rendering of everything but the
+    /// nonce and ciphertext (so it doesn't depend on a JSON serializer's key
+    /// order). A keyed vault binds its context, so one zone's file can't be
+    /// swapped in for another's.
+    fn aad(&self) -> Vec<u8> {
+        match self {
+            Self::Password { cost, salt } => format!(
+                "{FORMAT}|argon2id|m={}|t={}|p={}|salt={}|{CIPHER}",
+                cost.m,
+                cost.t,
+                cost.p,
+                B64.encode(salt)
+            ),
+            Self::Keyed { context } => format!("{FORMAT}|keyed|context={context}|{CIPHER}"),
+        }
+        .into_bytes()
+    }
+
+    fn header(&self) -> Kdf {
+        match self {
+            Self::Password { cost, salt } => Kdf::Argon2id {
+                m: cost.m,
+                t: cost.t,
+                p: cost.p,
+                salt: B64.encode(salt),
+            },
+            Self::Keyed { context } => Kdf::Keyed {
+                context: context.clone(),
+            },
+        }
+    }
 }
 
 fn derive(password: &str, salt: &[u8], cost: KdfCost) -> Result<Zeroizing<[u8; 32]>> {
@@ -121,6 +159,13 @@ fn derive(password: &str, salt: &[u8], cost: KdfCost) -> Result<Zeroizing<[u8; 3
         .hash_password_into(password.as_bytes(), salt, key.as_mut())
         .map_err(|e| anyhow::anyhow!("argon2: {e}"))?;
     Ok(key)
+}
+
+/// A fresh random 32-byte key for a keyed vault.
+pub fn new_key() -> Zeroizing<[u8; 32]> {
+    let mut key = Zeroizing::new([0_u8; 32]);
+    OsRng.fill_bytes(key.as_mut());
+    key
 }
 
 /// An advisory lock on a file in the vault dir, released on drop. Opened
@@ -205,11 +250,10 @@ pub fn atomic_write(dir: &Path, name: &str, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// An unlocked vault: the directory plus the derived key for this session.
+/// An unlocked vault: the directory plus the key for this session.
 pub struct Vault {
     dir: PathBuf,
-    cost: KdfCost,
-    salt: [u8; 16],
+    seal: Seal,
     key: Zeroizing<[u8; 32]>,
 }
 
@@ -218,14 +262,39 @@ impl Vault {
         dir.join(VAULT_FILE).is_file()
     }
 
-    /// Create a new vault holding `plaintext`. Fails if one already exists.
+    /// Create a new password-sealed vault holding `plaintext`. Fails if one already exists.
     pub fn create(
         dir: impl Into<PathBuf>,
         password: &str,
         plaintext: &[u8],
         cost: KdfCost,
     ) -> Result<Self> {
-        let dir = dir.into();
+        let mut salt = [0_u8; 16];
+        OsRng.fill_bytes(&mut salt);
+        let key = derive(password, &salt, cost.check()?)?;
+        Self::create_sealed(dir.into(), Seal::Password { cost, salt }, key, plaintext)
+    }
+
+    /// Create a new vault sealed by `key` (held in another vault) and bound to
+    /// `context`. Fails if one already exists.
+    pub fn create_keyed(
+        dir: impl Into<PathBuf>,
+        key: Zeroizing<[u8; 32]>,
+        context: &str,
+        plaintext: &[u8],
+    ) -> Result<Self> {
+        let seal = Seal::Keyed {
+            context: context.to_owned(),
+        };
+        Self::create_sealed(dir.into(), seal, key, plaintext)
+    }
+
+    fn create_sealed(
+        dir: PathBuf,
+        seal: Seal,
+        key: Zeroizing<[u8; 32]>,
+        plaintext: &[u8],
+    ) -> Result<Self> {
         private_dir(&dir)?;
         let _lock = write_lock(&dir)?;
         ensure!(
@@ -233,57 +302,88 @@ impl Vault {
             "a vault already exists in {}",
             dir.display()
         );
-        let mut salt = [0_u8; 16];
-        OsRng.fill_bytes(&mut salt);
-        let key = derive(password, &salt, cost.check()?)?;
-        let vault = Self {
-            dir,
-            cost,
-            salt,
-            key,
-        };
+        let vault = Self { dir, seal, key };
         vault.write_locked(plaintext)?;
         Ok(vault)
     }
 
-    /// Unlock: derive the key from `password` and decrypt. A wrong password
-    /// and a tampered file both fail the AEAD tag with the same error.
+    /// Unlock a password-sealed vault: derive the key and decrypt. A wrong
+    /// password and a tampered file both fail the AEAD tag with the same error.
     pub fn unlock(dir: impl Into<PathBuf>, password: &str) -> Result<(Self, Zeroizing<Vec<u8>>)> {
         let dir = dir.into();
         let _lock = write_lock(&dir)?;
-        let file: VaultFile =
-            serde_json::from_slice(&fs::read(dir.join(VAULT_FILE)).context("read vault")?)
-                .context("vault is not valid JSON")?;
-        ensure!(
-            file.format == FORMAT && file.cipher == CIPHER && file.kdf.alg == "argon2id",
-            "unsupported vault format"
-        );
-        let cost = file.kdf.cost.check()?;
+        let file = read_file(&dir)?;
+        let Kdf::Argon2id { m, t, p, salt } = &file.kdf else {
+            bail!("this vault is not unlocked by a password");
+        };
+        let cost = KdfCost {
+            m: *m,
+            t: *t,
+            p: *p,
+        }
+        .check()?;
         let salt: [u8; 16] = B64
-            .decode(&file.kdf.salt)?
+            .decode(salt)?
             .try_into()
             .map_err(|_| anyhow::anyhow!("vault salt must be 16 bytes"))?;
-        let nonce_bytes = B64.decode(&file.nonce)?;
-        ensure!(nonce_bytes.len() == 24, "vault nonce must be 24 bytes");
-        let key = derive(password, &salt, cost)?;
-        let plaintext = XChaCha20Poly1305::new(key.as_ref().into())
+        let vault = Self {
+            dir,
+            seal: Seal::Password { cost, salt },
+            key: derive(password, &salt, cost)?,
+        };
+        let plaintext = vault
+            .open(&file)
+            .map_err(|_| anyhow::anyhow!("wrong password or damaged vault"))?;
+        Ok((vault, plaintext))
+    }
+
+    /// Unlock a keyed vault. `context` must match the one it was created with.
+    pub fn unlock_keyed(
+        dir: impl Into<PathBuf>,
+        key: Zeroizing<[u8; 32]>,
+        context: &str,
+    ) -> Result<(Self, Zeroizing<Vec<u8>>)> {
+        let dir = dir.into();
+        let _lock = write_lock(&dir)?;
+        let file = read_file(&dir)?;
+        ensure!(
+            matches!(&file.kdf, Kdf::Keyed { context: c } if c == context),
+            "vault in {} does not belong to {context}",
+            dir.display()
+        );
+        let vault = Self {
+            dir,
+            seal: Seal::Keyed {
+                context: context.to_owned(),
+            },
+            key,
+        };
+        let plaintext = vault
+            .open(&file)
+            .map_err(|_| anyhow::anyhow!("damaged vault in {}", vault.dir.display()))?;
+        Ok((vault, plaintext))
+    }
+
+    /// Decrypt the file on disk with the session key (no KDF run).
+    pub fn read(&self) -> Result<Zeroizing<Vec<u8>>> {
+        let _lock = write_lock(&self.dir)?;
+        self.open(&read_file(&self.dir)?)
+            .map_err(|_| anyhow::anyhow!("vault changed on disk under a different key"))
+    }
+
+    fn open(&self, file: &VaultFile) -> Result<Zeroizing<Vec<u8>>> {
+        let nonce = B64.decode(&file.nonce)?;
+        ensure!(nonce.len() == 24, "vault nonce must be 24 bytes");
+        let plaintext = XChaCha20Poly1305::new(self.key.as_ref().into())
             .decrypt(
-                XNonce::from_slice(&nonce_bytes),
+                XNonce::from_slice(&nonce),
                 Payload {
                     msg: &B64.decode(&file.ciphertext)?,
-                    aad: &aad(cost, &salt),
+                    aad: &self.seal.aad(),
                 },
             )
-            .map_err(|_| anyhow::anyhow!("wrong password or damaged vault"))?;
-        Ok((
-            Self {
-                dir,
-                cost,
-                salt,
-                key,
-            },
-            Zeroizing::new(plaintext),
-        ))
+            .map_err(|_| anyhow::anyhow!("vault tag mismatch"))?;
+        Ok(Zeroizing::new(plaintext))
     }
 
     /// Re-encrypt `plaintext` under the session key (new nonce every time).
@@ -293,22 +393,42 @@ impl Vault {
     }
 
     /// New password: new salt, new key, same contents. `current` must match.
+    /// Password-sealed vaults only.
     pub fn change_password(&mut self, current: &str, new: &str, plaintext: &[u8]) -> Result<()> {
+        let Seal::Password { cost, salt } = self.seal.clone() else {
+            bail!("this vault is not unlocked by a password");
+        };
         ensure!(
-            *derive(current, &self.salt, self.cost)? == *self.key,
+            *derive(current, &salt, cost)? == *self.key,
             "current password is wrong"
         );
-        let mut salt = [0_u8; 16];
-        OsRng.fill_bytes(&mut salt);
-        let key = derive(new, &salt, self.cost)?;
+        let mut new_salt = [0_u8; 16];
+        OsRng.fill_bytes(&mut new_salt);
+        let key = derive(new, &new_salt, cost)?;
         let _lock = write_lock(&self.dir)?;
-        let previous = (self.salt, std::mem::replace(&mut self.key, key));
-        self.salt = salt;
+        let previous = (
+            std::mem::replace(
+                &mut self.seal,
+                Seal::Password {
+                    cost,
+                    salt: new_salt,
+                },
+            ),
+            std::mem::replace(&mut self.key, key),
+        );
         if let Err(e) = self.write_locked(plaintext) {
-            (self.salt, self.key) = previous;
+            (self.seal, self.key) = previous;
             return Err(e);
         }
         Ok(())
+    }
+
+    /// Check `password` against this password-sealed vault without touching disk.
+    pub fn verify_password(&self, password: &str) -> Result<bool> {
+        let Seal::Password { cost, salt } = &self.seal else {
+            bail!("this vault is not unlocked by a password");
+        };
+        Ok(*derive(password, salt, *cost)? == *self.key)
     }
 
     fn write_locked(&self, plaintext: &[u8]) -> Result<()> {
@@ -318,22 +438,47 @@ impl Vault {
                 &nonce,
                 Payload {
                     msg: plaintext,
-                    aad: &aad(self.cost, &self.salt),
+                    aad: &self.seal.aad(),
                 },
             )
             .map_err(|_| anyhow::anyhow!("vault encryption failed"))?;
         let file = VaultFile {
             format: FORMAT.into(),
-            kdf: Kdf {
-                alg: "argon2id".into(),
-                cost: self.cost,
-                salt: B64.encode(self.salt),
-            },
+            kdf: self.seal.header(),
             cipher: CIPHER.into(),
             nonce: B64.encode(nonce),
             ciphertext: B64.encode(ciphertext),
         };
         atomic_write(&self.dir, VAULT_FILE, &serde_json::to_vec_pretty(&file)?)
+    }
+}
+
+fn read_file(dir: &Path) -> Result<VaultFile> {
+    let file: VaultFile =
+        serde_json::from_slice(&fs::read(dir.join(VAULT_FILE)).context("read vault")?)
+            .context("vault is not valid JSON")?;
+    ensure!(
+        file.format == FORMAT && file.cipher == CIPHER,
+        "unsupported vault format"
+    );
+    Ok(file)
+}
+
+/// Exclusive ownership of a wallet directory for one process's session:
+/// a second process (CLI vs Basecamp module) fails fast instead of racing it.
+pub struct SessionLock {
+    _held: FileLock,
+}
+
+impl SessionLock {
+    pub fn acquire(dir: &Path) -> Result<Self> {
+        private_dir(dir)?;
+        FileLock::acquire(
+            &dir.join(SESSION_LOCK_FILE),
+            Duration::ZERO,
+            "this wallet is open in another Logos Kit process (Basecamp or the CLI); close it there first",
+        )
+        .map(|held| Self { _held: held })
     }
 }
 
@@ -348,7 +493,7 @@ pub struct EncryptedBackend {
     vault: Vault,
     interval: Duration,
     state: Mutex<Pending>,
-    _session: FileLock,
+    _session: SessionLock,
 }
 
 struct Pending {
@@ -358,11 +503,7 @@ struct Pending {
 
 impl EncryptedBackend {
     pub fn new(vault: Vault, interval: Duration) -> Result<Self> {
-        let session = FileLock::acquire(
-            &vault.dir.join(SESSION_LOCK_FILE),
-            Duration::ZERO,
-            "this wallet is open in another Logos Kit process (Basecamp or the CLI); close it there first",
-        )?;
+        let session = SessionLock::acquire(&vault.dir)?;
         Ok(Self {
             vault,
             interval,
@@ -413,7 +554,7 @@ impl wallet::storage::StorageBackend for EncryptedBackend {
         }
         drop(state);
         // The session key is already derived, so re-reading runs no KDF.
-        Ok(Some(self.reread()?.to_vec()))
+        Ok(Some(self.vault.read()?.to_vec()))
     }
 
     fn save(&self, bytes: &[u8]) -> Result<()> {
@@ -429,25 +570,5 @@ impl wallet::storage::StorageBackend for EncryptedBackend {
             Self::write_pending(&self.vault, &mut state)?;
         }
         Ok(())
-    }
-}
-
-impl EncryptedBackend {
-    /// Decrypt the file with the session key (no KDF run).
-    fn reread(&self) -> Result<Zeroizing<Vec<u8>>> {
-        let _lock = write_lock(&self.vault.dir)?;
-        let file: VaultFile = serde_json::from_slice(&fs::read(self.vault.dir.join(VAULT_FILE))?)?;
-        let nonce_bytes = B64.decode(&file.nonce)?;
-        ensure!(nonce_bytes.len() == 24, "vault nonce must be 24 bytes");
-        let plaintext = XChaCha20Poly1305::new(self.vault.key.as_ref().into())
-            .decrypt(
-                XNonce::from_slice(&nonce_bytes),
-                Payload {
-                    msg: &B64.decode(&file.ciphertext)?,
-                    aad: &aad(self.vault.cost, &self.vault.salt),
-                },
-            )
-            .map_err(|_| anyhow::anyhow!("vault changed on disk under a different key"))?;
-        Ok(Zeroizing::new(plaintext))
     }
 }

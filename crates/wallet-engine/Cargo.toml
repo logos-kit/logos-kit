@@ -23,13 +23,14 @@ lee = { workspace = true, features = ["prove"] }
 lee_core.workspace = true
 key_protocol.workspace = true
 common.workspace = true
+sequencer_service_rpc.workspace = true
 bip39 = { version = "2.2", features = ["zeroize"] }
 # vault.v1 (versions already in the lockfile via LEZ: aead 0.5 line)
 argon2 = { version = "0.5.3", features = ["zeroize"] }
 base64 = "0.22"
 chacha20poly1305 = "0.10.1"
 tempfile = "3"
-zeroize = "1.9"
+zeroize = { version = "1.9", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
