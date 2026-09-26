@@ -1,0 +1,37 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  color-scheme: dark;
+  --page: #0a0a0c;
+  --page-panel: #121215;
+  --page-line: rgba(255, 255, 255, 0.08);
+  --page-text: #ededf2;
+  --page-muted: #8f93a0;
+  --page-faint: #5b5f6b;
+  --page-pick: #3898ff;
+}
+html,
+body {
+  background: var(--page);
+  color: var(--page-text);
+  font-family: "Instrument Sans", ui-sans-serif, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--page-pick);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override component animations */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override component animations */
+    transition-duration: 0.01ms !important;
+  }
+}

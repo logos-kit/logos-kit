@@ -15,7 +15,9 @@
       "!docs/dev/PLAN.md",
       "!assets/logos",
       "!protocol/vectors",
-      "!docs/design/*.html"
+      "!docs/design/*.html",
+      "!apps/design-lab/src/components/ui",
+      "!apps/design-lab/src/hooks"
     ]
   },
   "formatter": {

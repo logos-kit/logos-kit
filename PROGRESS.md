@@ -45,6 +45,7 @@ The single place to resume from after a context clear.
 ### QA tooling
 - [x] Build `logos-qt-mcp` (`MCP EXIT 0`; driven from Node via `test-framework/framework.mjs` over TCP :3768)
 - [ ] Run the design-system storybook (before S7)
+- [x] Wallet design v2: `apps/design-lab` (React + 21st.dev/Motion Primitives/NumberFlow/Vaul components) with three working directions (Veil, Tray, Ledger); references study in `docs/design/references.md` + `docs/design/refs/`. Published for picks (artifact db collection `picks`).
 
 ### Design and chain tooling
 - [x] Brand assets: official marks and lockups from guide.logos.co → `assets/logos/logos/`, recorded in `docs/design/brand.md`
@@ -110,6 +111,9 @@ The single place to resume from after a context clear.
 - [ ] LEZ fork patches in `vendor/lez-patches/` (StorageBackend, SyncObserver, prepare/sign split, prove split, keycard feature)
 - [ ] typify → `crates/lwsp-types` (+ CI diff)
 - [ ] Nix build `.#logos_kit_wallet-lgx` with the engine (external-staticlib pattern; 2-day timebox, fallback C++ over wallet-ffi)
+
+- [x] Linux builds (agari-box, `nixos/nix` container, 4 GB/3 CPU cap): all three modules `lgx-portable` for `linux-amd64` (variant name plain `linux-amd64`; plugin `logos_kit_wallet_plugin.so`). sha256 wallet `768a1a54…f0b2`, ui `f5c3f5a7…052a`, probe `f24b8590…7be2`. Note: UI flakes' `path:../logos_kit_wallet` needs a git checkout (a `git archive` copy fails in pure eval). Wallet cold build 420 s.
+- [x] Code review (S0+S1) → 11 findings fixed in `4fa7cac` (QML gate `check:qml`, generated `provides`, vector coverage, rev/prefix self-checks, payload caps).
 
 ### Exit criteria
 - [ ] `nix build .#logos_kit_wallet-lgx` on darwin-arm64 (+ Linux via CI/remote builder)
