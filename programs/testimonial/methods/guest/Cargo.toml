@@ -1,0 +1,18 @@
+[package]
+name = "testimonial_program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "testimonial"
+path = "src/bin/testimonial.rs"
+
+[dependencies]
+borsh.workspace = true
+lee_core.workspace = true
+risc0-zkvm.workspace = true
+testimonial_core.workspace = true
