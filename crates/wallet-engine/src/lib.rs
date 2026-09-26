@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod ffi;
+pub mod session;
 pub mod vault;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).
