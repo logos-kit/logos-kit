@@ -6,8 +6,11 @@
 
 pub mod api;
 pub mod auto_lock;
+pub mod engine;
 pub mod ffi;
+pub mod policy;
 pub mod session;
+pub mod tx;
 pub mod vault;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).

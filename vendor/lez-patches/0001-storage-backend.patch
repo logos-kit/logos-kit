@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
 Date: Sat, 26 Sep 2026 18:23:43 +0100
-Subject: [PATCH 1/6] wallet: persist storage through a pluggable
- StorageBackend
+Subject: [PATCH] wallet: persist storage through a pluggable StorageBackend
 
 `Storage` is hard-wired to a plaintext JSON file and `WalletCore` writes
 that file directly (including once per synced block). Embedders that want

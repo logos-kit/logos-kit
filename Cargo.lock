@@ -5072,6 +5072,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "logos-kit-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rpassword",
+ "serde_json",
+ "tokio",
+ "wallet",
+ "wallet-engine",
+]
+
+[[package]]
 name = "loki-api"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9124,6 +9137,7 @@ dependencies = [
  "sequencer_service_rpc",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "tokio",
  "wallet",

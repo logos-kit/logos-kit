@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Sat, 26 Sep 2026 21:33:32 +0100
+Subject: [PATCH] wallet: don't print decrypted private notes; propagate decode
+ errors
+
+decode_insert_privacy_preserving_transaction_results printed the decrypted
+private account to stdout unconditionally, which an embedding wallet sends to
+its logs, and unwrapped the decryption. Log it at debug level and return an
+error instead.
+---
+ lez/wallet/src/lib.rs | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/lez/wallet/src/lib.rs b/lez/wallet/src/lib.rs
+index a286621..def3205 100644
+--- a/lez/wallet/src/lib.rs
++++ b/lez/wallet/src/lib.rs
+@@ -811,15 +811,17 @@ impl WalletCore {
+                         );
+                         continue;
+                     };
+-                    let (kind, res_acc) =
+-                        decrypt_note_at(&tx.message, output_index, secret).unwrap();
++                    let (kind, res_acc) = decrypt_note_at(&tx.message, output_index, secret)
++                        .with_context(|| {
++                            format!("note for {acc_account_id} does not decrypt with its secret")
++                        })?;
+ 
+-                    println!("Received new acc {res_acc:#?}");
++                    // Plaintext private state: debug log only, never stdout.
++                    log::debug!("Received new acc {res_acc:#?}");
+ 
+                     self.storage
+                         .key_chain_mut()
+-                        .insert_private_account(*acc_account_id, kind, res_acc)
+-                        .expect("Account Id should exist");
++                        .insert_private_account(*acc_account_id, kind, res_acc)?;
+                 }
+                 AccDecodeData::Skip => {}
+             }
