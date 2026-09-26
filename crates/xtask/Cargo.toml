@@ -12,3 +12,13 @@ workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
+base64 = "0.22"
+bip39 = "2.2"
+borsh = "1.5.7"
+hex = "0.4.3"
+# Same crate and version LEZ signs with (its Cargo.lock: k256 0.13.4).
+k256 = { version = "0.13.4", features = ["schnorr"] }
+lee.workspace = true
+lee_core.workspace = true
+key_protocol.workspace = true
+common.workspace = true

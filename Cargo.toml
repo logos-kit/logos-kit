@@ -18,8 +18,20 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 ureq = { version = "3", features = ["json"] }
 
+# LEZ at the pinned rev (docs/dev/pins.md). Re-pin all together.
+wallet = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+key_protocol = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+common = { git = "https://github.com/logos-blockchain/logos-execution-zone", rev = "f7fda38a4428b9989f1db1dbf5d2411484848fd4" }
+
 [workspace.lints.rust]
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Mirrors LEZ's own patch (logos-execution-zone/Cargo.toml): keccak with the
+# RISC Zero-accelerated backend.
+[patch.crates-io]
+keccak = { git = "https://github.com/logos-blockchain/sponges", rev = "3a56e99771beedf04946eab21a4a62adc2951377" }

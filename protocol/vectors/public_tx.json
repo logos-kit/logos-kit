@@ -1,0 +1,197 @@
+{
+  "messages": [
+    {
+      "borsh": "0100000001000000010000000100000001000000010000000100000001000000010000002a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b01000000050000000000000000000000000000000000000000",
+      "fields": {
+        "fee": null,
+        "instructionData": "",
+        "nonces": [
+          "5"
+        ],
+        "programAccountId": {
+          "base58": "4uQeVjgVccFGKht1dTy7bqxH3WehditPsgHyN1FSvRM",
+          "hex": "0100000001000000010000000100000001000000010000000100000001000000"
+        },
+        "shardSelectors": [
+          {
+            "accountId": {
+              "base58": "3qbR1eZRqXUWroWKKYhbDmR3FfqTHfqSU8zZSxtANzYh",
+              "hex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+            },
+            "programAccountId": {
+              "base58": "3uWi9x2SRpmjztkpkr2WWeBoVq3exjXG2YfDWLvm8KsQ",
+              "hex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+            }
+          }
+        ]
+      },
+      "hash": "39b9cf99bac372b97a186fc103d47138c73e2f5efc67fc884104ef647f009bdd",
+      "name": "exempt"
+    },
+    {
+      "borsh": "0100000001000000010000000100000001000000010000000100000001000000010000002a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a000000000000000000000000000000000000000000000000000000000000000001000000050000000000000000000000000000000000000000",
+      "fields": {
+        "fee": null,
+        "instructionData": "",
+        "nonces": [
+          "5"
+        ],
+        "programAccountId": {
+          "base58": "4uQeVjgVccFGKht1dTy7bqxH3WehditPsgHyN1FSvRM",
+          "hex": "0100000001000000010000000100000001000000010000000100000001000000"
+        },
+        "shardSelectors": [
+          {
+            "accountId": {
+              "base58": "3qbR1eZRqXUWroWKKYhbDmR3FfqTHfqSU8zZSxtANzYh",
+              "hex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+            },
+            "programAccountId": {
+              "base58": "11111111111111111111111111111111",
+              "hex": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ]
+      },
+      "hash": "bfa25b2f41b5bc81eb42f6264be86c4b9c435b421b67bb1dd53ef59c95fa04cb",
+      "name": "balance_shard_selector"
+    },
+    {
+      "borsh": "0100000001000000010000000100000001000000010000000100000001000000010000002a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b01000000050000000000000000000000000000000300000007080900",
+      "fields": {
+        "fee": null,
+        "instructionData": "070809",
+        "nonces": [
+          "5"
+        ],
+        "programAccountId": {
+          "base58": "4uQeVjgVccFGKht1dTy7bqxH3WehditPsgHyN1FSvRM",
+          "hex": "0100000001000000010000000100000001000000010000000100000001000000"
+        },
+        "shardSelectors": [
+          {
+            "accountId": {
+              "base58": "3qbR1eZRqXUWroWKKYhbDmR3FfqTHfqSU8zZSxtANzYh",
+              "hex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+            },
+            "programAccountId": {
+              "base58": "3uWi9x2SRpmjztkpkr2WWeBoVq3exjXG2YfDWLvm8KsQ",
+              "hex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+            }
+          }
+        ]
+      },
+      "hash": "8afcf6983a4a1458d29e878e4ae372b9b828daf85aa54a075474ecec3a8c5141",
+      "name": "nonempty_instruction"
+    },
+    {
+      "borsh": "0100000001000000010000000100000001000000010000000100000001000000010000002a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b0100000005000000000000000000000000000000000000000107070707070707070707070707070707070707070707070707070707070707070900000000000000030000000000000064000000000000000000000000000000",
+      "fields": {
+        "fee": {
+          "gasLimit": "9",
+          "maxFee": "100",
+          "payer": {
+            "base58": "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+            "hex": "0707070707070707070707070707070707070707070707070707070707070707"
+          },
+          "tip": "3"
+        },
+        "instructionData": "",
+        "nonces": [
+          "5"
+        ],
+        "programAccountId": {
+          "base58": "4uQeVjgVccFGKht1dTy7bqxH3WehditPsgHyN1FSvRM",
+          "hex": "0100000001000000010000000100000001000000010000000100000001000000"
+        },
+        "shardSelectors": [
+          {
+            "accountId": {
+              "base58": "3qbR1eZRqXUWroWKKYhbDmR3FfqTHfqSU8zZSxtANzYh",
+              "hex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+            },
+            "programAccountId": {
+              "base58": "3uWi9x2SRpmjztkpkr2WWeBoVq3exjXG2YfDWLvm8KsQ",
+              "hex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+            }
+          }
+        ]
+      },
+      "hash": "5cb2db3cbb650f32b789e2dad51fbbc5502475e0d3c31b2e3df3eebb93ec45a0",
+      "name": "charged"
+    }
+  ],
+  "meta": {
+    "generator": "cargo xtask vectors",
+    "lezRev": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+    "note": "Generated from LEZ code at lezRev. Do not edit by hand."
+  },
+  "prefix": "2f4c45452f76302e332f4d6573736167652f5075626c69632f00000000000000",
+  "signed": [
+    {
+      "auxRand": "1111111111111111111111111111111111111111111111111111111111111111",
+      "borsh": "0000000000000000000000000000000000000000000000000000000000000000020000008a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b00000000000000000000000000000000000000000000000000000000000000000c0fe2bd986326ba82ec6cafdde255e0a7ea70054f7def10080914cb173acc9bc000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000001100000000e8030000000000000000000000000000018a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b050c3000000000000000000000000000040420f00000000000000000000000000",
+      "fields": {
+        "fee": {
+          "gasLimit": "50000",
+          "maxFee": "1000000",
+          "payer": {
+            "base58": "AKRYNTU8c4MZ4fSr5FHcn6BGE6T4dfRCzn1ziQCNKFBu",
+            "hex": "8a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b0"
+          },
+          "tip": "0"
+        },
+        "instructionData": "00e8030000000000000000000000000000",
+        "nonces": [
+          "0"
+        ],
+        "programAccountId": {
+          "base58": "11111111111111111111111111111111",
+          "hex": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "shardSelectors": [
+          {
+            "accountId": {
+              "base58": "AKRYNTU8c4MZ4fSr5FHcn6BGE6T4dfRCzn1ziQCNKFBu",
+              "hex": "8a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b0"
+            },
+            "programAccountId": {
+              "base58": "11111111111111111111111111111111",
+              "hex": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          },
+          {
+            "accountId": {
+              "base58": "DzN4xv4Z3MZhEACzb8nENnocedCNBKEEiUekVCEMNJqH",
+              "hex": "c0fe2bd986326ba82ec6cafdde255e0a7ea70054f7def10080914cb173acc9bc"
+            },
+            "programAccountId": {
+              "base58": "11111111111111111111111111111111",
+              "hex": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ]
+      },
+      "hash": "5bd38bad30715c1573cdaf4c8a93724e79036ac7bfffb1e395dcf794bbe0c59f",
+      "instruction": {
+        "Transfer": {
+          "amount": "1000"
+        }
+      },
+      "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "name": "native_transfer",
+      "publicKey": "c8730d3953a94b608d67710f3c7cbb2f0694665ae60af5c7584253f49346b231",
+      "rpc": {
+        "sendTransactionParam": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAIpxYqWswPLAvqtanQffqxKefcmxjNnBSzCQ/izEAVSwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADA/ivZhjJrqC7Gyv3eJV4KfqcAVPfe8QCAkUyxc6zJvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAARAAAAAOgDAAAAAAAAAAAAAAAAAAABinFipazA8sC+q1qdB9+rEp59ybGM2cFLMJD+LMQBVLBQwwAAAAAAAAAAAAAAAAAAQEIPAAAAAAAAAAAAAAAAAAEAAACi7lgfBudB/iLAyKU0pXUS41h9Ai/RFwnsB+JQQOZ0I+F3yZifQZTxfHcZkrU4MgAi6fDKH1sSjCYxv4HKUQvPyHMNOVOpS2CNZ3EPPHy7LwaUZlrmCvXHWEJT9JNGsjE=",
+        "txHash": "6f6c0e8da7a8e202c50a642f18376a2d754cc686bdefdf5130ed790160a0c35c"
+      },
+      "signature": "a2ee581f06e741fe22c0c8a534a57512e3587d022fd11709ec07e25040e67423e177c9989f4194f17c771992b538320022e9f0ca1f5b128c2631bf81ca510bcf",
+      "signerPath": "/0",
+      "signingKey": "2129125f311c639b316e3e8e2a8548d2ba22381e56a3a75753ca385fa4a7c07b",
+      "transaction": {
+        "borsh": "0000000000000000000000000000000000000000000000000000000000000000020000008a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b00000000000000000000000000000000000000000000000000000000000000000c0fe2bd986326ba82ec6cafdde255e0a7ea70054f7def10080914cb173acc9bc000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000001100000000e8030000000000000000000000000000018a7162a5acc0f2c0beab5a9d07dfab129e7dc9b18cd9c14b3090fe2cc40154b050c3000000000000000000000000000040420f0000000000000000000000000001000000a2ee581f06e741fe22c0c8a534a57512e3587d022fd11709ec07e25040e67423e177c9989f4194f17c771992b538320022e9f0ca1f5b128c2631bf81ca510bcfc8730d3953a94b608d67710f3c7cbb2f0694665ae60af5c7584253f49346b231",
+        "hash": "6f6c0e8da7a8e202c50a642f18376a2d754cc686bdefdf5130ed790160a0c35c"
+      }
+    }
+  ]
+}

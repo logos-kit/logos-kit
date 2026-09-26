@@ -1,0 +1,25 @@
+[package]
+name = "wallet-engine"
+description = "Logos Kit wallet engine: keys, accounts, sync, approvals, proving (no Qt)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wallet.workspace = true
+lee = { workspace = true, features = ["prove"] }
+lee_core.workspace = true
+key_protocol.workspace = true
+common.workspace = true
+
+[dev-dependencies]
+base64 = "0.22"
+bip39 = "2.2"
+borsh = "1.5.7"
+hex = "0.4.3"

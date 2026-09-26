@@ -4,11 +4,17 @@
 //! - `fingerprint [url]`: identify the LEZ protocol version a sequencer runs.
 //!   There is no version RPC; v0.3 exposes `getFeeState`, v0.2.x has `pinata`
 //!   in `getProgramIds`.
+//! - `vectors`: regenerate `protocol/vectors/*.json` from LEZ code (see vectors.rs).
 
-use std::time::Duration;
+mod vectors;
+
+use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
+
+/// LEZ revision the vectors come from; must match the workspace `rev` pins.
+pub const LEZ_REV: &str = "f7fda38a4428b9989f1db1dbf5d2411484848fd4";
 
 const DEFAULT_SEQUENCER: &str = "https://testnet.lez.logos.co";
 
@@ -19,8 +25,12 @@ fn main() -> Result<()> {
             let url = args.get(1).map_or(DEFAULT_SEQUENCER, String::as_str);
             fingerprint(url)
         }
+        Some("vectors") => {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            vectors::run(&root)
+        }
         _ => {
-            eprintln!("usage: cargo xtask fingerprint [sequencer-url]");
+            eprintln!("usage: cargo xtask <fingerprint [sequencer-url] | vectors>");
             std::process::exit(2);
         }
     }

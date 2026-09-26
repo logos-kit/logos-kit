@@ -13,7 +13,8 @@
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
       "!docs/dev/PLAN.md",
-      "!assets/logos"
+      "!assets/logos",
+      "!protocol/vectors"
     ]
   },
   "formatter": {
