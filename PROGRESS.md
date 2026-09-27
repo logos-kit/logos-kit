@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S7 in progress on `stage/07-basecamp` (pushed). Done: engine service, module shim, Tray wallet UI, intents, dev harness, Basecamp flow (`just bc-flow` green), reviews fixed. Left for S7: catalog fork `logos-kit-modules` + release workflow, Linux lgx builds + clean-VM installs, public/private/token flows on testnet 0.3 (testnet still 0.2; target 2026-09-30), then merge. Testimonial deploy still waits for `just fingerprint` = 0.3.
+**Next action:** S8 on `stage/08-apps`: testimonial + faucet apps, template done (harness e2e green, lgx builds); next Basecamp GUI run of both apps, conformance kit, docs site. S7 leftovers below (testnet-0.3 flows) wait for 0.3. Earlier note: S7 in progress on `stage/07-basecamp` (pushed). Done: engine service, module shim, Tray wallet UI, intents, dev harness, Basecamp flow (`just bc-flow` green), reviews fixed. Left for S7: catalog fork `logos-kit-modules` + release workflow, Linux lgx builds + clean-VM installs, public/private/token flows on testnet 0.3 (testnet still 0.2; target 2026-09-30), then merge. Testimonial deploy still waits for `just fingerprint` = 0.3.
 
 ---
 
@@ -304,3 +304,30 @@ The single place to resume from after a context clear.
 - 2026-09-27: A receive code pays a fresh identifier (LEZ); the recipient's sync finds it. Paying your **own** code routes to that account (the sender wallet never rescans it).
 - 2026-09-27: Canvas stays unused (Rectangle QR/identicons, Shapes for glyphs and the ring).
 - Gotchas: onReqChanged runs before sibling bindings update (read `req` directly); Repeater delegates have no QObject parent (walk `childItems()`); Biome must skip `modules/*/qml` (Qt V4 JS); debug-build engines make private sync slow enough to trip the 15 s call budget (harness uses the release dylib).
+
+---
+
+## Stage S8 · Mini-apps + dApp template + conformance kit + minimal docs, branch `stage/08-apps`
+
+**Status:** in progress (started 2026-09-27)
+
+- [x] Signing-key backups (the user asked Claude to set them up): age-encrypted to the maintainer's SSH keys in `~/.config/logos/keys-backup/` and on agari-box `/root/backups/logos-kit/`, plus base64 in the macOS Keychain; each checked against the key's SHA-256. Restore steps in `docs/dev/releasing.md`
+- [x] `sdk/qml/LogosKitUi`: Tray components for any Basecamp app (Theme, Txt, Btn, Card, Field, TextBox with a UTF-8 byte counter, Skeleton, Spinner, Tag, Notice, Identicon, LogosMark, Glyph, InfoRow). `just qml-vendor` copies `LogosKit/` + `LogosKitUi/` into every app and the template
+- [x] SDK additions: codec `decodeTestimonial`, `decodeTestimonialStats`, limits, `TESTIMONIAL_PROGRAMS` (filled at deploy); client `readTestimonials`; facade `getTestimonials`, `getTestimonial`, `openExplorer`
+- [x] LWS-0 `lez_openExplorer {chain, txHash|account}`: the wallet builds the explorer URL (testnet only; one per second), so sandboxed apps get links without being able to open arbitrary URLs
+- [x] Dev harness for apps: `modules/logos_kit_wallet_ui/dev/app_harness.py` (app + wallet windows on one release engine; intents routed like the shell, the app's module calls carry its own caller identity)
+- [x] **`logos_kit_testimonial`**: connect (public) → compose (must name Logos Kit; byte and hidden-character rules mirror `testimonial_core`) → approve in the wallet → pending steps → done + explorer. States: no program on chain, checking (skeletons), already posted, no funds (in-flow faucet), fresh-account nudge, approving, failed (rechecks the record: a rejected post may have landed). Live feed: count, this month, newest 25. Proof: `just e2e-testimonial-app` (deploy, seed, connect, faucet, validation, post, included in block 15, count 1 → 2, already-posted view; `docs/reviews/s8/testimonial/`). `lgx-portable` builds
+- [x] **`logos_kit_faucet`**: connect (public + private) → pick → request. States: funded, rate-limited countdown, outcome unknown (watches the balance, never re-asks), declined, failed, and the private path (faucet → public, the user approves the shield in the wallet, proving timer, included). Proof: `e2e/faucet-app.sh` (public +1e9, second claim rate-limited to 0:00, private funded via an approved, proved shield; `docs/reviews/s8/faucet/`). `lgx-portable` builds
+- [x] **`templates/basecamp-dapp`** (`nix flake init -t github:logos-kit/logos-kit#dapp`): teaching app (connect → balance → in-flow faucet → transfer → receipt), README, icon. The wallet contract is vendored (`dependency_overrides` → `logos_kit_wallet.lidl`), so the template's only input is the builder. Proof: `e2e/template-app.sh` (receipt included, block 167); `nix flake init -t git+file://…#dapp` in an empty directory + `nix build .#lgx-portable` → `logos-my_lez_dapp-module.lgx` (EXIT 0)
+- [ ] Both apps in a real Basecamp (shell chooser, sandbox, catalog install)
+- [ ] Conformance kit (`logos_kit_wallet_fake`, capability matrix, `just conformance <dapp>`)
+- [ ] Minimal docs (`apps/docs`, Fumadocs): LWS-0 reference, QML quickstart, testimonial + faucet worked examples, security model, `llms.txt`
+- [ ] Catalog release with the two apps (versions: core 0.1.2 for `lez_openExplorer`, UI 0.1.2, apps 0.1.0)
+- [ ] Testimonial program deployed on testnet 0.3 + `TESTIMONIAL_PROGRAMS` entry (waits for 0.3)
+- [ ] Milestone review, demo takes, usability sessions
+
+### Decisions and deviations
+- 2026-09-27: **Bugs found by driving the apps, fixed:** the local genesis faucet was rebuilt per request, so its per-account limit never applied (now kept per sequencer; window 60 s); `ui_requestFunds` didn't resolve an app's `pvt_…` handle (private claims failed); the wallet cleared an answered faucet request, leaving an empty sheet with no Done; a request that arrived while another sheet was open (the shield after a private claim) never showed.
+- 2026-09-27: Noticed, not yet fixed (wallet UI): the approval sheet shows the fee in base units labelled "LEZ" (e.g. "≤ 134,400,000 LEZ"), and requesters show two-letter initials instead of the app's icon.
+- 2026-09-27: Testimonials must name "Logos Kit" (the prize counts texts that identify this wallet). Starter phrases fill the rest.
+- Gotchas: `short` is reserved in QML JS; `\u` escapes typed into a file can arrive as the real characters (U+2028 breaks a QML line), so keep regex escapes ASCII; relative `source:` strings in a component resolve against the *using* file, so `LogosKitUi` uses `Qt.resolvedUrl`; the SDK's `kit.api` is null until `LogosKit` completes (`onApiChanged`); private accounts need an explicit tick in the connect sheet.
