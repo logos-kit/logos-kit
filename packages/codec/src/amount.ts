@@ -1,46 +1,96 @@
-// u64/u128 as decimal strings, via bn.js (no native BigInt: QML).
-import BN from 'bn.js'
+// u64/u128 as decimal strings, with no BigInt (QML) and no bignum library:
+// the only arithmetic LEZ amounts need is decimal ↔ little-endian bytes,
+// comparison and addition. Unit formatting is string work.
 import type { Bytes } from './bytes.ts'
 
-const U128_MAX = new BN(1).ushln(128).subn(1)
-const U64_MAX = new BN(1).ushln(64).subn(1)
+const U128_MAX = '340282366920938463463374607431768211455'
+const U64_MAX = '18446744073709551615'
 const DEC = /^(0|[1-9][0-9]*)$/
 
-function parse(dec: string | number, max: BN, what: string): BN {
-  const s = String(dec)
-  if (!DEC.test(s)) throw new Error(`${what}: not a decimal integer: ${s}`)
-  const v = new BN(s, 10)
-  if (v.gt(max)) throw new Error(`${what} overflow: ${s}`)
-  return v
+function cmp(a: string, b: string): -1 | 0 | 1 {
+  if (a.length !== b.length) return a.length < b.length ? -1 : 1
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+function parse(dec: string | number, max: string, what: string): string {
+  const s = typeof dec === 'number' ? (Number.isSafeInteger(dec) ? String(dec) : '') : dec
+  if (!DEC.test(s)) throw new Error(`${what}: not a decimal integer: ${dec}`)
+  if (cmp(s, max) > 0) throw new Error(`${what} overflow: ${s}`)
+  return s
 }
 
 /** Validates and normalises a u128 decimal string. */
-export const u128 = (dec: string | number): string => parse(dec, U128_MAX, 'u128').toString(10)
-export const u64 = (dec: string | number): string => parse(dec, U64_MAX, 'u64').toString(10)
+export const u128 = (dec: string | number): string => parse(dec, U128_MAX, 'u128')
+export const u64 = (dec: string | number): string => parse(dec, U64_MAX, 'u64')
 
-export const u128le = (dec: string | number): Bytes =>
-  new Uint8Array(parse(dec, U128_MAX, 'u128').toArray('le', 16))
-export const u64le = (dec: string | number): Bytes =>
-  new Uint8Array(parse(dec, U64_MAX, 'u64').toArray('le', 8))
-export const readUle = (b: Bytes): string => new BN(b, 'le').toString(10)
+/** Decimal → `n` little-endian bytes (repeated division by 256). */
+function toLe(dec: string, n: number): Bytes {
+  const out = new Uint8Array(n)
+  let digits = dec.split('').map(Number)
+  for (let i = 0; i < n && !(digits.length === 1 && digits[0] === 0); i++) {
+    const next: number[] = []
+    let rem = 0
+    for (const d of digits) {
+      const cur = rem * 10 + d
+      const q = Math.floor(cur / 256)
+      rem = cur % 256
+      if (next.length || q) next.push(q)
+    }
+    out[i] = rem
+    digits = next.length ? next : [0]
+  }
+  return out
+}
+
+export const u128le = (dec: string | number): Bytes => toLe(u128(dec), 16)
+export const u64le = (dec: string | number): Bytes => toLe(u64(dec), 8)
+
+/** Little-endian bytes → decimal (Horner over base 10^7 limbs). */
+export function readUle(b: Bytes): string {
+  const BASE = 10000000
+  const limbs = [0] // least significant first
+  for (let i = b.length - 1; i >= 0; i--) {
+    let carry = b[i] as number
+    for (let j = 0; j < limbs.length; j++) {
+      const v = (limbs[j] as number) * 256 + carry
+      limbs[j] = v % BASE
+      carry = Math.floor(v / BASE)
+    }
+    while (carry) {
+      limbs.push(carry % BASE)
+      carry = Math.floor(carry / BASE)
+    }
+  }
+  let s = String(limbs[limbs.length - 1])
+  for (let j = limbs.length - 2; j >= 0; j--) {
+    const part = String(limbs[j])
+    s += '0000000'.slice(part.length) + part
+  }
+  return s
+}
 
 export function add(a: string, b: string): string {
-  return new BN(u128(a), 10).add(new BN(u128(b), 10)).toString(10)
+  const x = u128(a)
+  const y = u128(b)
+  let out = ''
+  let carry = 0
+  for (let i = x.length - 1, j = y.length - 1; i >= 0 || j >= 0 || carry; i--, j--) {
+    const s = (i >= 0 ? Number(x[i]) : 0) + (j >= 0 ? Number(y[j]) : 0) + carry
+    out = String(s % 10) + out
+    carry = s >= 10 ? 1 : 0
+  }
+  return u128(out)
 }
 
-export function compare(a: string, b: string): -1 | 0 | 1 {
-  return new BN(u128(a), 10).cmp(new BN(u128(b), 10))
-}
+export const compare = (a: string, b: string): -1 | 0 | 1 => cmp(u128(a), u128(b))
 
 /** `raw` in base units → a decimal string with `decimals` places (trailing zeros cut). */
 export function formatUnits(raw: string, decimals: number): string {
-  const v = new BN(u128(raw), 10)
-  if (decimals === 0) return v.toString(10)
-  const base = new BN(10).pow(new BN(decimals))
-  const whole = v.div(base).toString(10)
-  let frac = v.mod(base).toString(10)
-  while (frac.length < decimals) frac = `0${frac}`
-  frac = frac.replace(/0+$/, '')
+  const v = u128(raw)
+  if (decimals === 0) return v
+  const padded = v.length <= decimals ? '0'.repeat(decimals - v.length + 1) + v : v
+  const whole = padded.slice(0, padded.length - decimals)
+  const frac = padded.slice(padded.length - decimals).replace(/0+$/, '')
   return frac ? `${whole}.${frac}` : whole
 }
 
@@ -50,9 +100,9 @@ export function parseUnits(s: string, decimals: number): string {
   if (!m) throw new Error(`not an amount: ${s}`)
   const f = m[2] || ''
   if (f.length > decimals) throw new Error(`more than ${decimals} decimal places: ${s}`)
-  let frac = f
-  while (frac.length < decimals) frac += '0'
-  return u128(
-    (m[1] as string) + frac === '' ? '0' : new BN((m[1] as string) + frac, 10).toString(10),
+  const digits = ((m[1] as string) + f + '0'.repeat(decimals - f.length)).replace(
+    /^0+(?=[0-9])/,
+    '',
   )
+  return u128(digits)
 }

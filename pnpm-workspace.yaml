@@ -13,6 +13,8 @@ allowBuilds:
 
 catalog:
   acorn: ^8.15.0
+  '@babel/core': ^7.29.7
+  esbuild: ^0.28.2
   # tooling
   '@arethetypeswrong/cli': ^0.18.5
   '@biomejs/biome': ^2.5.14
