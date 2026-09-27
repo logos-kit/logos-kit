@@ -92,16 +92,51 @@ fn fingerprint(url: &str) -> Result<()> {
     };
     let has_pinata = program_names.iter().any(|n| n.contains("pinata"));
 
-    let version = match (&fee_state, has_pinata) {
-        (Ok(_), _) => "0.3",
-        (Err(_), true) => "0.2.x",
-        (Err(_), false) => "unknown",
+    // The only reliable test: does the newest block decode with the LEZ types
+    // we're pinned to (v0.3.0-rc1)? 0.2.5 already had getFeeState and no
+    // piñata, so those alone mislabel it (2026-09-27, the halted devnet).
+    let head = match &last_block {
+        Ok(v) => v.as_u64().map(|id| rpc(&agent, url, "getBlock", json!([id]))).transpose()?,
+        Err(_) => None,
+    };
+    let (decodes, head_ms) = match head {
+        Some(Ok(Value::String(b64))) => {
+            use base64::Engine as _;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(b64)?;
+            match borsh::from_slice::<common::block::Block>(&bytes) {
+                Ok(b) => (true, Some(b.header.timestamp)),
+                // The header's id / prev hash / hash / timestamp prefix is the
+                // same in 0.2.x, so the time still reads.
+                Err(_) => (
+                    false,
+                    bytes
+                        .get(72..80)
+                        .and_then(|t| t.try_into().ok())
+                        .map(u64::from_le_bytes),
+                ),
+            }
+        }
+        _ => (false, None),
+    };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis();
+    let head_age_secs = head_ms.map(|t| (now_ms.saturating_sub(u128::from(t)) / 1000) as u64);
+
+    let version = match (decodes, &fee_state, has_pinata) {
+        (true, Ok(_), _) => "0.3",
+        (false, Ok(_), false) => "0.2.5 (not our 0.3 block format)",
+        (_, Err(_), true) => "0.2.x",
+        _ => "unknown",
     };
 
     let report = json!({
         "sequencer": url,
         "version": version,
         "lastBlockId": last_block.as_ref().ok(),
+        "headDecodesAsPinned": decodes,
+        "headAgeSecs": head_age_secs,
+        "halted": head_age_secs.map(|s| s > 600),
         "programs": program_names,
         "feeState": fee_state.as_ref().ok(),
         "feeStateError": fee_state.as_ref().err(),
