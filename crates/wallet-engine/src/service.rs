@@ -111,6 +111,8 @@ pub struct Service {
     /// Checks approval passwords without the wallet lock (set while unlocked).
     checker: Mutex<Option<crate::vault::PasswordCheck>>,
     throttle: Mutex<Throttle>,
+    /// When an app last opened an explorer page (one per second at most).
+    last_explorer: Mutex<Option<Instant>>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
     refresh: tokio::sync::Notify,
@@ -270,6 +272,7 @@ impl Service {
                 fails: 0,
                 until: None,
             }),
+            last_explorer: Mutex::new(None),
             generation: Mutex::new(0),
             refresh: tokio::sync::Notify::new(),
         })
@@ -347,6 +350,7 @@ impl Service {
         match method {
             "lez_getCapabilities" => Ok(capabilities()),
             "lez_readAccount" => self.read_account(p),
+            "lez_openExplorer" => self.open_explorer(p),
             "lez_getSession" => self.get_session(caller),
             "lez_getAccounts" => {
                 let app = app_of(caller)?;
@@ -1462,6 +1466,58 @@ impl Service {
 
     // -- LWS-0 reads --------------------------------------------------------------
 
+    /// Open the zone's explorer at a transaction or account. The wallet
+    /// builds the URL, so an app can only ever open its own explorer page.
+    fn open_explorer(&self, p: &Value) -> Result<Value> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct P {
+            chain: String,
+            tx_hash: Option<String>,
+            account: Option<String>,
+        }
+        let a: P = params(p)?;
+        let zone = self.current_zone();
+        if a.chain != zone.chain {
+            return Err(coded(
+                4902,
+                format!("the wallet is on {}", zone.chain),
+                Value::Null,
+            ));
+        }
+        let Some(base) = explorer_base(&zone.chain) else {
+            return Err(coded(
+                5700,
+                format!("{} has no explorer", zone.chain),
+                Value::Null,
+            ));
+        };
+        let url = match (a.tx_hash, a.account) {
+            (Some(h), None) => {
+                let hex = h.strip_prefix("0x").unwrap_or(&h);
+                ensure!(
+                    hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()),
+                    invalid("txHash must be 32 bytes of hex")
+                );
+                format!("{base}/transaction/{}", hex.to_ascii_lowercase())
+            }
+            (None, Some(acc)) => {
+                let id = crate::decode::account_id(&acc).map_err(|_| invalid("bad account id"))?;
+                format!("{base}/account/{id}")
+            }
+            _ => return Err(invalid("pass exactly one of txHash or account")),
+        };
+        {
+            let mut last = lock(&self.last_explorer);
+            if last.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+                return Err(Denied::err(Code::RequestPending, "an explorer page just opened"));
+            }
+            *last = Some(Instant::now());
+        }
+        open_url(&url)?;
+        Ok(json!({ "url": url }))
+    }
+
     fn read_account(&self, p: &Value) -> Result<Value> {
         #[derive(Deserialize)]
         struct P {
@@ -1873,6 +1929,14 @@ fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
         Some("Local genesis key")
     } else {
         None
+    }
+}
+
+/// The public explorer of a zone, if it has one.
+fn explorer_base(chain: &str) -> Option<&'static str> {
+    match chain {
+        "lez:testnet" => Some("https://explorer.testnet.lez.logos.co"),
+        _ => None,
     }
 }
 

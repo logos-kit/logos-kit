@@ -2,6 +2,8 @@ import Type from 'typebox'
 import {
   BalanceParams,
   BalanceResult,
+  OpenExplorerParams,
+  OpenExplorerResult,
   ReadAccountParams,
   ReadAccountResult,
   RequestFundsParams,
@@ -49,6 +51,8 @@ export const Methods = {
   lez_getBalance: { params: BalanceParams, result: BalanceResult, userFacing: false },
   /** Read one program's public data on an account (chain state: no grant needed). */
   lez_readAccount: { params: ReadAccountParams, result: ReadAccountResult, userFacing: false },
+  /** Open the zone's explorer at a transaction or account (the wallet builds the URL). */
+  lez_openExplorer: { params: OpenExplorerParams, result: OpenExplorerResult, userFacing: false },
   lez_signAndSendTransaction: {
     params: TransactionProposal,
     result: SubmitResult,

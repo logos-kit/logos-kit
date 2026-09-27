@@ -53,6 +53,8 @@ export interface WalletActions {
   getWalletBalance(params: P<'lez_getBalance'>): Promise<BalanceResult>
   /** A public account's data for one program (chain state; no grant needed). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
+  /** Open the zone's explorer at a transaction (`txHash`) or an account. */
+  openExplorer(target: { txHash: string } | { account: AccountId }): Promise<{ url: string }>
   /** Propose; resolves once the wallet queued it (`handle`), before approval finishes. */
   sendTransaction(proposal: TransactionProposal): Promise<SubmitResult>
   /** One program call from `account` (built with @logos-kit/codec). */
@@ -127,6 +129,8 @@ export function walletActions(client: Client): WalletActions {
       })) as ReadAccountResult
       return { nonce: r.nonce, data: fromBase64(r.data) }
     },
+    openExplorer: (target) =>
+      call(METHODS.openExplorer, { chain: client.chain, ...target }) as Promise<{ url: string }>,
     sendTransaction: (proposal) =>
       call(METHODS.signAndSendTransaction, proposal) as Promise<SubmitResult>,
     sendCall: (account, c) =>

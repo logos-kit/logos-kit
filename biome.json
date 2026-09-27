@@ -19,6 +19,7 @@
       "!packages/qml-bundle/gate/noderun.cjs",
       "!docs/dev/PLAN.md",
       "!assets/logos",
+      "!sdk/qml/LogosKitUi/assets",
       "!protocol/vectors",
       "!docs/design/*.html",
       "!apps/design-lab/src/components/ui",

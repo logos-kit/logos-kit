@@ -2,11 +2,16 @@
 import {
   type AccountId,
   accountBytes,
+  decodeTestimonial,
+  decodeTestimonialStats,
   type PublicTransaction,
   Reader,
   sendTransactionParam,
   TESTIMONIAL_PAGE_SIZE,
   TESTIMONIAL_SUBMISSION,
+  type Testimonial,
+  type TestimonialStats,
+  testimonialRecord,
   testimonialStats,
   transactionHash,
 } from '@logos-kit/codec'
@@ -164,6 +169,55 @@ export async function openTestimonialPage(
     if (n < TESTIMONIAL_PAGE_SIZE) return { page, count }
   }
   throw new RangeError('more testimonial pages than a submission can hold')
+}
+
+export interface TestimonialFeed {
+  /** Every post so far. */
+  count: number
+  /** Posts per UTC month (`yyyymm`), ascending, across all pages. */
+  monthly: { yyyymm: number; count: number }[]
+  /** The newest posts first, at most `limit`. */
+  latest: Testimonial[]
+}
+
+/**
+ * A submission's total, monthly tallies and newest posts, read shard by
+ * shard with `read` (any source: the wallet's `readAccount` or a node).
+ */
+export async function readTestimonials(
+  program: AccountId,
+  read: (account: AccountId) => Promise<Uint8Array | undefined>,
+  options: { submission?: string; limit?: number } = {},
+): Promise<TestimonialFeed> {
+  const submission = options.submission ?? TESTIMONIAL_SUBMISSION
+  const limit = options.limit ?? 20
+  const pages: TestimonialStats[] = []
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const s = decodeTestimonialStats(await read(testimonialStats(program, submission, page)))
+    if (s) pages.push(s)
+    if (!s || s.authors.length < TESTIMONIAL_PAGE_SIZE) break
+  }
+  const months: Record<number, number> = {}
+  let count = 0
+  const authors: AccountId[] = []
+  for (const p of pages) {
+    count += p.authors.length
+    for (const m of p.monthly) months[m.yyyymm] = (months[m.yyyymm] || 0) + m.count
+    for (const a of p.authors) authors.push(a)
+  }
+  const newest = authors.slice(Math.max(0, authors.length - limit)).reverse()
+  const latest: Testimonial[] = []
+  for (const t of await Promise.all(
+    newest.map(async (a) =>
+      decodeTestimonial(await read(testimonialRecord(program, submission, a))),
+    ),
+  ))
+    if (t) latest.push(t)
+  const monthly = Object.keys(months)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((yyyymm) => ({ yyyymm, count: months[yyyymm] as number }))
+  return { count, monthly, latest }
 }
 
 export { nativeBalance }

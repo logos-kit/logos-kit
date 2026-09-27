@@ -6,7 +6,9 @@ export {
   nativeBalance,
   nodeActions,
   openTestimonialPage,
+  readTestimonials,
   statsAuthors,
+  type TestimonialFeed,
 } from './actions/node.ts'
 export {
   FINAL_LIFECYCLES,

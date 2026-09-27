@@ -1077,6 +1077,38 @@
         }
       }
     },
+    "lez_openExplorer": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "required": ["chain"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          },
+          "txHash": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "account": {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+            "description": "Base58-encoded 32-byte LEZ account id"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "lez_signAndSendTransaction": {
       "userFacing": true,
       "params": {

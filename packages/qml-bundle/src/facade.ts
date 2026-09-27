@@ -11,12 +11,23 @@ import {
   FINAL_LIFECYCLES,
   type PollOptions,
   poll,
+  readTestimonials,
   resolveTestimonial,
+  type TestimonialFeed,
   type TestimonialRequest,
   toInstruction,
   walletActions,
 } from '@logos-kit/client'
-import { type AccountId, nativeTransfer, type ProgramCall, tokenTransfer } from '@logos-kit/codec'
+import {
+  type AccountId,
+  decodeTestimonial,
+  nativeTransfer,
+  type ProgramCall,
+  TESTIMONIAL_SUBMISSION,
+  type Testimonial,
+  testimonialRecord,
+  tokenTransfer,
+} from '@logos-kit/codec'
 import {
   type BalanceResult,
   CHAINS,
@@ -80,6 +91,11 @@ export interface LogosKit {
   /** A public account's data for one program (chain state). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
   /**
+   * Open the zone's explorer at a transaction or account in the user's
+   * browser (the QML sandbox can't open links; the wallet builds the URL).
+   */
+  openExplorer(target: { txHash: string } | { account: AccountId }): Promise<{ url: string }>
+  /**
    * Answers once the user approved (with a handle), before the transaction
    * lands. An `id` is added if missing, so the wallet can refuse a duplicate.
    */
@@ -90,6 +106,17 @@ export interface LogosKit {
   transfer(from: AccountId, to: AccountId, amount: string, token?: AccountId): Promise<SubmitResult>
   /** Finds the open stats page itself when `page` is omitted. */
   postTestimonial(post: TestimonialRequest): Promise<SubmitResult>
+  /** A submission's total, monthly counts and newest posts (default 20). */
+  getTestimonials(
+    program: AccountId,
+    options?: { submission?: string; limit?: number },
+  ): Promise<TestimonialFeed>
+  /** `author`'s testimonial, or `null` if they haven't posted. */
+  getTestimonial(
+    program: AccountId,
+    author: AccountId,
+    submission?: string,
+  ): Promise<Testimonial | null>
   getTransactionStatus(handle: string): Promise<TransactionStatus>
   /** Calls `onUpdate` on every status change until the lifecycle is final. */
   watchTransaction(
@@ -181,6 +208,7 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
     getWalletBalance: (account, asset) =>
       wallet.getWalletBalance(asset ? { chain, account, asset } : { chain, account }),
     readAccount: (account, program) => wallet.readAccount(account, program),
+    openExplorer: (target) => wallet.openExplorer(target),
     sendTransaction: (proposal) =>
       intent<SubmitResult>(INTENTS.sendTransaction, {
         ...proposal,
@@ -196,6 +224,17 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
       ),
     postTestimonial: async (post) =>
       kit.sendCall(post.author, await resolveTestimonial(post, wallet.readAccount)),
+    getTestimonials: (program, options) =>
+      readTestimonials(program, async (a) => (await wallet.readAccount(a, program)).data, options),
+    getTestimonial: async (program, author, submission) =>
+      decodeTestimonial(
+        (
+          await wallet.readAccount(
+            testimonialRecord(program, submission || TESTIMONIAL_SUBMISSION, author),
+            program,
+          )
+        ).data,
+      ),
     getTransactionStatus: (handle) => wallet.getTransactionStatus(handle),
     watchTransaction(handle, onUpdate, onError, options) {
       let stopped = false

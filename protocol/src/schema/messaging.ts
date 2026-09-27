@@ -59,6 +59,18 @@ export const ReadAccountParams = Type.Object({
   program: AccountId,
 })
 
+/**
+ * `lez_openExplorer`: open the zone's explorer at one transaction or account.
+ * The wallet builds the URL, so apps can't open arbitrary links through it.
+ */
+export const OpenExplorerParams = Type.Object({
+  chain: ChainId,
+  txHash: Type.Optional(Hash32),
+  account: Type.Optional(AccountId),
+})
+
+export const OpenExplorerResult = Type.Object({ url: Type.String() })
+
 export const ReadAccountResult = Type.Object({
   nonce: U128,
   /** The program's data on this account (borsh), base64; empty if none. */

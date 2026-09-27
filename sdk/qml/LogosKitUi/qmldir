@@ -1,0 +1,15 @@
+module LogosKitUi
+singleton Theme 1.0 Theme.qml
+Txt 1.0 Txt.qml
+Btn 1.0 Btn.qml
+Card 1.0 Card.qml
+Field 1.0 Field.qml
+TextBox 1.0 TextBox.qml
+Spinner 1.0 Spinner.qml
+Skeleton 1.0 Skeleton.qml
+Tag 1.0 Tag.qml
+Notice 1.0 Notice.qml
+Identicon 1.0 Identicon.qml
+LogosMark 1.0 LogosMark.qml
+Glyph 1.0 Glyph.qml
+InfoRow 1.0 InfoRow.qml

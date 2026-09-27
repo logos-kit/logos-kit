@@ -44,6 +44,8 @@ export type {
   LwsRpcSchema,
   MethodName,
   NotificationName,
+  OpenExplorerParams,
+  OpenExplorerResult,
   Outcome,
   OutcomeSource,
   PrivateHandle,

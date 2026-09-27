@@ -11,6 +11,7 @@ export const METHODS = {
   getCapabilities: 'lez_getCapabilities',
   getBalance: 'lez_getBalance',
   readAccount: 'lez_readAccount',
+  openExplorer: 'lez_openExplorer',
   signAndSendTransaction: 'lez_signAndSendTransaction',
   getTransactionStatus: 'lez_getTransactionStatus',
   signMessage: 'lez_signMessage',

@@ -80,6 +80,11 @@ e2e-testimonial:
     e2e/standalone.sh
     e2e/testimonial.sh; status=$?; e2e/standalone.sh stop; exit $status
 
+# S8: the testimonial app's flow (app + wallet windows, real engine, local chain).
+e2e-testimonial-app:
+    e2e/standalone.sh
+    e2e/testimonial-app.sh; status=$?; e2e/standalone.sh stop; exit $status
+
 # Rebuild the testimonial program at HEAD in the pinned docker builder (artifacts/).
 build-testimonial:
     cargo run -q -p logos-kit-cli -- testimonial build
@@ -92,6 +97,10 @@ qt-setup:
 qml-sdk:
     pnpm --filter @logos-kit/protocol --filter @logos-kit/codec --filter @logos-kit/client --filter @logos-kit/theme build
     pnpm --filter @logos-kit/qml-bundle build
+
+# Copy the QML SDK (LogosKit/ + LogosKitUi/) into every app that vendors it.
+qml-vendor:
+    for d in modules/probe_dapp modules/logos_kit_testimonial; do rm -rf $d/qml/LogosKit $d/qml/LogosKitUi; cp -R sdk/qml/LogosKit sdk/qml/LogosKitUi $d/qml/; done
 
 # QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
 qml-gate: qml-sdk

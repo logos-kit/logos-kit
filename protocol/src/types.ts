@@ -39,6 +39,8 @@ export type BalanceParams = Static<typeof M.BalanceParams>
 export type BalanceResult = Static<typeof M.BalanceResult>
 export type ReadAccountParams = Static<typeof M.ReadAccountParams>
 export type ReadAccountResult = Static<typeof M.ReadAccountResult>
+export type OpenExplorerParams = Static<typeof M.OpenExplorerParams>
+export type OpenExplorerResult = Static<typeof M.OpenExplorerResult>
 
 export type MethodName = Mt.MethodName
 export type NotificationName = Mt.NotificationName
