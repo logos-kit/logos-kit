@@ -11,6 +11,5 @@ export RISC0_DEV_MODE=1
 cd "$ROOT"
 uv run -q --python .qt/q692/bin/python modules/logos_kit_wallet_ui/dev/app_harness.py \
   --app logos_kit_faucet --qml modules/logos_kit_faucet/qml/Main.qml \
-  --prop chain=lez:local \
   --script modules/logos_kit_faucet/dev/qa_faucet.py \
   --shots docs/reviews/s8/faucet 2>&1 | grep -v "usedbeforedeclared"

@@ -2,8 +2,12 @@
 // bridge (`logos`) and QML timers. Everything else lives in logoskit.js.
 //
 //   import "LogosKit"   // this folder, copied into your ui_qml module
-//   LogosKit { id: kit; chain: "lez:testnet"; visible: root.visible }
+//   LogosKit { id: kit; visible: root.visible }
 //   kit.api.connect().then(function (session) { ... })
+//
+// `chain` follows the network the wallet is on (like wagmi following the
+// wallet); set `followWallet: false` to pin it. `api` is rebuilt when the
+// chain changes, so read `kit.api` each time rather than keeping it.
 //
 // Your metadata.json must list the intents it uses:
 //   "uses": [{"intent": "lez.wallet.connect", "cardinality": "single"},
@@ -15,6 +19,8 @@ QtObject {
     id: kit
 
     property string chain: "lez:testnet"
+    /** Switch `chain` to the wallet's network (checked on start, when shown, and every 5 s while visible). */
+    property bool followWallet: true
     /** Status polling pauses while false (bind it to your view's visibility). */
     property bool visible: true
     /** Wallet core module name. */
@@ -50,8 +56,32 @@ QtObject {
         }
     }
 
+    property bool _ready: false
+
+    function _follow() {
+        if (!followWallet || !_api) return
+        _api.getChainId().then(function (c) { if (c && c !== kit.chain) kit.chain = c }, function () {})
+    }
+
+    onChainChanged: if (_ready) _create()
+    onVisibleChanged: if (visible) _follow()
+
+    // The user can switch the wallet's network while the app is open.
+    property Timer _followTimer: Timer {
+        interval: 5000
+        repeat: true
+        running: kit.followWallet && kit.visible && kit._ready
+        onTriggered: kit._follow()
+    }
+
     Component.onCompleted: {
         SDK.LogosKit.installQmlHost({ setTimeout: _setTimeout, clearTimeout: _clearTimeout })
+        _ready = true
+        _create()
+        _follow()
+    }
+
+    function _create() {
         _api = SDK.LogosKit.createLogosKit({
             chain: chain,
             module: module,

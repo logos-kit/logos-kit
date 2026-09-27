@@ -90,6 +90,8 @@ export interface LogosKit {
   getWalletBalance(account: AccountId, asset?: AccountId): Promise<BalanceResult>
   /** A public account's data for one program (chain state). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
+  /** The network the wallet is on (`LogosKit` follows it by default). */
+  getChainId(): Promise<ChainId>
   /**
    * Open the zone's explorer at a transaction or account in the user's
    * browser (the QML sandbox can't open links; the wallet builds the URL).
@@ -208,6 +210,7 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
     getWalletBalance: (account, asset) =>
       wallet.getWalletBalance(asset ? { chain, account, asset } : { chain, account }),
     readAccount: (account, program) => wallet.readAccount(account, program),
+    getChainId: () => wallet.getChainId(),
     openExplorer: (target) => wallet.openExplorer(target),
     sendTransaction: (proposal) =>
       intent<SubmitResult>(INTENTS.sendTransaction, {

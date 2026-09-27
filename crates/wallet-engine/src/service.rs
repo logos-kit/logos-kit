@@ -352,6 +352,8 @@ impl Service {
         }
         match method {
             "lez_getCapabilities" => Ok(capabilities()),
+            // Which network the wallet is on (like eth_chainId): apps follow it.
+            "lez_chainId" => Ok(json!({ "chain": self.current_zone().chain })),
             "lez_readAccount" => self.read_account(p),
             "lez_openExplorer" => self.open_explorer(p),
             "lez_getSession" => self.get_session(caller),

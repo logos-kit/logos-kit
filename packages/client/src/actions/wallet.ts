@@ -11,6 +11,7 @@ import {
 } from '@logos-kit/codec'
 import {
   type BalanceResult,
+  type ChainId,
   type ConnectParams,
   type LwsRpcSchema,
   METHODS,
@@ -53,6 +54,8 @@ export interface WalletActions {
   getWalletBalance(params: P<'lez_getBalance'>): Promise<BalanceResult>
   /** A public account's data for one program (chain state; no grant needed). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
+  /** The network the wallet is on. */
+  getChainId(): Promise<ChainId>
   /** Open the zone's explorer at a transaction (`txHash`) or an account. */
   openExplorer(target: { txHash: string } | { account: AccountId }): Promise<{ url: string }>
   /** Propose; resolves once the wallet queued it (`handle`), before approval finishes. */
@@ -129,6 +132,7 @@ export function walletActions(client: Client): WalletActions {
       })) as ReadAccountResult
       return { nonce: r.nonce, data: fromBase64(r.data) }
     },
+    getChainId: async () => ((await call(METHODS.chainId, {})) as { chain: ChainId }).chain,
     openExplorer: (target) =>
       call(METHODS.openExplorer, { chain: client.chain, ...target }) as Promise<{ url: string }>,
     sendTransaction: (proposal) =>

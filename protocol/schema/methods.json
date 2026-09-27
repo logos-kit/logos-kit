@@ -847,6 +847,24 @@
         }
       }
     },
+    "lez_chainId": {
+      "userFacing": false,
+      "params": {
+        "type": "object",
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": ["chain"],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+          }
+        }
+      }
+    },
     "lez_getCapabilities": {
       "userFacing": false,
       "params": {

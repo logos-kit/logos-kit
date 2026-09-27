@@ -31,6 +31,6 @@ echo "info program $PROGRAM"
 cd "$ROOT"
 uv run -q --python .qt/q692/bin/python modules/logos_kit_wallet_ui/dev/app_harness.py \
   --app logos_kit_testimonial --qml modules/logos_kit_testimonial/qml/Main.qml \
-  --prop chain=lez:local --prop "program=$PROGRAM" \
+  --prop "program=$PROGRAM" \
   --script modules/logos_kit_testimonial/dev/qa_testimonial.py \
   --shots docs/reviews/s8/testimonial 2>&1 | grep -v "usedbeforedeclared"

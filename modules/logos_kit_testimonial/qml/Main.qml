@@ -15,8 +15,8 @@ Item {
     width: 520
     height: 820
 
-    /** CAIP-2 chain; the wallet must be on the same one. */
-    property string chain: "lez:testnet"
+    /** The wallet's network (the SDK follows it). */
+    readonly property string chain: kit.chain
     /** The testimonial program; defaults to the deployment known for `chain`. */
     property string program: ""
     readonly property string programId: program !== "" ? program
@@ -49,9 +49,15 @@ Item {
 
     LogosKit {
         id: kit
-        chain: root.chain
         visible: root.visible
-        onApiChanged: if (api) { root.restore(); root.loadFeed() }
+        // Rebuilt when the wallet's network changes: start over on the new one.
+        onApiChanged: if (api) { root.reset(); root.restore(); root.loadFeed() }
+    }
+
+    function reset() {
+        if (root.watcher) root.watcher.stop()
+        root.session = null; root.account = ""; root.balance = null; root.nonce = null
+        root.mine = undefined; root.feed = null; root.feedError = ""; root.phase = "compose"; root.note = ""
     }
 
     // ---- helpers --------------------------------------------------------------
@@ -221,7 +227,7 @@ Item {
     Timer { id: delayedRefresh; interval: 2500; onTriggered: root.refreshAccount() }
     Timer { interval: 30000; repeat: true; running: root.visible && root.phase !== "pending"; onTriggered: root.loadFeed() }
 
-    onProgramIdChanged: if (kit.api) { root.feed = null; loadFeed(); refreshAccount() }
+    onProgramIdChanged: if (kit.api) { root.feed = null; root.mine = undefined; loadFeed(); refreshAccount() }
 
     // ---- view -----------------------------------------------------------------
 

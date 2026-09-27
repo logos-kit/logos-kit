@@ -43,6 +43,8 @@ export const Methods = {
     userFacing: false,
   },
   lez_getAccounts: { params: Empty, result: Type.Array(WalletAccount), userFacing: false },
+  /** The network the wallet is on (like `eth_chainId`); apps follow it. */
+  lez_chainId: { params: Empty, result: Type.Object({ chain: ChainId }), userFacing: false },
   lez_getCapabilities: {
     params: Type.Object({ chain: Type.Optional(ChainId) }),
     result: Capabilities,

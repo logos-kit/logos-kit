@@ -15,8 +15,8 @@ Item {
     width: 520
     height: 820
 
-    /** CAIP-2 chain; the wallet must be on the same one. */
-    property string chain: "lez:testnet"
+    /** The wallet's network (the SDK follows it). */
+    readonly property string chain: kit.chain
 
     property var session: null
     property var accounts: session ? session.accounts : []
@@ -38,9 +38,16 @@ Item {
 
     LogosKit {
         id: kit
-        chain: root.chain
         visible: root.visible
-        onApiChanged: if (api) root.restore()
+        // Rebuilt when the wallet's network changes: start over on the new one.
+        onApiChanged: if (api) { root.reset(); root.restore() }
+    }
+
+    function reset() {
+        if (root.watcher) root.watcher.stop()
+        checkTimer.stop()
+        root.session = null; root.account = ""; root.balances = ({}); root.limits = ({})
+        root.phase = "idle"; root.result = null; root.shield = null; root.note = ""; root.history = []
     }
 
     // ---- helpers --------------------------------------------------------------

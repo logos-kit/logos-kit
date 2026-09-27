@@ -18,8 +18,8 @@ Item {
     width: 480
     height: 720
 
-    // The wallet must be on the same network. "lez:local" for a local sequencer.
-    property string chain: "lez:testnet"
+    // The wallet's network: the SDK follows it (testnet, or lez:local while you develop).
+    readonly property string chain: kit.chain
 
     property var session: null
     readonly property string account: session && session.accounts.length ? session.accounts[0].address : ""
@@ -30,10 +30,13 @@ Item {
 
     LogosKit {
         id: kit
-        chain: root.chain
         visible: root.visible         // status polling pauses while the app is hidden
-        // Restore an earlier connection silently (no prompt).
-        onApiChanged: if (api) api.getSession().then(function (s) { if (s) root.use(s) }, function () {})
+        // Ready, or rebuilt for another network: restore a connection silently (no prompt).
+        onApiChanged: if (api) {
+            root.session = null
+            root.receipt = null
+            api.getSession().then(function (s) { if (s) root.use(s) }, function () {})
+        }
     }
 
     function use(s) { root.session = s; refresh() }

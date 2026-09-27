@@ -19,8 +19,8 @@ wallet; it installs from the Logos Kit catalog.
 1. In `metadata.json`, set `name` (lowercase, `_`), `display_name`,
    `description` and `category`. List every intent you use under `uses`.
 2. Replace `src/icons/icon.png` (256×256).
-3. Edit `qml/Main.qml`. Set `chain` to `"lez:local"` while you work against a
-   local sequencer.
+3. Edit `qml/Main.qml`. The app follows the wallet's network, so switching
+   the wallet to a local sequencer (Settings → Network) switches the app too.
 
 ## The SDK in one screen
 
