@@ -1,0 +1,36 @@
+{
+  "name": "logos_kit_wallet",
+  "display_name": "Logos Kit Wallet core (FAKE, conformance)",
+  "version": "0.1.1",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "developer",
+  "description": "FAKE wallet core for dApp conformance tests: answers LWS-0 from a fixed scenario, holds no keys, moves no funds. Replaces logos_kit_wallet in a test profile only.",
+  "main": "logos_kit_wallet_plugin",
+  "dependencies": [],
+  "codegen": {
+    "lidl": "logos_kit_wallet.lidl",
+    "rust": {
+      "crate": "rust-lib"
+    }
+  },
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [
+      {
+        "name": "wallet_engine"
+      }
+    ],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": ["lib"],
+      "extra_link_libraries": []
+    }
+  },
+  "platforms": [],
+  "concurrency": "multi"
+}

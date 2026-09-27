@@ -1,0 +1,20 @@
+[package]
+name = "wallet-engine-fake"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Deterministic stand-in for the Logos Kit wallet engine (conformance kit): same C ABI, no keys, no chain"
+publish = false
+
+# Standalone (like the other module crates): not in the root workspace.
+[workspace]
+
+[lib]
+# Same library name as the real engine, so the core module shim links it unchanged.
+name = "wallet_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"
+

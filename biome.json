@@ -23,6 +23,7 @@
       "!assets/logos",
       "!sdk/qml/LogosKitUi/assets",
       "!protocol/vectors",
+      "!docs/protocol/capability-matrix.json",
       "!docs/design/*.html",
       "!apps/design-lab/src/components/ui",
       "!apps/design-lab/src/hooks"
