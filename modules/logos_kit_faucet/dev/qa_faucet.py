@@ -12,10 +12,8 @@ def shown(name):
 def approve_funds():
     w.wait(lambda: w.find("fundsApprove"), 30, "faucet sheet")
     w.click("fundsApprove")
-    w.wait(lambda: w.find("fundsApprove") is None, 60, "faucet answered")
-    w.pump(1500)
-    if w.find("fundsDone"):
-        w.click("fundsDone")
+    # The result holds the wallet's sheet until Done.
+    w.click("fundsDone", 60)
 
 def session_account(kind):
     accts = root.property("accounts")
@@ -73,4 +71,22 @@ w.click("approve")
 d.shot("09-shield-proving", settle=1500)
 d.wait(lambda: shown("fcDone"), 900, "private funded")
 d.shot("10-private-funded", settle=2500)
-print("OK faucet app: public funded, rate-limited countdown, private funded via shield")
+
+def js(name):
+    v = root.property(name)
+    return v.toVariant() if hasattr(v, "toVariant") else v
+
+assert js("shield")["status"]["outcome"] == "success", js("shield")
+assert js("result").get("fundedAccount") == pub, js("result")
+d.click("fcAgain")
+
+# Outcome unknown that never shows up: the watch ends in a clear state
+# (read failures and unchanged balances both count), with a safe re-check.
+root.setProperty("account", pub)
+root.setProperty("maxChecks", 2)
+bal = js("balances")[pub]
+QMetaObject.invokeMethod(root, "startChecking", Q_ARG("QVariant", pub), Q_ARG("QVariant", bal))
+d.wait(lambda: shown("fcUnconfirmed"), 30, "unconfirmed after the watch")
+d.shot("11-unconfirmed")
+assert shown("fcCheckAgain")
+print("OK faucet app: public funded, rate-limited countdown, private funded via shield, unknown ends unconfirmed")

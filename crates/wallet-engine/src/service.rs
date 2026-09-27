@@ -114,7 +114,7 @@ pub struct Service {
     /// The local genesis-key faucet (see `local_faucet`).
     local_faucet: Mutex<Option<(String, Arc<KeyFaucet>)>>,
     /// When an app last opened an explorer page (one per second at most).
-    last_explorer: Mutex<Option<Instant>>,
+    explorer: Mutex<ExplorerBudget>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
     refresh: tokio::sync::Notify,
@@ -275,7 +275,7 @@ impl Service {
                 until: None,
             }),
             local_faucet: Mutex::new(None),
-            last_explorer: Mutex::new(None),
+            explorer: Mutex::new(ExplorerBudget::default()),
             generation: Mutex::new(0),
             refresh: tokio::sync::Notify::new(),
         })
@@ -355,7 +355,7 @@ impl Service {
             // Which network the wallet is on (like eth_chainId): apps follow it.
             "lez_chainId" => Ok(json!({ "chain": self.current_zone().chain })),
             "lez_readAccount" => self.read_account(p),
-            "lez_openExplorer" => self.open_explorer(p),
+            "lez_openExplorer" => self.open_explorer(p, caller),
             "lez_getSession" => self.get_session(caller),
             "lez_getAccounts" => {
                 let app = app_of(caller)?;
@@ -1520,7 +1520,9 @@ impl Service {
 
     /// Open the zone's explorer at a transaction or account. The wallet
     /// builds the URL, so an app can only ever open its own explorer page.
-    fn open_explorer(&self, p: &Value) -> Result<Value> {
+    /// Opens a browser tab, so only for connected apps (and our UI), within
+    /// [`ExplorerBudget`].
+    fn open_explorer(&self, p: &Value, caller: &Caller) -> Result<Value> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct P {
@@ -1559,16 +1561,19 @@ impl Service {
             }
             _ => return Err(invalid("pass exactly one of txHash or account")),
         };
-        {
-            let mut last = lock(&self.last_explorer);
-            if last.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+        let app = if caller.is_owner() {
+            String::new()
+        } else {
+            let app = app_of(caller)?;
+            if self.session_for(&app)?.is_null() {
                 return Err(Denied::err(
-                    Code::RequestPending,
-                    "an explorer page just opened",
+                    Code::Unauthorized,
+                    "connect to the wallet before opening explorer pages",
                 ));
             }
-            *last = Some(Instant::now());
-        }
+            app
+        };
+        lock(&self.explorer).take(&app, Instant::now())?;
         open_url(&url)?;
         Ok(json!({ "url": url }))
     }
@@ -1864,6 +1869,48 @@ async fn background(svc: &'static Service, engine: Arc<Engine>, generation: u64)
 fn getrandom_fill(buf: &mut [u8]) {
     use chacha20poly1305::aead::{OsRng, rand_core::RngCore as _};
     OsRng.fill_bytes(buf);
+}
+
+/// Explorer pages open a browser tab on the user's desktop: at most one a
+/// second overall, and [`ExplorerBudget::PER_APP`] per app per window.
+#[derive(Default)]
+struct ExplorerBudget {
+    last: Option<Instant>,
+    per_app: HashMap<String, VecDeque<Instant>>,
+}
+
+impl ExplorerBudget {
+    const GAP: Duration = Duration::from_secs(1);
+    const PER_APP: usize = 20;
+    const WINDOW: Duration = Duration::from_secs(600);
+
+    /// Spend one opening for `app` (empty: the wallet's own UI, no quota).
+    fn take(&mut self, app: &str, now: Instant) -> Result<()> {
+        if self.last.is_some_and(|t| now.duration_since(t) < Self::GAP) {
+            return Err(Denied::err(
+                Code::RequestPending,
+                "an explorer page just opened",
+            ));
+        }
+        if !app.is_empty() {
+            let times = self.per_app.entry(app.to_owned()).or_default();
+            while times
+                .front()
+                .is_some_and(|t| now.duration_since(*t) >= Self::WINDOW)
+            {
+                times.pop_front();
+            }
+            if times.len() >= Self::PER_APP {
+                return Err(Denied::err(
+                    Code::RequestPending,
+                    "too many explorer pages; try again in a few minutes",
+                ));
+            }
+            times.push_back(now);
+        }
+        self.last = Some(now);
+        Ok(())
+    }
 }
 
 fn app_of(caller: &Caller) -> Result<String> {
@@ -2232,6 +2279,21 @@ fn icon_grid(dir: &std::path::Path, rel: &str) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explorer_budget_gaps_and_caps_per_app() {
+        use std::time::{Duration, Instant};
+        let mut b = super::ExplorerBudget::default();
+        let t0 = Instant::now();
+        assert!(b.take("app", t0).is_ok());
+        assert!(b.take("other", t0 + Duration::from_millis(500)).is_err());
+        for i in 1..20 {
+            assert!(b.take("app", t0 + Duration::from_secs(i * 2)).is_ok());
+        }
+        assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
+        assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
+        assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
+    }
+
     #[test]
     fn receive_code_round_trips() {
         let npk = "11".repeat(32);

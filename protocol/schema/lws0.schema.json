@@ -810,6 +810,9 @@
         "shieldHandle": {
           "type": "string"
         },
+        "fundedAccount": {
+          "$ref": "#/$defs/AccountId"
+        },
         "reason": {
           "type": "string",
           "maxLength": 256

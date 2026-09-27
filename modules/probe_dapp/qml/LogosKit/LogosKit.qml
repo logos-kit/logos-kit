@@ -29,6 +29,13 @@ QtObject {
     readonly property var api: _api
     readonly property var sdk: SDK.LogosKit
 
+    /**
+     * The wallet's real answer to a step that already timed out (45 s): e.g.
+     * `{handle}` for a send the user approved late. `data` is the result, or a
+     * LezError when `ok` is false. Handle it as `onLateResult: function (intent, ok, data) {…}`.
+     */
+    signal lateResult(string intent, bool ok, var data)
+
     property var _api: null
     property int _nextTimer: 1
     property var _timers: ({})
@@ -86,6 +93,7 @@ QtObject {
             chain: chain,
             module: module,
             isVisible: function () { return kit.visible },
+            onLateResult: function (intent, ok, data) { kit.lateResult(intent, ok, data) },
             callModuleAsync: function (m, method, args, cb, timeoutMs) {
                 logos.callModuleAsync(m, method, args, cb, timeoutMs)
             },

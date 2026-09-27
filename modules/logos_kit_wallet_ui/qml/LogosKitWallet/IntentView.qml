@@ -29,6 +29,10 @@ ColumnLayout {
     // sheet closes, so its result (faucet outcome, proof) keeps its Done.
     property var shown: null
     readonly property var cur: req || shown
+    // An answered request still on screen (its result, its Done) holds the
+    // sheet: the Store refuses new ones until it closes.
+    Binding { target: iv.store; property: "sheetBusy"; value: iv.visible && iv.req === null && iv.shown !== null }
+    onFinished: shown = null
     readonly property string kind: cur ? cur.intent : ""
     readonly property var p: cur ? cur.params || ({}) : ({})
     readonly property string requester: cur ? cur.requester : ""
@@ -185,9 +189,18 @@ ColumnLayout {
             if (r.retryAfterSeconds !== undefined) out.retryAfterSeconds = r.retryAfterSeconds
             if (r.reason) out.reason = r.reason
             if (r.shield) out.shieldHandle = r.shield.handle
+            // A private target was funded through this public account.
+            if (r.fundedAccount && r.fundedAccount !== iv.p.account) out.fundedAccount = r.fundedAccount
             iv.store.answer(true, out, "")
             iv.store.refreshAll()
         })
+    }
+
+    Notice {
+        objectName: "intentQueued"
+        visible: !!iv.store.queued && iv.req === null
+        Layout.fillWidth: true
+        text: (iv.store.queued ? iv.store.appName(iv.store.queued.requester) : "") + " is waiting with another request. Close this to see it."
     }
 
     // == header (all kinds) ================================================================

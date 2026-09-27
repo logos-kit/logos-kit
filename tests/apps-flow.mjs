@@ -28,16 +28,26 @@ import {
 const PROGRAM = process.env.PROGRAM
 if (!PROGRAM) throw new Error('set PROGRAM to the testimonial program id')
 
-// The shell may ask which app handles an intent: pick the wallet until `name` shows.
+// The shell may ask which app handles an intent: pick the wallet until `name`
+// shows. A new request waits while an earlier result is still on the wallet's
+// sheet (a notice says so): close that result, as a user would.
 async function viaWallet(name, what) {
   await waitFor(
     what,
     async () => {
       if (await visibleId(name)) return true
+      if (await visibleId('intentQueued')) {
+        for (const done of ['proofDone', 'fundsDone', 'keepRunning'])
+          if (await visibleId(done)) {
+            await click(done)
+            break
+          }
+        return false
+      }
       await chooseWallet()
       return false
     },
-    30000,
+    60000,
   )
 }
 
@@ -98,15 +108,27 @@ await step('faucet: connect, rate limit, claim', async () => {
   await click('fcRequest')
   await viaWallet('fundsApprove', 'wallet faucet sheet')
   await click('fundsApprove')
-  if (await visibleId('fundsDone')) await click('fundsDone')
+  await click('fundsDone', 60000)
   await openApp('Logos Kit Faucet')
   await waitVisible('fcLimited', 60000)
   await shot('20-faucet-limited')
   // The countdown reopens the button; the next claim pays.
-  await click('fcRequest', 90000)
+  // (`click` waits 20 s for a button to enable; the countdown takes up to 60 s.)
+  await waitFor(
+    'countdown over',
+    async () => {
+      const id = await visibleId('fcRequest')
+      return (
+        !!id &&
+        (await ins.send('evaluate', { objectId: id, expression: 'this.enabled' })).result === true
+      )
+    },
+    150000,
+  )
+  await click('fcRequest')
   await viaWallet('fundsApprove', 'wallet faucet sheet')
   await click('fundsApprove')
-  if (await visibleId('fundsDone')) await click('fundsDone')
+  await click('fundsDone', 60000)
   await openApp('Logos Kit Faucet')
   await waitVisible('fcDone', 120000)
   await shot('21-faucet-funded')

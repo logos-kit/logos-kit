@@ -1069,6 +1069,23 @@ impl ::std::convert::From<::serde_json::Value> for Lws0LogosKitWalletProtocol {
         Self(value)
     }
 }
+///`OpenExplorerParams`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct OpenExplorerParams {
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub account: ::std::option::Option<AccountId>,
+    pub chain: ChainId,
+    #[serde(
+        rename = "txHash",
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub tx_hash: ::std::option::Option<Hash32>,
+}
+///`OpenExplorerResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct OpenExplorerResult {
+    pub url: ::std::string::String,
+}
 ///`Outcome`
 #[derive(
     ::serde::Deserialize,
@@ -1261,6 +1278,11 @@ pub struct RequestFundsParams {
 pub struct RequestFundsResult {
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub amount: ::std::option::Option<U128>,
+    #[serde(
+        rename = "fundedAccount",
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub funded_account: ::std::option::Option<AccountId>,
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub reason: ::std::option::Option<RequestFundsResultReason>,
     #[serde(

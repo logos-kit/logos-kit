@@ -34,8 +34,15 @@ Item {
     property bool checking: false
 
     // Posting.
-    property string phase: "compose"  // compose | approving | pending | done | failed
+    property string phase: "compose"  // compose | approving | pending | done | unconfirmed | failed
     property string handle: ""
+    // The post in flight, frozen when it starts: switching accounts or
+    // networks can't re-point its callbacks.
+    property var flow: null
+    // Bumped when the network (and so `kit.api`) changes: late answers from
+    // the old one are dropped.
+    property int epoch: 0
+    readonly property bool busy: phase === "approving" || phase === "pending"
     property var status: null
     property string failure: ""
     property string note: ""          // soft notice under the composer
@@ -55,7 +62,9 @@ Item {
     }
 
     function reset() {
+        root.epoch++
         if (root.watcher) root.watcher.stop()
+        root.watcher = null; root.flow = null; root.handle = ""; root.status = null
         root.session = null; root.account = ""; root.balance = null; root.nonce = null
         root.mine = undefined; root.feed = null; root.feedError = ""; root.phase = "compose"; root.note = ""
     }
@@ -106,15 +115,21 @@ Item {
 
     // ---- flows ----------------------------------------------------------------
 
+    // Wraps a callback so it runs only if the network hasn't changed since.
+    function live(f) {
+        var ep = root.epoch
+        return function (v) { if (ep === root.epoch) return f(v) }
+    }
+
     function restore() {
-        kit.api.getSession().then(function (s) { if (s && s.accounts.length) useSession(s) }, function () {})
+        kit.api.getSession().then(live(function (s) { if (s && s.accounts.length) useSession(s) }), function () {})
     }
 
     function connect() {
         root.note = ""
-        kit.api.connect({ accountKinds: ["public"] }).then(useSession, function (e) {
+        kit.api.connect({ accountKinds: ["public"] }).then(live(useSession), live(function (e) {
             root.note = isRejection(e) ? "" : errText(e)
-        })
+        }))
     }
 
     function useSession(s) {
@@ -126,6 +141,8 @@ Item {
     }
 
     function selectAccount(a) {
+        // Never while a post is in flight: its result belongs to its author.
+        if (root.busy) return
         root.account = a
         root.phase = "compose"
         root.failure = ""
@@ -133,17 +150,19 @@ Item {
     }
 
     function refreshAccount() {
-        var a = root.account
+        var a = root.account, ep = root.epoch
         if (!a) return
+        var mine = function () { return ep === root.epoch && a === root.account }
         root.checking = true
         var reads = [
-            kit.api.getWalletBalance(a).then(function (b) { if (a === root.account) root.balance = b.amount }),
+            kit.api.getWalletBalance(a).then(function (b) { if (mine()) root.balance = b.amount }),
         ]
         if (root.programId) {
-            reads.push(kit.api.readAccount(a, root.programId).then(function (r) { if (a === root.account) root.nonce = r.nonce }))
-            reads.push(kit.api.getTestimonial(root.programId, a).then(function (t) { if (a === root.account) root.mine = t }))
+            reads.push(kit.api.readAccount(a, root.programId).then(function (r) { if (mine()) root.nonce = r.nonce }))
+            reads.push(kit.api.getTestimonial(root.programId, a).then(function (t) { if (mine()) root.mine = t }))
         }
-        Promise.all(reads).then(function () { root.checking = false }, function (e) {
+        Promise.all(reads).then(function () { if (mine()) root.checking = false }, function (e) {
+            if (!mine()) return
             root.checking = false
             root.note = errText(e)
         })
@@ -153,73 +172,100 @@ Item {
         if (!root.programId) return
         root.feedLoading = true
         root.feedError = ""
-        kit.api.getTestimonials(root.programId, { limit: 25 }).then(function (f) {
+        kit.api.getTestimonials(root.programId, { limit: 25 }).then(live(function (f) {
             root.feed = f
             root.feedLoading = false
-        }, function (e) {
+        }), live(function (e) {
             root.feedLoading = false
             root.feedError = e && e.code === 4100 ? "Connect to read testimonials." : errText(e)
-        })
+        }))
     }
 
     function getFunds() {
         root.funding = true
         root.note = ""
-        kit.api.requestFunds(root.account).then(function (r) {
+        kit.api.requestFunds(root.account).then(live(function (r) {
             root.funding = false
             if (r.status === "funded") { root.note = ""; delayedRefresh.restart() }
             else if (r.status === "rate_limited") root.note = "The faucet is busy. Try again" + (r.retryAfterSeconds ? " in " + Math.ceil(r.retryAfterSeconds / 60) + " min." : " later.")
             else if (r.status === "outcome_unknown") { root.note = "The faucet hasn't confirmed yet. Your balance updates when it does."; delayedRefresh.restart() }
             else root.note = r.reason || "The faucet said no."
-        }, function (e) {
+        }), live(function (e) {
             root.funding = false
             root.note = isRejection(e) ? "" : errText(e)
-        })
+        }))
     }
 
     function post() {
         var text = composer.text, name = nameField.text
-        if (textProblem(text) || nameProblem(name)) return
+        if (root.busy || textProblem(text) || nameProblem(name)) return
+        var f = { epoch: root.epoch, api: kit.api, program: root.programId, author: root.account, text: text, handle: "" }
+        var ours = function () { return root.flow === f && f.epoch === root.epoch }
+        root.flow = f
         root.phase = "approving"
         root.failure = ""
         root.note = ""
-        var req = { program: root.programId, author: root.account, text: text }
+        var req = { program: f.program, author: f.author, text: text }
         if (name !== "") req.username = name
-        kit.api.postTestimonial(req).then(function (r) {
+        f.api.postTestimonial(req).then(function (r) {
+            if (!ours()) return
+            f.handle = r.handle
             root.handle = r.handle
             root.status = null
             root.phase = "pending"
             if (root.watcher) root.watcher.stop()
-            root.watcher = kit.api.watchTransaction(r.handle, onStatus, function (e) { fail(errText(e)) })
+            root.watcher = f.api.watchTransaction(r.handle,
+                function (s) { if (ours()) onStatus(f, s) },
+                function (e) { if (ours()) fail(errText(e)) })
         }, function (e) {
+            if (!ours()) return
             if (isRejection(e)) { root.phase = "compose"; root.note = "Cancelled in the wallet. Nothing was sent." }
             else if (e && e.code === 6108) { root.phase = "compose"; root.note = e.message }
             else fail(errText(e))
         })
     }
 
-    function onStatus(s) {
+    function onStatus(f, s) {
         root.status = s
         var lc = s.lifecycle
         if (lc === "included" || lc === "finalized") {
-            if (s.outcome === "failure") { recheckAfterReject(s); return }
-            root.phase = "done"
-            refreshAccount()
-            loadFeed()
+            if (s.outcome === "success") posted(f)
+            else if (s.outcome === "failure") recheckAfterReject(f, s)
+            // Included, but the wallet couldn't tell: the record decides.
+            else confirm(f)
         } else if (lc === "rejected" || lc === "dropped" || lc === "expired") {
-            recheckAfterReject(s)
+            recheckAfterReject(f, s)
         }
+    }
+
+    function posted(f) {
+        root.phase = "done"
+        refreshAccount()
+        loadFeed()
+    }
+
+    // Read the author's record: this post there means it landed.
+    function confirm(f) {
+        root.phase = "pending"
+        f.api.getTestimonial(f.program, f.author).then(function (t) {
+            if (root.flow !== f || f.epoch !== root.epoch) return
+            if (t && t.text === f.text) posted(f)
+            else root.phase = "unconfirmed"
+        }, function () {
+            if (root.flow === f && f.epoch === root.epoch) root.phase = "unconfirmed"
+        })
     }
 
     // A rejected post may still mean "you already posted" (another device, a
     // retry): read the record before calling it a failure.
-    function recheckAfterReject(s) {
-        kit.api.getTestimonial(root.programId, root.account).then(function (t) {
+    function recheckAfterReject(f, s) {
+        f.api.getTestimonial(f.program, f.author).then(function (t) {
+            if (root.flow !== f || f.epoch !== root.epoch) return
             if (t) { root.mine = t; root.phase = "compose"; loadFeed(); return }
             fail(s.error && s.error.message ? s.error.message
                 : s.lifecycle === "expired" ? "The approval expired before it was sent."
                 : "The network didn't accept it.")
-        }, function () { fail("The network didn't accept it.") })
+        }, function () { if (root.flow === f && f.epoch === root.epoch) fail("The network didn't accept it.") })
     }
 
     function fail(msg) { root.failure = msg; root.phase = "failed" }
@@ -435,7 +481,8 @@ Item {
                                         Identicon { seed: modelData.address; size: 18 }
                                         Txt { text: modelData.label || root.shortId(modelData.address); font.pixelSize: 12 }
                                     }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectAccount(modelData.address) }
+                                    opacity: root.busy && modelData.address !== root.account ? 0.4 : 1
+                                    MouseArea { anchors.fill: parent; enabled: !root.busy; cursorShape: Qt.PointingHandCursor; onClicked: root.selectAccount(modelData.address) }
                                 }
                             }
                         }
@@ -610,6 +657,36 @@ Item {
                                 onClicked: kit.api.openExplorer({ txHash: root.status.txHash }).catch(function (e) { root.note = errText(e) })
                             }
                             Btn { text: "Done"; tone: "neutral"; onClicked: root.phase = "compose" }
+                        }
+                    }
+
+                    // Included, outcome not confirmed
+                    ColumnLayout {
+                        objectName: "tmUnconfirmed"
+                        visible: root.phase === "unconfirmed"
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Txt { text: "Sent, not confirmed yet"; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        Notice {
+                            tone: "warn"
+                            text: "The transaction is in a block, but your testimonial isn't readable yet. Don't post again: check once more in a moment."
+                        }
+                        InfoRow {
+                            visible: !!(root.status && root.status.txHash)
+                            label: "Transaction"
+                            value: root.status && root.status.txHash ? root.shortId(root.status.txHash.replace("0x", "")) : ""
+                            mono: true
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Btn { objectName: "tmRecheck"; text: "Check again"; tone: "ink"; onClicked: if (root.flow) root.confirm(root.flow) }
+                            Btn {
+                                visible: root.chain === "lez:testnet" && !!(root.status && root.status.txHash)
+                                text: "View on explorer"
+                                icon: "external"
+                                tone: "ghost"
+                                onClicked: kit.api.openExplorer({ txHash: root.status.txHash }).catch(function (e) { root.note = errText(e) })
+                            }
                         }
                     }
 

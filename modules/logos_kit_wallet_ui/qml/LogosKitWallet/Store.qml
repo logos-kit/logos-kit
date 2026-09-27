@@ -193,14 +193,33 @@ QtObject {
 
     // -- intents ---------------------------------------------------------------
 
+    // True while an answered request's result is still on the sheet. A new
+    // request waits (`queued`) until the user closes it, so it never swaps in
+    // under a click meant for the old one.
+    property bool sheetBusy: false
+    property var queued: null
+    // Later, not inside the sheet's binding that just changed (a loop).
+    onSheetBusyChanged: if (!sheetBusy && queued !== null) Qt.callLater(openQueued)
+    function openQueued() {
+        if (sheetBusy || queued === null || intent !== null) return
+        var q = queued
+        queued = null
+        openIntent(q)
+    }
+
     function receiveIntent(requestId, name, params, requester) {
-        if (intent !== null) {
-            // One at a time; the shell rarely lets a second through.
+        var req = { requestId: requestId, intent: name, params: params || {}, requester: requester || "" }
+        if (intent !== null || queued !== null) {
+            // One at a time (plus one waiting); the shell rarely lets more through.
             logos.respond(requestId, false, ({}), "failed")
             return
         }
-        intent = { requestId: requestId, intent: name, params: params || {}, requester: requester || "" }
-        loadApp(requester)
+        loadApp(req.requester)
+        if (sheetBusy) queued = req
+        else openIntent(req)
+    }
+    function openIntent(req) {
+        intent = req
         intentArrived()
     }
 

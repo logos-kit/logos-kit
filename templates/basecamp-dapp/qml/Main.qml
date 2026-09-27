@@ -24,26 +24,54 @@ Item {
     property var session: null
     readonly property string account: session && session.accounts.length ? session.accounts[0].address : ""
     property string balance: ""
-    property string phase: "idle"     // idle | funding | approving | sending | done | failed
+    property string phase: "idle"     // idle | funding | approving | waiting | sending | done | unconfirmed | failed
     property var receipt: null        // the latest TransactionStatus
     property string message: ""
+    property var watcher: null
+    property var sent: null           // { amount, before }: what the receipt should show
+    // Bumped when the wallet switches network (kit.api is rebuilt): answers
+    // that arrive later from the old network are ignored.
+    property int epoch: 0
 
     LogosKit {
         id: kit
         visible: root.visible         // status polling pauses while the app is hidden
-        // Ready, or rebuilt for another network: restore a connection silently (no prompt).
+        // Ready, or rebuilt for another network: start over, then restore a
+        // connection silently (no prompt).
         onApiChanged: if (api) {
-            root.session = null
-            root.receipt = null
-            api.getSession().then(function (s) { if (s) root.use(s) }, function () {})
+            root.reset()
+            api.getSession().then(root.live(function (s) { if (s) root.use(s) }), function () {})
         }
+        // The user took longer than 45 s to approve: the wallet's answer comes here.
+        onLateResult: function (intent, ok, data) {
+            if (intent !== kit.sdk.INTENTS.sendTransaction || root.phase !== "waiting") return
+            if (ok) root.follow(data.handle)
+            else root.show(data)
+        }
+    }
+
+    function reset() {
+        root.epoch++
+        if (root.watcher) root.watcher.stop()
+        root.watcher = null
+        root.session = null; root.balance = ""; root.receipt = null; root.sent = null
+        root.phase = "idle"; root.message = ""
+    }
+
+    // Runs `f` only if the network hasn't changed since this was called.
+    function live(f) {
+        var ep = root.epoch
+        return function (v) { if (ep === root.epoch) return f(v) }
     }
 
     function use(s) { root.session = s; refresh() }
 
-    function refresh() {
+    function refresh(then) {
         if (!root.account) return
-        kit.api.getWalletBalance(root.account).then(function (b) { root.balance = b.amount }, show)
+        kit.api.getWalletBalance(root.account).then(live(function (b) {
+            root.balance = b.amount
+            if (then) then(b.amount)
+        }), live(show))
     }
 
     // Errors are LezError { code, message }. A user saying no is not an error.
@@ -54,36 +82,61 @@ Item {
 
     function connect() {
         root.message = ""
-        kit.api.connect({ accountKinds: ["public"] }).then(use, show)
+        kit.api.connect({ accountKinds: ["public"] }).then(live(use), live(show))
     }
 
     function getFunds() {
         root.phase = "funding"
-        kit.api.requestFunds(root.account).then(function (r) {
+        kit.api.requestFunds(root.account).then(live(function (r) {
             root.phase = "idle"
-            root.message = r.status === "funded" ? "" : r.status === "rate_limited"
-                ? "The faucet is busy; try again in " + Math.ceil((r.retryAfterSeconds || 60) / 60) + " min."
+            root.message = r.status === "funded" ? ""
+                : r.status === "rate_limited" ? "The faucet is busy; try again in " + Math.ceil((r.retryAfterSeconds || 60) / 60) + " min."
+                : r.status === "outcome_unknown" ? "The faucet hasn't confirmed yet; your balance updates when it lands. Don't ask again yet."
                 : r.reason || "No funds this time."
             refreshLater.restart()
-        }, show)
+        }), live(show))
     }
 
     function send() {
         root.phase = "approving"
         root.message = ""
+        root.sent = { amount: amount.text.trim(), before: root.balance }
         // Resolves once the user approved in the wallet; the handle follows it from there.
-        kit.api.transfer(root.account, to.text.trim(), amount.text.trim()).then(function (r) {
-            root.phase = "sending"
-            kit.api.watchTransaction(r.handle, function (s) {
-                root.receipt = s
-                if (s.lifecycle === "included" || s.lifecycle === "finalized") {
-                    root.phase = s.outcome === "failure" ? "failed" : "done"
-                    refresh()
-                } else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired") {
-                    root.phase = "failed"
-                }
-            }, show)
-        }, show)
+        kit.api.transfer(root.account, to.text.trim(), root.sent.amount).then(live(function (r) {
+            root.follow(r.handle)
+        }), live(function (e) {
+            // No answer in 45 s: the wallet may still be open. Keep waiting;
+            // its answer arrives in onLateResult.
+            if (e && e.code === kit.sdk.ErrorCode.Timeout) { root.phase = "waiting"; return }
+            show(e)
+        }))
+    }
+
+    // Follow a transaction to the end. `outcome` says whether it worked:
+    // "included" alone can also be a failed or unconfirmed transaction.
+    function follow(handle) {
+        root.phase = "sending"
+        if (root.watcher) root.watcher.stop()
+        root.watcher = kit.api.watchTransaction(handle, live(function (s) {
+            root.receipt = s
+            if (s.lifecycle === "included" || s.lifecycle === "finalized") {
+                if (s.outcome === "success") { root.phase = "done"; refresh() }
+                else if (s.outcome === "failure") { root.phase = "failed"; refresh() }
+                else confirm()
+            } else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired") {
+                root.phase = "failed"
+            }
+        }), live(show))
+    }
+
+    // Outcome unknown: our balance going down since we sent confirms it
+    // (amounts are digit strings: u128 never becomes a JS number).
+    function below(a, b) { return a.length !== b.length ? a.length < b.length : a < b }
+    function confirm() {
+        refresh(function (now) {
+            var s = root.sent
+            root.phase = s && s.before !== "" && below(now, s.before) ? "done" : "unconfirmed"
+        })
     }
 
     Timer { id: refreshLater; interval: 2000; onTriggered: root.refresh() }
@@ -159,9 +212,9 @@ Item {
                     Layout.fillWidth: true
                     large: true
                     tone: "ink"
-                    enabled: root.validSend && root.phase !== "approving" && root.phase !== "sending"
-                    busy: root.phase === "approving" || root.phase === "sending"
-                    text: root.phase === "approving" ? "Approve in your wallet…" : root.phase === "sending" ? "Sending…" : "Send"
+                    enabled: root.validSend && root.phase !== "approving" && root.phase !== "waiting" && root.phase !== "sending"
+                    busy: root.phase === "approving" || root.phase === "waiting" || root.phase === "sending"
+                    text: root.phase === "approving" || root.phase === "waiting" ? "Approve in your wallet…" : root.phase === "sending" ? "Sending…" : "Send"
                     onClicked: root.send()
                 }
             }
@@ -184,11 +237,22 @@ Item {
                         tone: root.phase === "done" ? "ok" : root.phase === "failed" ? "danger" : "pending"
                     }
                 }
+                Txt {
+                    visible: root.phase === "unconfirmed"
+                    Layout.fillWidth: true
+                    text: "In a block, but the wallet couldn't confirm it worked. Check your balance before sending again."
+                    tone: "warn"; font.pixelSize: 12; wrapMode: Text.Wrap
+                }
+                Btn { visible: root.phase === "unconfirmed"; text: "Check again"; onClicked: root.confirm() }
                 Txt { visible: !!(root.receipt && root.receipt.txHash); text: root.receipt && root.receipt.txHash ? root.receipt.txHash : ""; mono: true; tone: "text2"; font.pixelSize: 11; Layout.fillWidth: true }
                 Txt { visible: !!(root.receipt && root.receipt.block); text: root.receipt && root.receipt.block ? "Block #" + root.receipt.block.id : ""; tone: "text2"; font.pixelSize: 12 }
             }
         }
 
+        Notice {
+            visible: root.phase === "waiting"
+            text: "Still waiting for your wallet. Finish or cancel the request there."
+        }
         Notice { visible: root.message !== ""; tone: "warn"; text: root.message }
     }
 }

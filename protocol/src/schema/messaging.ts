@@ -32,6 +32,12 @@ export const RequestFundsResult = Type.Object({
   txHash: Type.Optional(Hash32),
   /** Present when the target was private and a follow-up shield was queued. */
   shieldHandle: Type.Optional(Type.String()),
+  /**
+   * The public account the faucet paid, when it isn't the target (a private
+   * target is funded through one): where the funds are if the shield is
+   * refused, or while the outcome is unknown.
+   */
+  fundedAccount: Type.Optional(AccountId),
   reason: Type.Optional(Type.String({ maxLength: 256 })),
 })
 

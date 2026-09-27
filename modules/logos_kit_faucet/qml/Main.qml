@@ -26,15 +26,21 @@ Item {
     property var limits: ({})          // address -> epoch ms when the next claim opens
     property real now: Date.now()
 
-    property string phase: "idle"      // idle | requesting | checking | shielding | done | limited | declined | failed
+    property string phase: "idle"      // idle | requesting | checking | shielding | done | limited | unconfirmed | declined | failed
     property var result: null
     property string failure: ""
     property string note: ""
     property var shield: null          // { handle, status, startedAt }
     property var watcher: null
-    property string before: ""         // balance before an unconfirmed claim
-    property int checks: 0
+    // An unconfirmed claim: which account we watch (the one the faucet paid),
+    // its balance before, when we started and how many reads we tried.
+    property var claim: null
     property var history: []
+    // Bumped when the network (and so `kit.api`) changes: late answers from
+    // the old one are dropped.
+    property int epoch: 0
+    property int maxChecks: 30
+    property int maxCheckMs: 120000
 
     LogosKit {
         id: kit
@@ -44,7 +50,9 @@ Item {
     }
 
     function reset() {
+        root.epoch++
         if (root.watcher) root.watcher.stop()
+        root.watcher = null; root.claim = null
         checkTimer.stop()
         root.session = null; root.account = ""; root.balances = ({}); root.limits = ({})
         root.phase = "idle"; root.result = null; root.shield = null; root.note = ""; root.history = []
@@ -95,15 +103,21 @@ Item {
 
     // ---- flows ----------------------------------------------------------------
 
+    // Wraps a callback so it runs only if the network hasn't changed since.
+    function live(f) {
+        var ep = root.epoch
+        return function (v) { if (ep === root.epoch) return f(v) }
+    }
+
     function restore() {
-        kit.api.getSession().then(function (s) { if (s && s.accounts.length) useSession(s) }, function () {})
+        kit.api.getSession().then(live(function (s) { if (s && s.accounts.length) useSession(s) }), function () {})
     }
 
     function connect() {
         root.note = ""
-        kit.api.connect({ accountKinds: ["public", "private"] }).then(useSession, function (e) {
+        kit.api.connect({ accountKinds: ["public", "private"] }).then(live(useSession), live(function (e) {
             root.note = isRejection(e) ? "" : errText(e)
-        })
+        }))
     }
 
     function useSession(s) {
@@ -113,35 +127,41 @@ Item {
     }
 
     function select(a) {
-        if (root.phase === "requesting" || root.phase === "shielding" || root.phase === "checking") return
+        if (root.phase === "requesting" || root.phase === "shielding" || root.phase === "checking" || root.phase === "unconfirmed") return
         root.account = a
         root.phase = root.limits[a] && root.limits[a] > Date.now() ? "limited" : "idle"
         refreshBalance(a)
     }
 
-    function refreshBalance(a, then) {
-        return kit.api.getWalletBalance(a).then(function (b) {
+    // `then(amount)` on a read, `failed(error)` when it couldn't be read.
+    function refreshBalance(a, then, failed) {
+        return kit.api.getWalletBalance(a).then(live(function (b) {
             var m = {}
             for (var k in root.balances) m[k] = root.balances[k]
             m[a] = b.amount
             root.balances = m
             if (then) then(b.amount)
-        }, function () {})
+        }), live(function (e) { if (failed) failed(e) }))
     }
 
     function request() {
-        var a = root.account
+        var a = root.account, ep = root.epoch
         root.phase = "requesting"
         root.result = null
         root.failure = ""
         root.note = ""
-        root.before = root.balances[a] || "0"
+        root.claim = null
+        var before = {}
+        for (var k in root.balances) before[k] = root.balances[k]
         kit.api.requestFunds(a).then(function (r) {
+            if (ep !== root.epoch) return
             root.result = r
+            // A private target is funded through a public account of yours.
+            var paid = r.fundedAccount || a
             if (r.status === "funded") {
                 if (r.shieldHandle) { startShield(r.shieldHandle); return }
                 if (root.selected && root.selected.kind === "private") {
-                    root.note = "The faucet paid your public account, but the private move couldn't start. Move it from the wallet."
+                    root.note = "The faucet paid your public account " + root.shortId(paid) + ", but the private move couldn't start. Move it from the wallet."
                 }
                 root.phase = "done"
                 log({ status: "funded", amount: r.amount })
@@ -149,15 +169,14 @@ Item {
             } else if (r.status === "rate_limited") {
                 limit(a, r.retryAfterSeconds || 60)
             } else if (r.status === "outcome_unknown") {
-                root.phase = "checking"
-                root.checks = 0
-                checkTimer.restart()
+                startChecking(paid, before[paid] || "0")
             } else {
                 root.failure = r.reason || "The faucet declined this request."
                 root.phase = "declined"
                 log({ status: "declined" })
             }
         }, function (e) {
+            if (ep !== root.epoch) return
             if (isRejection(e)) { root.phase = "idle"; root.note = "Cancelled in the wallet." }
             else { root.failure = errText(e); root.phase = "failed" }
         })
@@ -176,51 +195,73 @@ Item {
     function settle(a) { settleTimer.target = a; settleTimer.restart() }
     Timer { id: settleTimer; property string target: ""; interval: 1500; onTriggered: root.refreshBalance(target) }
 
-    // outcome_unknown: never ask again blindly (it could pay twice); watch the balance.
-    Timer {
-        id: checkTimer
-        interval: 3000
-        repeat: true
-        onTriggered: {
-            root.checks++
-            var a = root.account
-            root.refreshBalance(a, function (bal) {
-                if (root.phase !== "checking") return
-                if (bal !== root.before && bal !== "0") {
-                    checkTimer.stop()
-                    root.phase = "done"
-                    root.result = { status: "funded", amount: "" }
-                    log({ status: "funded" })
-                } else if (root.checks >= 30) {
-                    checkTimer.stop()
-                    root.failure = "We couldn't confirm it arrived. Check your balance in a few minutes before asking again."
-                    root.phase = "failed"
-                    log({ status: "unknown" })
-                }
-            })
-        }
+    // outcome_unknown: never ask again blindly (it could pay twice); watch the
+    // balance of the account the faucet paid. Every tick counts, read or not,
+    // so the watch always ends: after `maxChecks` reads or `maxCheckMs`.
+    function startChecking(watch, before) {
+        root.claim = { account: watch, before: before, startedAt: Date.now(), attempts: 0, epoch: root.epoch }
+        root.phase = "checking"
+        checkTimer.restart()
     }
+    function checkOnce() {
+        var c = root.claim
+        if (!c || c.epoch !== root.epoch) { checkTimer.stop(); return }
+        c.attempts++
+        root.refreshBalance(c.account, function (bal) {
+            if (root.claim !== c || (root.phase !== "checking" && root.phase !== "unconfirmed")) return
+            if (bal !== c.before && bal !== "0") {
+                checkTimer.stop()
+                root.claim = null
+                root.result = { status: "funded", amount: "" }
+                if (root.selected && root.selected.kind === "private")
+                    root.note = "It arrived in your public account " + root.shortId(c.account) + ". Move it in privately from the wallet."
+                root.phase = "done"
+                log({ status: "funded" })
+            } else giveUp(c)
+        }, function () { if (root.claim === c) giveUp(c) })
+    }
+    function giveUp(c) {
+        if (root.phase !== "checking") return
+        if (c.attempts < root.maxChecks && Date.now() - c.startedAt < root.maxCheckMs) return
+        checkTimer.stop()
+        root.phase = "unconfirmed"
+        log({ status: "unknown" })
+    }
+    Timer { id: checkTimer; interval: 3000; repeat: true; onTriggered: root.checkOnce() }
 
     function startShield(handle) {
+        var ep = root.epoch, target = root.account
+        var paid = root.result && root.result.fundedAccount ? root.result.fundedAccount : ""
+        var where = paid ? "your public account " + root.shortId(paid) : "your public account"
+        var privBefore = root.balances[target] || "0"
         root.phase = "shielding"
         root.shield = { handle: handle, status: null, startedAt: 0 }
         if (root.watcher) root.watcher.stop()
         root.watcher = kit.api.watchTransaction(handle, function (s) {
+            if (ep !== root.epoch) return
             var sh = { handle: handle, status: s, startedAt: root.shield.startedAt }
             if (!sh.startedAt && s.lifecycle !== "awaiting_approval") sh.startedAt = Date.now()
             root.shield = sh
             if (s.lifecycle === "included" || s.lifecycle === "finalized") {
-                if (s.outcome === "failure") { root.failure = "The private move failed. The funds are still in your public account."; root.phase = "failed"; return }
-                root.phase = "done"
-                log({ status: "funded", amount: root.result ? root.result.amount : "" })
-                for (var i = 0; i < root.accounts.length; i++) root.refreshBalance(root.accounts[i].address)
+                if (s.outcome === "failure") { root.failure = "The private move failed. The funds are still in " + where + "."; root.phase = "failed"; return }
+                if (s.outcome === "success") { shielded(); return }
+                // Included, outcome unknown: the private balance decides.
+                root.refreshBalance(target, function (bal) {
+                    if (bal !== privBefore && bal !== "0") shielded()
+                    else { root.claim = { account: target, before: privBefore, startedAt: Date.now(), attempts: 0, epoch: ep, shield: true }; root.phase = "unconfirmed" }
+                }, function () { root.claim = { account: target, before: privBefore, startedAt: Date.now(), attempts: 0, epoch: ep, shield: true }; root.phase = "unconfirmed" })
             } else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired") {
                 root.failure = s.lifecycle === "rejected" && s.outcome === "unknown"
-                    ? "You didn't approve the private move. The funds are in your public account; move them from the wallet."
-                    : (s.error && s.error.message) || "The private move didn't go through. The funds are in your public account."
+                    ? "You didn't approve the private move. The funds are in " + where + "; move them from the wallet."
+                    : ((s.error && s.error.message) || "The private move didn't go through.") + " The funds are in " + where + "."
                 root.phase = "failed"
             }
-        }, function (e) { root.failure = errText(e); root.phase = "failed" })
+        }, function (e) { if (ep === root.epoch) { root.failure = errText(e); root.phase = "failed" } })
+    }
+    function shielded() {
+        root.phase = "done"
+        log({ status: "funded", amount: root.result ? root.result.amount : "" })
+        for (var i = 0; i < root.accounts.length; i++) root.refreshBalance(root.accounts[i].address)
     }
 
     Timer {
@@ -407,6 +448,43 @@ Item {
                             Txt { text: "Checking whether it arrived…"; font.weight: Font.DemiBold }
                             Txt { text: "The faucet didn't confirm yet. We watch your balance instead of asking twice."; tone: "text2"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.maximumWidth: 400 }
                         }
+                    }
+
+                    // Unconfirmed: the watch ended without seeing the funds
+                    ColumnLayout {
+                        objectName: "fcUnconfirmed"
+                        visible: root.phase === "unconfirmed"
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Txt { text: "Not confirmed yet"; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        Notice {
+                            tone: "warn"
+                            text: root.claim && root.claim.shield
+                                ? "The private move is in a block, but your private balance hasn't changed yet. Check again in a moment."
+                                : "We couldn't see the funds arrive" + (root.claim && root.claim.account !== root.account
+                                    ? " in your public account " + root.shortId(root.claim.account) + " (private funds go through it)" : "")
+                                  + ". Don't ask again yet: it may still land. Check the balance in a minute."
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Btn {
+                                objectName: "fcCheckAgain"
+                                text: "Check balance again"
+                                tone: "ink"
+                                onClicked: {
+                                    var c = root.claim
+                                    if (!c) return
+                                    root.refreshBalance(c.account, function (bal) {
+                                        if (root.claim !== c || bal === c.before || bal === "0") return
+                                        root.claim = null
+                                        if (c.shield) root.shielded()
+                                        else { root.result = { status: "funded", amount: "" }; root.phase = "done"; log({ status: "funded" }) }
+                                    }, function (e) { root.note = errText(e) })
+                                }
+                            }
+                            Btn { text: "Back"; onClicked: { root.claim = null; root.phase = "idle"; root.refreshBalance(root.account) } }
+                        }
+                        Txt { visible: root.note !== ""; Layout.fillWidth: true; text: root.note; tone: "text2"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone }
                     }
 
                     // Private: shield steps

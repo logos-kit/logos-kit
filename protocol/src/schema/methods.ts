@@ -53,7 +53,11 @@ export const Methods = {
   lez_getBalance: { params: BalanceParams, result: BalanceResult, userFacing: false },
   /** Read one program's public data on an account (chain state: no grant needed). */
   lez_readAccount: { params: ReadAccountParams, result: ReadAccountResult, userFacing: false },
-  /** Open the zone's explorer at a transaction or account (the wallet builds the URL). */
+  /**
+   * Open the zone's explorer at a transaction or account (the wallet builds the
+   * URL; testnet only). Connected apps only (4100 otherwise); at most one page
+   * a second overall and 20 per app per 10 minutes (6107).
+   */
   lez_openExplorer: { params: OpenExplorerParams, result: OpenExplorerResult, userFacing: false },
   lez_signAndSendTransaction: {
     params: TransactionProposal,

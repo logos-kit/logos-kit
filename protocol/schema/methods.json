@@ -1813,6 +1813,11 @@
           "shieldHandle": {
             "type": "string"
           },
+          "fundedAccount": {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+            "description": "Base58-encoded 32-byte LEZ account id"
+          },
           "reason": {
             "type": "string",
             "maxLength": 256

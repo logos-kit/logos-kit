@@ -30,6 +30,9 @@ w.shot("04-wallet-faucet")
 w.click("fundsApprove")
 d.wait(lambda: not shown("tmNoFunds") and shown("tmFresh"), 120, "funded, fresh-account nudge")
 d.shot("05-funded-fresh")
+# The faucet result holds the wallet's sheet until Done (a new request is
+# refused meanwhile, so a click meant for Done can't land on an Approve).
+w.click("fundsDone")
 
 # Validation: the text must name the wallet.
 d.type("tmText", "Great wallet!")
@@ -52,6 +55,9 @@ w.click("approve")
 d.wait(lambda: shown("tmPending") or shown("tmDone"), 30, "pending")
 d.shot("10-pending", settle=200)
 d.wait(lambda: shown("tmDone"), 120, "included")
+st = d.root().property("status")
+st = st.toVariant() if hasattr(st, "toVariant") else st
+assert st["outcome"] == "success", f"Done only on outcome success, got {st}"
 d.wait(lambda: txt("tmCount") == "2", 60, "count 2")
 d.shot("11-done")
 

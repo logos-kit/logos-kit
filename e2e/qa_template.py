@@ -16,18 +16,23 @@ d.shot("02-connected-empty")
 d.click("funds")
 w.wait(lambda: w.find("fundsApprove"), 30, "faucet sheet")
 w.click("fundsApprove")
-w.wait(lambda: w.find("fundsApprove") is None, 60, "faucet answered")
-w.pump(1500)
-if w.find("fundsDone"):
-    w.click("fundsDone")
+# The result holds the wallet's sheet until Done (new requests wait for it).
+w.click("fundsDone", 60)
 d.wait(lambda: d.prop("balance", "text").startswith("1000000000"), 60, "funded")
-d.type("to", other)
+# Send to a public account other than the one the app was given (the
+# connect sheet shares the wallet's current account, which may be "Other").
+publics = [a["accountId"] for a in created["accounts"] if a["kind"] == "public"] + [other]
+to = [a for a in publics if a != d.root().property("account")][0]
+d.type("to", to)
 d.type("amount", "42")
 d.shot("03-compose")
 d.click("send")
 w.wait(lambda: w.find("approve"), 30, "approval")
 w.shot("04-wallet-approval")
 w.click("approve")
-d.wait(lambda: d.prop("lifecycle", "text") in ("included", "finalized"), 120, "included")
+d.wait(lambda: d.root().property("phase") == "done", 120, "included, outcome success")
+rc = d.root().property("receipt")
+rc = rc.toVariant() if hasattr(rc, "toVariant") else rc
+assert rc["outcome"] == "success", rc
 d.shot("05-receipt", settle=1500)
 print("OK template: connect, in-flow faucet, transfer approved, receipt included")
