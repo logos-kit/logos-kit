@@ -10,6 +10,8 @@
 //! Output (checked in, never hand-edited):
 //! - `protocol/vectors/public_tx.json`
 //! - `protocol/vectors/keys.json`
+//! - `protocol/vectors/programs.json` (builtin ids, instruction data, our
+//!   testimonial program's accounts, from the programs' own crates)
 
 use std::{fs, path::Path, str::FromStr as _};
 
@@ -50,7 +52,8 @@ pub fn run(repo_root: &Path) -> Result<()> {
     fs::create_dir_all(&out)?;
     write_json(&out.join("public_tx.json"), &public_tx_vectors()?)?;
     write_json(&out.join("keys.json"), &key_vectors()?)?;
-    println!("wrote {}/{{public_tx,keys}}.json", out.display());
+    write_json(&out.join("programs.json"), &program_vectors()?)?;
+    println!("wrote {}/{{public_tx,keys,programs}}.json", out.display());
     Ok(())
 }
 
@@ -308,5 +311,59 @@ fn key_vectors() -> Result<Value> {
         "seed": hex::encode(seed_bytes),
         "public": public,
         "private": private,
+    }))
+}
+
+fn program_vectors() -> Result<Value> {
+    use testimonial_core as tm;
+    let definition = AccountId::new([7; 32]);
+    let native = borsh::to_vec(&native_token::Instruction::Transfer {
+        amount: 12_345_678_901_234_567_890_123,
+    })?;
+    let token = borsh::to_vec(&token_core::Instruction::Transfer {
+        amount_to_transfer: u128::MAX,
+        descriptor: token_core::TokenDescriptor {
+            definition_id: definition,
+            kind: token_core::TokenKind::Fungible,
+        },
+    })?;
+    let program = AccountId::new([9; 32]);
+    let author = AccountId::new([1; 32]);
+    let sub = "LP-0021/logos-kit";
+    let mut testimonials = Vec::new();
+    for (page, username, text) in [
+        (0_u32, Some("abu"), "I use Logos Kit \u{2713}\nsecond line"),
+        (3, None, "no name"),
+    ] {
+        let data = borsh::to_vec(&tm::Instruction::Post {
+            submission: sub.to_owned(),
+            page,
+            username: username.map(str::to_owned),
+            text: text.to_owned(),
+            timestamp_ms: 1_800_000_000_000,
+        })?;
+        testimonials.push(json!({
+            "program": program.to_string(), "author": author.to_string(), "submission": sub,
+            "page": page, "username": username, "text": text, "timestampMs": 1_800_000_000_000_u64,
+            "stats": AccountId::new(tm::stats_account(program.value(), sub, page)).to_string(),
+            "previousStats": page.checked_sub(1).map(|p| AccountId::new(tm::stats_account(program.value(), sub, p)).to_string()),
+            "record": AccountId::new(tm::record_account(program.value(), sub, author.value())).to_string(),
+            "data": hex::encode(data),
+        }));
+    }
+    Ok(json!({
+        "meta": meta(),
+        "builtins": {
+            "native": NATIVE_TOKEN_PROGRAM_ID.to_string(),
+            "token": programs::token_account_id().to_string(),
+            "associatedTokenAccount": programs::ata_account_id().to_string(),
+            "programLoader": lee_core::program::PROGRAM_LOADER_ACCOUNT_ID.to_string(),
+        },
+        "nativeTransfer": { "amount": "12345678901234567890123", "data": hex::encode(native) },
+        "tokenTransfer": {
+            "amount": u128::MAX.to_string(), "definition": definition.to_string(),
+            "kind": "fungible", "data": hex::encode(token),
+        },
+        "testimonial": testimonials,
     }))
 }
