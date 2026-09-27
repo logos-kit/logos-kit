@@ -116,6 +116,22 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "protocol/src/**",
+        "packages/codec/src/**",
+        "packages/client/src/**",
+        "packages/theme/src/**",
+        "packages/qml-bundle/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noPrototypeBuiltins": "off"
+          }
+        }
+      }
     }
   ]
 }

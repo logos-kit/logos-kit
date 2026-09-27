@@ -20,6 +20,7 @@ import {
   decodeAccount,
   decodeBlock,
   decodeTransactionResult,
+  http,
   nativeBalance,
   nodeActions,
   parseJson,
@@ -28,7 +29,7 @@ import {
   TimeoutError,
   walletActions,
 } from '../src/index.ts'
-import { localAccount, sendCall } from '../src/local.ts'
+import { localAccount, sendLocalCall } from '../src/local.ts'
 
 const dir = new URL('./fixtures/', import.meta.url)
 const raw = (f: string) => readFileSync(new URL(f, dir), 'utf8')
@@ -101,7 +102,15 @@ function replay() {
   const transport = custom({
     async request({ method, params }) {
       seen.push({ method, params })
-      if (method === 'sendTransaction') return TX
+      if (method === 'getAccountsNonces') {
+        // The fixture answers two accounts; the node answers as many as asked.
+        const all = (parseJson(raw('getAccountsNonces.json')) as { result: unknown[] }).result
+        return all.slice(0, ((params as unknown[])[0] as unknown[]).length)
+      }
+      if (method === 'sendTransaction') {
+        const tx = decodeTransactionResult([(params as string[])[0], 0])
+        return tx?.kind === 'public' ? transactionHash(tx.transaction) : TX
+      }
       const f = map[method]
       if (!f) throw new RpcError(-32601, 'Method not found')
       return (parseJson(raw(f)) as { result: unknown }).result
@@ -123,8 +132,8 @@ describe('node actions over a transport', () => {
     const { client, seen } = replay()
     const key = fromHex('7f273098f25b71e6c005a9519f2678da8d1c7f01f6a27778e2d9948abdf901fb')
     const acct = localAccount(key)
-    const hash = await sendCall(client, acct, nativeTransfer(acct.address, acct.address, '5'))
-    expect(hash).toBe(TX)
+    const hash = await sendLocalCall(client, acct, nativeTransfer(acct.address, acct.address, '5'))
+    expect(hash).toMatch(/^[0-9a-f]{64}$/)
     const param = seen.find((s) => s.method === 'sendTransaction')?.params as string[]
     const tx = decodeTransactionResult([param[0], 0])
     expect(tx?.kind).toBe('public')
@@ -135,7 +144,7 @@ describe('node actions over a transport', () => {
 })
 
 describe('Basecamp module transport + wallet actions', () => {
-  it('unwraps values and maps errors to LezError', async () => {
+  it('unwraps values, resolves the testimonial page, maps errors to LezError', async () => {
     const calls: unknown[][] = []
     const callModuleAsync = (
       m: string,
@@ -146,7 +155,10 @@ describe('Basecamp module transport + wallet actions', () => {
       calls.push([m, method, args])
       if (method === 'lez_getTransactionStatus')
         cb('{"value":{"handle":"h","lifecycle":"included","outcome":"success"}}')
-      else if (method === 'lez_signAndSendTransaction') cb('{"value":"{\\"handle\\":\\"h\\"}"}')
+      else if (method === 'lez_signAndSendTransaction') cb('{"value":{"handle":"h"}}')
+      else if (method === 'lez_readAccount') cb('{"value":{"nonce":"0","data":""}}')
+      else if (method === 'lez_getAccounts') cb('{"value":"[not json, a label]"}')
+      else if (method === 'lez_signIn') cb('{"error":"cancelled"}')
       else cb('{"error":{"code":4001,"message":"Request declined"}}')
     }
     const w = createClient({
@@ -158,30 +170,65 @@ describe('Basecamp module transport + wallet actions', () => {
     expect(
       await w.postTestimonial({ program, author, text: 'I use Logos Kit', timestampMs: 1 }),
     ).toEqual({ handle: 'h' })
-    const first = calls[0] as unknown[]
-    const sent = JSON.parse((first[2] as string[])[0] as string)
-    expect(first[0]).toBe('logos_kit_wallet')
+    expect(calls.map((c) => c[1])).toEqual(['lez_readAccount', 'lez_signAndSendTransaction'])
+    const sent = JSON.parse(((calls[1] as unknown[])[2] as string[])[0] as string)
+    expect((calls[1] as unknown[])[0]).toBe('logos_kit_wallet')
     expect(sent.account).toBe(author)
     expect(sent.instructions[0].data).toBe(
       toBase64(testimonialPost({ program, author, text: 'I use Logos Kit', timestampMs: 1 }).data),
     )
+    expect(sent.instructions[0].accounts.map((a: { writable: boolean }) => a.writable)).toEqual([
+      false,
+      true,
+      true,
+    ])
+    // A string value is a string, never re-parsed as JSON.
+    expect(await w.getAccounts()).toBe('[not json, a label]')
     expect((await w.waitForTransactionStatus('h', { interval: 1 })).outcome).toBe('success')
     const err = await w.connect({ chains: ['lez:testnet'] }).catch((e) => e)
     expect(err).toBeInstanceOf(LezError)
     expect(err.code).toBe(4001)
+    const cancelled = await w
+      .signIn({ domain: 'd', uri: 'u', nonce: 'n', issuedAt: 'i' } as never)
+      .catch((e) => e)
+    expect(cancelled.code).toBe(4001)
   })
-  it('poll pauses while hidden and times out', async () => {
+  it('a bridge that never answers times out', async () => {
+    const t = basecampModule({ callModuleAsync: () => {}, timeout: 1 })
+    await expect(t.request('lez_getAccounts', {})).rejects.toBeInstanceOf(TimeoutError)
+  })
+  it('poll: hidden pauses the clock, stop ends it, visible times out', async () => {
     let calls = 0
-    await expect(
-      poll(
-        async () => {
-          calls++
-          return undefined
-        },
-        'never',
-        { timeout: 30, interval: 5, isVisible: () => false },
-      ),
-    ).rejects.toBeInstanceOf(TimeoutError)
+    let hidden = 0
+    const stopped = await poll(
+      async () => {
+        calls++
+        return undefined
+      },
+      'never',
+      { timeout: 5, interval: 2, isVisible: () => false, shouldStop: () => ++hidden > 10 },
+    )
+    expect(stopped).toBeUndefined()
     expect(calls).toBe(0)
+    await expect(
+      poll(async () => undefined, 'never', { timeout: 20, interval: 5 }),
+    ).rejects.toBeInstanceOf(TimeoutError)
+  })
+  it('http: sendTransaction is never retried; malformed JSON is refused', async () => {
+    let n = 0
+    const failing = (async () => {
+      n++
+      throw new Error('network down')
+    }) as unknown as typeof fetch
+    const t = http('http://x', { fetch: failing, retryCount: 3 })
+    await expect(t.request('sendTransaction', [])).rejects.toThrow('network down')
+    expect(n).toBe(1)
+    await expect(t.request('getLastBlockId', [])).rejects.toThrow('network down')
+    expect(n).toBe(5)
+    expect(() => parseJson('01')).toThrow()
+    expect(() => parseJson('1.')).toThrow()
+    // An escaped control character is fine; a raw one is not JSON.
+    expect(parseJson(String.raw`"a\u0001"`)).toBe('a\u0001')
+    expect(() => parseJson('"tab\there"')).toThrow(/control character/)
   })
 })

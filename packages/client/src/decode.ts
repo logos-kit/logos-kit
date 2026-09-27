@@ -18,11 +18,26 @@ export interface Account {
   shards: Record<AccountId, Uint8Array>
 }
 
+/** A shard never exceeds LEZ's DATA_MAX_LENGTH (100 KiB). */
+const MAX_SHARD = 100 * 1024
+
 export function decodeAccount(v: unknown): Account {
-  const a = v as { nonce: unknown; data?: { shards?: Record<string, number[]> } }
-  const shards: Record<AccountId, Uint8Array> = {}
+  const a = v as { nonce: unknown; data?: { shards?: unknown } } | null
+  if (!a || typeof a !== 'object') throw new TypeError('account: not an object')
+  // No prototype: shard keys come from the node.
+  const shards = Object.create(null) as Record<AccountId, Uint8Array>
   const raw = (a.data && a.data.shards) || {}
-  for (const k of Object.keys(raw)) shards[k] = new Uint8Array(raw[k] as number[])
+  if (typeof raw !== 'object') throw new TypeError('account: shards is not an object')
+  for (const k of Object.keys(raw)) {
+    const bytes = (raw as Record<string, unknown>)[k]
+    if (!Array.isArray(bytes) || bytes.length > MAX_SHARD)
+      throw new TypeError(`account: shard ${k} is not a byte array`)
+    for (const x of bytes) {
+      if (typeof x !== 'number' || !Number.isInteger(x) || x < 0 || x > 255)
+        throw new TypeError(`account: shard ${k} holds a non-byte`)
+    }
+    shards[k] = new Uint8Array(bytes)
+  }
   return { nonce: decimal(a.nonce), shards }
 }
 
@@ -62,15 +77,12 @@ export function decodeBlock(b64: string): Block {
   r.fixed(64) // producer signature
   const count = r.u32()
   const header = { id, hash, prevHash, timestamp, producer }
-  // A private transaction has no length prefix; decoding stops at the first one.
+  // A private transaction has no length prefix: decoding stops at the first
+  // one. Any other decoding error is a real error.
   const transactions: PublicTransaction[] = []
-  try {
-    for (let i = 0; i < count; i++) {
-      if (r.u8() !== 0) return { header, transactionCount: count, raw: b64 }
-      transactions.push(readTransaction(r))
-    }
-  } catch {
-    return { header, transactionCount: count, raw: b64 }
+  for (let i = 0; i < count; i++) {
+    if (r.u8() !== 0) return { header, transactionCount: count, raw: b64 }
+    transactions.push(readTransaction(r))
   }
   return { header, transactions, transactionCount: count, raw: b64 }
 }

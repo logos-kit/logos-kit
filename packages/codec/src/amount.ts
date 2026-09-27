@@ -85,7 +85,13 @@ export function add(a: string, b: string): string {
 export const compare = (a: string, b: string): -1 | 0 | 1 => cmp(u128(a), u128(b))
 
 /** `raw` in base units → a decimal string with `decimals` places (trailing zeros cut). */
+function checkDecimals(decimals: number): void {
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 38)
+    throw new Error(`decimals must be an integer 0-38: ${decimals}`)
+}
+
 export function formatUnits(raw: string, decimals: number): string {
+  checkDecimals(decimals)
   const v = u128(raw)
   if (decimals === 0) return v
   const padded = v.length <= decimals ? '0'.repeat(decimals - v.length + 1) + v : v
@@ -96,6 +102,7 @@ export function formatUnits(raw: string, decimals: number): string {
 
 /** A human amount (`"1.5"`) → base units. Refuses more decimals than the asset has. */
 export function parseUnits(s: string, decimals: number): string {
+  checkDecimals(decimals)
   const m = /^([0-9]+)(?:\.([0-9]*))?$/.exec(s.trim())
   if (!m) throw new Error(`not an amount: ${s}`)
   const f = m[2] || ''

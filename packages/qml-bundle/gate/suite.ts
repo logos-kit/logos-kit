@@ -88,14 +88,37 @@ export async function run(host: Host): Promise<void> {
   log('lossless JSON', (parseJson(`{"balance":${max}}`) as { balance: string }).balance === max)
   log('tokens', toQmlTokens(trayDark).privateSoft)
 
-  // facade against a mock wallet: intents, busy guard, timeout, watch, testimonial
+  // shims, exercised inside the engine (Qt locks builtins; these are added)
+  const shimmed = Object as unknown as {
+    hasOwn(o: object, k: string): boolean
+    fromEntries(it: unknown[]): object
+  }
+  log('Object.hasOwn', shimmed.hasOwn({ a: 1 }, 'a') && !shimmed.hasOwn({}, 'toString'))
+  log(
+    'Array.flat',
+    JSON.stringify(([[1, [2]], 3] as unknown as { flat(d: number): unknown }).flat(2)),
+  )
+  const fe = shimmed.fromEntries([['__proto__', 1]]) as Record<string, unknown>
+  log(
+    'fromEntries keeps __proto__ a key',
+    Object.getPrototypeOf(fe) === Object.prototype &&
+      Object.getOwnPropertyDescriptor(fe, '__proto__')?.value === 1,
+  )
+
+  // facade against a mock wallet: intents, busy guard, timeout + late answer,
+  // watch, testimonial (page read through lez_readAccount)
   const statuses = ['awaiting_approval', 'signing', 'submitted', 'included']
   let polls = 0
   const pending: Array<() => void> = []
+  let lateSign: ((res: { ok: boolean; data?: unknown }) => void) | undefined
+  const late: string[] = []
+  const methods: string[] = []
   const kit = createLogosKit({
     chain: 'lez:testnet',
     intentTimeoutMs: 200,
+    onLateResult: (intent, ok, data) => late.push(`${intent} ${ok} ${JSON.stringify(data)}`),
     callModuleAsync: (_m, method, _args, cb) => {
+      methods.push(method)
       if (method === 'lez_getTransactionStatus') {
         const lifecycle = statuses[Math.min(polls++, statuses.length - 1)]
         host.setTimeout(
@@ -112,23 +135,20 @@ export async function run(host: Host): Promise<void> {
           1,
         )
       } else if (method === 'lez_getAccounts') cb('{"value":[{"address":"A","kind":"public"}]}')
+      else if (method === 'lez_readAccount') cb('{"value":{"nonce":"0","data":""}}')
       else cb('{"error":{"code":-32601,"message":"no such method"}}')
     },
     openIntent: (intent, params, cb) => {
-      const p = params as { instructions?: { data: string }[] }
+      const p = params as { id?: string; instructions?: { data: string }[] }
       if (intent === 'lez.wallet.connect')
         pending.push(() => cb({ ok: true, data: { sessionId: 's1' } }))
       else if (intent === 'lez.transaction.send')
         cb({
           ok: true,
-          data: {
-            handle: 'h1',
-            data: p.instructions?.[0]?.data.length ?? 0,
-          },
+          data: { handle: 'h1', hasId: !!p.id, data: p.instructions?.[0]?.data.length ?? 0 },
         })
-      else if (intent === 'lez.message.sign') {
-        /* never answers: timeout */
-      } else cb({ ok: false, error: 'cancelled' })
+      else if (intent === 'lez.message.sign') lateSign = cb
+      else cb({ ok: false, error: 'cancelled' })
     },
   })
   const connecting = kit.connect()
@@ -141,11 +161,23 @@ export async function run(host: Host): Promise<void> {
   log('busy after', kit.isBusy())
   log('accounts', await kit.getAccounts())
   log('timeout', await kit.signMessage('A', 'hi').catch((e: { code: number }) => e.code))
-  log('user rejection', await kit.requestFunds('A').catch((e: { code: number }) => e.code))
+  log('still busy after a timeout', kit.isBusy())
   log(
-    'testimonial sent',
-    await kit.postTestimonial({ program: t.program, author: t.author, text: 'hi', timestampMs: 1 }),
+    'refused while the sheet may be open',
+    await kit.requestFunds('A').catch((e: { code: number }) => e.code),
   )
+  if (lateSign) lateSign({ ok: true, data: { signature: 'sig' } })
+  log('late answer delivered', late)
+  log('free after the late answer', !kit.isBusy())
+  log('user rejection', await kit.requestFunds('A').catch((e: { code: number }) => e.code))
+  const sent = await kit.postTestimonial({
+    program: t.program,
+    author: t.author,
+    text: 'hi',
+    timestampMs: 1,
+  })
+  log('testimonial sent', sent)
+  log('module calls', methods.join(','))
   const seen: string[] = []
   const final = await new Promise<string>((resolve, reject) => {
     kit.watchTransaction(

@@ -75,3 +75,8 @@ qml-sdk:
 # QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
 qml-gate: qml-sdk
     pnpm --filter @logos-kit/qml-bundle gate
+
+# S6 exit proof: a transfer built and signed in TypeScript lands on the standalone sequencer.
+e2e-client:
+    e2e/standalone.sh
+    node e2e/ts/client.ts; status=$?; e2e/standalone.sh stop; exit $status

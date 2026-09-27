@@ -1,8 +1,17 @@
 // @logos-kit/client: typed LEZ client ("lez-viem"). QML-safe root.
 // biome-ignore lint/performance/noBarrelFile: entrypoint module
-export { type FeeState, type NodeActions, nativeBalance, nodeActions } from './actions/node.ts'
+export {
+  type FeeState,
+  type NodeActions,
+  nativeBalance,
+  nodeActions,
+  openTestimonialPage,
+  statsAuthors,
+} from './actions/node.ts'
 export {
   FINAL_LIFECYCLES,
+  resolveTestimonial,
+  type TestimonialRequest,
   toInstruction,
   type WalletActions,
   walletActions,
@@ -19,7 +28,7 @@ export {
 } from './decode.ts'
 export { HttpError, RpcError, TimeoutError } from './errors.ts'
 export { decimal, parseJson } from './json.ts'
-export { type PollOptions, poll } from './poll.ts'
+export { type PollOptions, poll, pollValue } from './poll.ts'
 export {
   type BasecampModuleOptions,
   basecampModule,

@@ -15,6 +15,8 @@ import { sha256 } from './sha256.ts'
 
 export interface AccountRow extends ShardSelector {
   signer: boolean
+  /** The call changes this row's data (shown on the approval sheet). */
+  writable: boolean
 }
 
 export interface ProgramCall {
@@ -28,8 +30,8 @@ export function nativeTransfer(from: AccountId, to: AccountId, amount: string): 
   return {
     program: NATIVE_TOKEN_PROGRAM,
     accounts: [
-      { account: from, program: NATIVE_TOKEN_PROGRAM, signer: true },
-      { account: to, program: NATIVE_TOKEN_PROGRAM, signer: false },
+      { account: from, program: NATIVE_TOKEN_PROGRAM, signer: true, writable: true },
+      { account: to, program: NATIVE_TOKEN_PROGRAM, signer: false, writable: true },
     ],
     data: new Writer().u8(0).u128(amount).toBytes(),
   }
@@ -49,11 +51,14 @@ export function tokenTransfer(
   amount: string,
   kind: TokenKind = 'fungible',
 ): ProgramCall {
+  // Object.hasOwn is ES2022; these packages must run in Qt's ES2017 engine.
+  if (!Object.prototype.hasOwnProperty.call(KIND, kind))
+    throw new Error(`unknown token kind: ${kind}`)
   return {
     program: TOKEN_PROGRAM,
     accounts: [
-      { account: from, program: TOKEN_PROGRAM, signer: true },
-      { account: to, program: TOKEN_PROGRAM, signer: false },
+      { account: from, program: TOKEN_PROGRAM, signer: true, writable: true },
+      { account: to, program: TOKEN_PROGRAM, signer: false, writable: true },
     ],
     data: new Writer().u8(0).u128(amount).fixed(accountBytes(definition)).u8(KIND[kind]).toBytes(),
   }
@@ -98,17 +103,18 @@ export interface TestimonialPost {
 export function testimonialPost(p: TestimonialPost): ProgramCall {
   const submission = p.submission ?? TESTIMONIAL_SUBMISSION
   const page = p.page ?? 0
-  const row = (account: AccountId, signer: boolean): AccountRow => ({
+  const row = (account: AccountId, signer: boolean, writable: boolean): AccountRow => ({
     account,
     program: p.program,
     signer,
+    writable,
   })
   const accounts = [
-    row(p.author, true),
-    row(testimonialStats(p.program, submission, page), false),
-    row(testimonialRecord(p.program, submission, p.author), false),
+    row(p.author, true, false),
+    row(testimonialStats(p.program, submission, page), false, true),
+    row(testimonialRecord(p.program, submission, p.author), false, true),
   ]
-  if (page > 0) accounts.push(row(testimonialStats(p.program, submission, page - 1), false))
+  if (page > 0) accounts.push(row(testimonialStats(p.program, submission, page - 1), false, false))
   const data = new Writer()
     .u8(0)
     .string(submission)

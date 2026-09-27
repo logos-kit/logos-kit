@@ -710,6 +710,33 @@
         }
       }
     },
+    "ReadAccountParams": {
+      "type": "object",
+      "required": ["chain", "account", "program"],
+      "properties": {
+        "chain": {
+          "$ref": "#/$defs/ChainId"
+        },
+        "account": {
+          "$ref": "#/$defs/AccountId"
+        },
+        "program": {
+          "$ref": "#/$defs/AccountId"
+        }
+      }
+    },
+    "ReadAccountResult": {
+      "type": "object",
+      "required": ["nonce", "data"],
+      "properties": {
+        "nonce": {
+          "$ref": "#/$defs/U128"
+        },
+        "data": {
+          "$ref": "#/$defs/Base64"
+        }
+      }
+    },
     "RequestFundsParams": {
       "type": "object",
       "required": ["chain", "account"],

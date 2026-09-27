@@ -22,6 +22,10 @@ export function signMessage(
   secretKeys: Bytes[],
   auxRand?: Bytes,
 ): PublicTransaction {
+  if (secretKeys.length !== message.nonces.length)
+    throw new Error(
+      `${secretKeys.length} key(s) for ${message.nonces.length} nonce(s): one key per signer`,
+    )
   const hash = messageHash(message)
   const witnesses: Witness[] = secretKeys.map((k) => ({
     signature: signHash(hash, k, auxRand),

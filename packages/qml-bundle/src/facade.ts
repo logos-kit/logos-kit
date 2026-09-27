@@ -3,6 +3,7 @@
 // User-facing steps (connect, send, sign, sign in, faucet) are Basecamp
 // intents: the shell shows its chooser, then our wallet's own sheet. Reads and
 // status go straight to the wallet core module. Keys never leave the wallet.
+// Names match @logos-kit/client's walletActions, so code ports both ways.
 import {
   basecampModule,
   type CallModuleAsync,
@@ -10,17 +11,12 @@ import {
   FINAL_LIFECYCLES,
   type PollOptions,
   poll,
+  resolveTestimonial,
+  type TestimonialRequest,
   toInstruction,
   walletActions,
 } from '@logos-kit/client'
-import {
-  type AccountId,
-  nativeTransfer,
-  type ProgramCall,
-  type TestimonialPost,
-  testimonialPost,
-  tokenTransfer,
-} from '@logos-kit/codec'
+import { type AccountId, nativeTransfer, type ProgramCall, tokenTransfer } from '@logos-kit/codec'
 import {
   type BalanceResult,
   CHAINS,
@@ -55,8 +51,15 @@ export interface LogosKitHost {
   chain?: ChainId
   /** Wallet core module (default `logos_kit_wallet`). */
   module?: string
-  /** A user-facing step fails with `Timeout` after this long. Default 45 s. */
+  /**
+   * A user-facing step rejects with `Timeout` after this long (default 45 s).
+   * The wallet may still be showing it: a timeout does NOT mean nothing was
+   * sent. The busy guard stays closed until the wallet really answers, and
+   * that late answer goes to `onLateResult`.
+   */
   intentTimeoutMs?: number
+  /** The real answer to a step that already timed out (e.g. a send's handle). */
+  onLateResult?: (intent: string, ok: boolean, data: unknown) => void
   /** Status polling pauses while this returns false (e.g. the view is hidden). */
   isVisible?: () => boolean
 }
@@ -67,22 +70,26 @@ export interface WatchHandle {
 
 export interface LogosKit {
   readonly chain: ChainId
-  /** A user-facing step is open (connect, send, sign…); a second one is refused. */
+  /** A user-facing step is open (connect, send, sign…); another one is refused. */
   isBusy(): boolean
   connect(params?: Partial<ConnectParams>): Promise<Session>
   getSession(sessionId?: string): Promise<Session | null>
   getAccounts(): Promise<WalletAccount[]>
-  /** Native balance, or a token's with `token`. Decimal string. */
-  getBalance(account: AccountId, token?: AccountId): Promise<BalanceResult>
-  /** Answers once the user approved (with a handle), before the transaction lands. */
+  /** Native balance, or a token's with `asset`. */
+  getWalletBalance(account: AccountId, asset?: AccountId): Promise<BalanceResult>
+  /** A public account's data for one program (chain state). */
+  readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
+  /**
+   * Answers once the user approved (with a handle), before the transaction
+   * lands. An `id` is added if missing, so the wallet can refuse a duplicate.
+   */
   sendTransaction(
     proposal: Omit<TransactionProposal, 'chain'> & { chain?: ChainId },
   ): Promise<SubmitResult>
   sendCall(account: AccountId, call: ProgramCall): Promise<SubmitResult>
   transfer(from: AccountId, to: AccountId, amount: string, token?: AccountId): Promise<SubmitResult>
-  postTestimonial(
-    post: Omit<TestimonialPost, 'timestampMs'> & { timestampMs?: number },
-  ): Promise<SubmitResult>
+  /** Finds the open stats page itself when `page` is omitted. */
+  postTestimonial(post: TestimonialRequest): Promise<SubmitResult>
   getTransactionStatus(handle: string): Promise<TransactionStatus>
   /** Calls `onUpdate` on every status change until the lifecycle is final. */
   watchTransaction(
@@ -91,7 +98,7 @@ export interface LogosKit {
     onError?: (e: unknown) => void,
     options?: PollOptions,
   ): WatchHandle
-  waitForTransaction(handle: string, options?: PollOptions): Promise<TransactionStatus>
+  waitForTransactionStatus(handle: string, options?: PollOptions): Promise<TransactionStatus>
   signMessage(account: AccountId, message: string): Promise<SignMessageResult>
   signIn(request: SignInRequest): Promise<SignInResult>
   requestFunds(account: AccountId): Promise<RequestFundsResult>
@@ -105,6 +112,10 @@ function intentError(e: unknown): LezError {
   if (o && typeof o.code === 'string') return fromIntentError(o.code)
   return new LezError(ErrorCode.Internal, 'Wallet request failed')
 }
+
+let ids = 0
+/** A proposal id unique per app session (LWS-0 `id`; the wallet refuses a repeat). */
+const newId = (): string => `lk-${Date.now().toString(36)}-${(++ids).toString(36)}`
 
 export function createLogosKit(host: LogosKitHost): LogosKit {
   const chain = host.chain || CHAINS.lezTestnet
@@ -123,27 +134,31 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
     }
     busy = true
     return new Promise<T>((resolve, reject) => {
-      let done = false
-      const finish = (f: () => void) => {
-        if (done) return
-        done = true
+      let timedOut = false
+      let answered = false
+      const timer = setTimeout(() => {
+        timedOut = true
+        reject(
+          new LezError(
+            ErrorCode.Timeout,
+            'The wallet has not answered yet; it may still send. Wait for it before trying again.',
+          ),
+        )
+      }, timeout)
+      const answer = (ok: boolean, data: unknown, error: unknown) => {
+        if (answered) return
+        answered = true
         busy = false
         clearTimeout(timer)
-        f()
+        if (timedOut) {
+          if (host.onLateResult) host.onLateResult(name, ok, ok ? data : intentError(error))
+        } else if (ok) resolve(data as T)
+        else reject(intentError(error))
       }
-      const timer = setTimeout(
-        () =>
-          finish(() =>
-            reject(new LezError(ErrorCode.Timeout, 'The wallet did not answer in time')),
-          ),
-        timeout,
-      )
       try {
-        host.openIntent(name, params, (res) =>
-          finish(() => (res?.ok ? resolve(res.data as T) : reject(intentError(res?.error)))),
-        )
+        host.openIntent(name, params, (res) => answer(!!res?.ok, res?.data, res?.error))
       } catch (e) {
-        finish(() => reject(intentError(e)))
+        answer(false, undefined, e)
       }
     })
   }
@@ -163,14 +178,14 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
     connect: (params) => intent<Session>(INTENTS.connect, { chains: [chain], ...params }),
     getSession: (sessionId) => wallet.getSession(sessionId),
     getAccounts: () => wallet.getAccounts(),
-    getBalance: (account, token) =>
-      wallet.getWalletBalance(
-        token ? { chain, account, asset: token } : { chain, account },
-      ) as Promise<BalanceResult>,
+    getWalletBalance: (account, asset) =>
+      wallet.getWalletBalance(asset ? { chain, account, asset } : { chain, account }),
+    readAccount: (account, program) => wallet.readAccount(account, program),
     sendTransaction: (proposal) =>
       intent<SubmitResult>(INTENTS.sendTransaction, {
         ...proposal,
         chain: proposal.chain || chain,
+        id: proposal.id || newId(),
       }),
     sendCall: (account, call) =>
       kit.sendTransaction({ account, instructions: [toInstruction(call)] }),
@@ -179,18 +194,16 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
         from,
         token ? tokenTransfer(from, to, token, amount) : nativeTransfer(from, to, amount),
       ),
-    postTestimonial: (post) =>
-      kit.sendCall(
-        post.author,
-        testimonialPost({ ...post, timestampMs: post.timestampMs || Date.now() }),
-      ),
+    postTestimonial: async (post) =>
+      kit.sendCall(post.author, await resolveTestimonial(post, wallet.readAccount)),
     getTransactionStatus: (handle) => wallet.getTransactionStatus(handle),
     watchTransaction(handle, onUpdate, onError, options) {
       let stopped = false
       let last = ''
+      const o = withVisibility(options)
+      o.shouldStop = () => stopped
       poll(
         async () => {
-          if (stopped) return null
           const s = await wallet.getTransactionStatus(handle)
           const key = `${s.lifecycle}|${s.outcome}|${s.proving ? s.proving.phase : ''}`
           if (!stopped && key !== last) {
@@ -200,7 +213,7 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
           return FINAL_LIFECYCLES.indexOf(s.lifecycle) >= 0 ? s : undefined
         },
         `transaction ${handle}`,
-        withVisibility(options),
+        o,
       ).catch((e) => {
         if (!stopped && onError) onError(e)
       })
@@ -210,7 +223,7 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
         },
       }
     },
-    waitForTransaction: (handle, options) =>
+    waitForTransactionStatus: (handle, options) =>
       wallet.waitForTransactionStatus(handle, withVisibility(options)),
     signMessage: (account, message) =>
       intent<SignMessageResult>(INTENTS.signMessage, { account, message }),

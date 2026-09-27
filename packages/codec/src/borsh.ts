@@ -6,12 +6,14 @@ import { type Bytes, concat, fromUtf8, utf8 } from './bytes.ts'
 export class Writer {
   private parts: Bytes[] = []
   u8(v: number): this {
-    this.parts.push(new Uint8Array([v & 0xff]))
+    if (!Number.isInteger(v) || v < 0 || v > 0xff) throw new Error(`u8 out of range: ${v}`)
+    this.parts.push(new Uint8Array([v]))
     return this
   }
   u32(v: number): this {
+    if (!Number.isInteger(v) || v < 0 || v > 0xffffffff) throw new Error(`u32 out of range: ${v}`)
     const b = new Uint8Array(4)
-    new DataView(b.buffer).setUint32(0, v >>> 0, true)
+    new DataView(b.buffer).setUint32(0, v, true)
     this.parts.push(b)
     return this
   }

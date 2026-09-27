@@ -40,17 +40,17 @@ export function equal(a: Bytes, b: Bytes): boolean {
   return true
 }
 
-/** UTF-8 (QML has no TextEncoder unless shimmed; this needs none). */
+/** UTF-8 (QML has no TextEncoder unless shimmed). Lone surrogates become U+FFFD. */
 export function utf8(s: string): Bytes {
   const out: number[] = []
   for (let i = 0; i < s.length; i++) {
     let c = s.charCodeAt(i)
-    if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) {
-      const d = s.charCodeAt(i + 1)
-      if (d >= 0xdc00 && d < 0xe000) {
+    if (c >= 0xd800 && c < 0xe000) {
+      const d = i + 1 < s.length ? s.charCodeAt(i + 1) : 0
+      if (c < 0xdc00 && d >= 0xdc00 && d < 0xe000) {
         c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00)
         i++
-      }
+      } else c = 0xfffd
     }
     if (c < 0x80) out.push(c)
     else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63))
@@ -61,23 +61,42 @@ export function utf8(s: string): Bytes {
   return new Uint8Array(out)
 }
 
+/**
+ * Strict UTF-8 decoding: malformed, overlong, surrogate and out-of-range
+ * sequences become U+FFFD (per bad byte), never a lookalike character.
+ */
 export function fromUtf8(b: Bytes): string {
   let s = ''
   let i = 0
+  const cont = (k: number) => i + k < b.length && ((b[i + k] as number) & 0xc0) === 0x80
   while (i < b.length) {
-    const c = b[i++] as number
-    let cp: number
-    if (c < 0x80) cp = c
-    else if (c < 0xe0) cp = ((c & 31) << 6) | ((b[i++] as number) & 63)
-    else if (c < 0xf0)
-      cp = ((c & 15) << 12) | (((b[i++] as number) & 63) << 6) | ((b[i++] as number) & 63)
-    else
+    const c = b[i] as number
+    let n = 0
+    let cp = 0xfffd
+    if (c < 0x80) {
+      cp = c
+      n = 1
+    } else if (c >= 0xc2 && c < 0xe0 && cont(1)) {
+      cp = ((c & 31) << 6) | ((b[i + 1] as number) & 63)
+      n = 2
+    } else if (c >= 0xe0 && c < 0xf0 && cont(1) && cont(2)) {
+      cp = ((c & 15) << 12) | (((b[i + 1] as number) & 63) << 6) | ((b[i + 2] as number) & 63)
+      n = cp < 0x800 || (cp >= 0xd800 && cp < 0xe000) ? 0 : 3
+    } else if (c >= 0xf0 && c < 0xf5 && cont(1) && cont(2) && cont(3)) {
       cp =
         ((c & 7) << 18) |
-        (((b[i++] as number) & 63) << 12) |
-        (((b[i++] as number) & 63) << 6) |
-        ((b[i++] as number) & 63)
-    s += String.fromCodePoint(cp)
+        (((b[i + 1] as number) & 63) << 12) |
+        (((b[i + 2] as number) & 63) << 6) |
+        ((b[i + 3] as number) & 63)
+      n = cp < 0x10000 || cp > 0x10ffff ? 0 : 4
+    }
+    if (n === 0) {
+      s += '\ufffd'
+      i++
+    } else {
+      s += String.fromCodePoint(cp)
+      i += n
+    }
   }
   return s
 }
