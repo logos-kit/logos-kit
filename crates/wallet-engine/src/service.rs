@@ -108,6 +108,8 @@ pub struct Service {
     snapshot: Mutex<Snapshot>,
     /// The last ui_state wallet fields, served while a sync holds the wallet.
     last_state: Mutex<Option<WalletFields>>,
+    /// Checks approval passwords without the wallet lock (set while unlocked).
+    checker: Mutex<Option<crate::vault::PasswordCheck>>,
     throttle: Mutex<Throttle>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
@@ -263,6 +265,7 @@ impl Service {
             jobs: Mutex::new(HashMap::new()),
             snapshot: Mutex::new(Snapshot::default()),
             last_state: Mutex::new(None),
+            checker: Mutex::new(None),
             throttle: Mutex::new(Throttle {
                 fails: 0,
                 until: None,
@@ -401,10 +404,10 @@ impl Service {
             "restore" => self.restore(p),
             "unlock" => self.unlock(p),
             "lock" => {
+                self.forget_session();
                 if let Ok(engine) = self.engine() {
                     self.block(async { engine.lock().await })?;
                 }
-                *lock(&self.snapshot) = Snapshot::default();
                 self.emit("wallet_changed", json!({ "locked": true }));
                 Ok(Value::Null)
             }
@@ -474,7 +477,7 @@ impl Service {
                                 }),
                                 AccountKind::Private => {
                                     let (npk, vpk) = s.receive_keys(&info.account_id)?;
-                                    receive_code(&npk, &vpk)
+                                    receive_code(&npk, &vpk)?
                                 }
                             })
                         })
@@ -485,7 +488,30 @@ impl Service {
                 let mut p = p.clone();
                 if let Some(code) = p.get("toCode").and_then(Value::as_str).map(str::to_owned) {
                     let keys = parse_receive_code(&code).map_err(|e| invalid(format!("{e:#}")))?;
-                    p["toKeys"] = serde_json::to_value(keys)?;
+                    // One of our own codes: pay that account itself. A fresh
+                    // identifier would land in an account this wallet never
+                    // scans for (it already processed the block as sender).
+                    let engine = self.engine()?;
+                    let own = self.block(async {
+                        engine
+                            .with_session_quiet(async |s| {
+                                for a in s.accounts()? {
+                                    if a.kind == AccountKind::Private
+                                        && let Ok((npk, vpk)) = s.receive_keys(&a.account_id)
+                                        && npk == keys.npk
+                                        && vpk == keys.vpk
+                                    {
+                                        return Ok(Some(a.account_id));
+                                    }
+                                }
+                                Ok(None)
+                            })
+                            .await
+                    })?;
+                    match own {
+                        Some(account) => p["to"] = json!(account),
+                        None => p["toKeys"] = serde_json::to_value(keys)?,
+                    }
                     if let Some(o) = p.as_object_mut() {
                         o.remove("toCode");
                     }
@@ -631,11 +657,15 @@ impl Service {
                 let a: P = params(p)?;
                 check_password(&a.new)?;
                 let engine = self.engine()?;
-                self.block(async {
+                let checker = self.block(async {
                     engine
-                        .with_session(async |s| s.change_password(&a.current, &a.new))
+                        .with_session(async |s| {
+                            s.change_password(&a.current, &a.new)?;
+                            s.password_checker()
+                        })
                         .await
                 })?;
+                *lock(&self.checker) = Some(checker);
                 Ok(Value::Null)
             }
             "setPrefs" => {
@@ -719,7 +749,12 @@ impl Service {
                     .into_iter()
                     .find(|z| z.id == a.zone)
                     .ok_or_else(|| invalid("unknown zone"))?;
+                // Check the password before anything changes: a typo must not
+                // leave the wallet locked on the other zone.
+                self.check_password(&a.password)?;
+                let previous = lock(&self.prefs).zone.clone();
                 // The new session needs the directory lock the old one holds.
+                self.forget_session();
                 if let Ok(engine) = self.engine() {
                     self.block(async { engine.lock().await })?;
                 }
@@ -727,7 +762,18 @@ impl Service {
                 prefs.zone = Some(zone.id.clone());
                 self.save_prefs(&prefs)?;
                 *lock(&self.prefs) = prefs;
-                self.unlock(&json!({ "password": a.password }))
+                match self.unlock(&json!({ "password": a.password })) {
+                    Ok(v) => Ok(v),
+                    Err(e) => {
+                        // Back to where the user was.
+                        let mut prefs = lock(&self.prefs).clone();
+                        prefs.zone = previous;
+                        self.save_prefs(&prefs)?;
+                        *lock(&self.prefs) = prefs;
+                        let _ = self.unlock(&json!({ "password": a.password }));
+                        Err(e)
+                    }
+                }
             }
             "testZone" => {
                 let client = self.client()?;
@@ -908,8 +954,50 @@ impl Service {
         }
     }
 
+    /// Stop the background loop and drop what belonged to the open session.
+    fn forget_session(&self) {
+        *lock(&self.generation) += 1;
+        *lock(&self.snapshot) = Snapshot::default();
+        *lock(&self.last_state) = None;
+        *lock(&self.checker) = None;
+    }
+
+    /// The password, checked off the wallet lock (Argon2, then compare).
+    /// Wrong tries count toward the unlock throttle.
+    fn check_password(&self, password: &str) -> Result<()> {
+        {
+            let t = lock(&self.throttle);
+            if let Some(left) = t
+                .until
+                .and_then(|u| u.checked_duration_since(Instant::now()))
+            {
+                return Err(Denied::err(
+                    Code::Unauthorized,
+                    format!("too many tries; wait {}s", left.as_secs() + 1),
+                ));
+            }
+        }
+        let ok = match lock(&self.checker).as_ref() {
+            Some(c) => c.verify(password)?,
+            None => return Err(Denied::err(Code::Unauthorized, "the wallet is locked")),
+        };
+        if ok {
+            lock(&self.throttle).fails = 0;
+            Ok(())
+        } else {
+            let mut t = lock(&self.throttle);
+            t.fails += 1;
+            if t.fails >= UNLOCK_TRIES {
+                t.fails = 0;
+                t.until = Some(Instant::now() + UNLOCK_COOLDOWN);
+            }
+            Err(Denied::err(Code::Unauthorized, "wrong password"))
+        }
+    }
+
     /// Put an unlocked session to work and start its background loop.
     fn open(&'static self, session: Session) -> Result<()> {
+        *lock(&self.checker) = session.password_checker().ok();
         let existing = lock(&self.engine).clone();
         let engine = match existing {
             Some(e) => {
@@ -928,6 +1016,7 @@ impl Service {
             *g
         };
         *lock(&self.snapshot) = Snapshot::default();
+        *lock(&self.last_state) = Some((true, None, None));
         self.emit("wallet_changed", json!({ "locked": false }));
         self.detached("logos-kit-sync", move || {
             background(self, engine, generation)
@@ -1068,11 +1157,50 @@ impl Service {
             data: ix.data,
         };
         let engine = self.engine()?;
+        // A module must be connected to every account it wants signed, and is
+        // told so before the wallet looks at them: whether the wallet holds a
+        // key must not depend on the answer (no membership oracle).
+        if let Caller::Module(app) = caller {
+            let signers: Vec<String> = match &intent {
+                Intent::Call { from, accounts, .. } => std::iter::once(from.clone())
+                    .chain(
+                        accounts
+                            .iter()
+                            .filter(|a| a.signer)
+                            .map(|a| a.account.clone()),
+                    )
+                    .collect(),
+                other => vec![other.from_account().to_owned()],
+            };
+            let granted = self.block(async {
+                engine
+                    .with_session_quiet(async |s| {
+                        let zone = s.zone().id.clone();
+                        Ok(signers.iter().all(|a| {
+                            policy::allows(s.grants(), &zone, app, a, Capability::ProposeTx)
+                        }))
+                    })
+                    .await
+            })?;
+            if !granted {
+                return Err(Denied::err(
+                    Code::Unauthorized,
+                    "this app isn't connected to an account this would sign with",
+                ));
+            }
+        }
+        let owner_relay = caller.is_owner();
         let ticket = self
             .block(async { engine.request_tx(caller, relayed, intent).await })
-            // The app's own proposal didn't build: tell it why.
+            // The proposal didn't build. The wallet UI shows why; an app gets
+            // a fixed reason (RPC and wallet detail stay here).
             .map_err(|e| match policy::code_of(&e) {
-                Code::Internal => coded(6104, format!("{e:#}"), Value::Null),
+                Code::Internal if owner_relay => coded(6104, format!("{e:#}"), Value::Null),
+                Code::Internal => coded(
+                    6104,
+                    "the wallet couldn't build this transaction",
+                    Value::Null,
+                ),
                 _ => e,
             })?;
         if let Some(key) = key {
@@ -1106,6 +1234,11 @@ impl Service {
             acknowledged: bool,
         }
         let a: P = params(p)?;
+        // A wrong password is answered here, never after the approval was
+        // reported as accepted (the engine's own check may wait for a sync).
+        if let Some(pw) = a.password.as_deref() {
+            self.check_password(pw)?;
+        }
         let password = a.password.map(Zeroizing::new);
         let engine = self.engine()?;
         let (tx, rx) = tokio::sync::oneshot::channel::<Result<TxStatus>>();
@@ -1147,8 +1280,16 @@ impl Service {
         let status = match first {
             Ok(Ok(Ok(s))) => s,
             Ok(Ok(Err(e))) => return Err(e),
-            // Still working without a status change yet (a slow build): accepted.
-            Ok(Err(_)) | Err(_) => self.engine()?.status(caller, &a.handle)?,
+            // The approval worker ended without answering.
+            Ok(Err(_)) => {
+                return Err(Denied::err(
+                    Code::Internal,
+                    "the approval stopped unexpectedly",
+                ));
+            }
+            // Password already checked; the engine is still taking the
+            // request (waiting for the wallet): report what it shows now.
+            Err(_) => self.engine()?.status(caller, &a.handle)?,
         };
         Ok(json!({ "accepted": true, "status": owner_status(&status) }))
     }
@@ -1188,9 +1329,17 @@ impl Service {
             requester: String,
             account: String,
             request: SignInRequest,
+            /// The user confirmed they started this sign-in from `domain`
+            /// (Basecamp can't bind a site name to an app).
+            #[serde(default)]
+            acknowledged: bool,
         }
         let a: P = params(p)?;
         check_requester(&a.requester)?;
+        ensure!(
+            a.acknowledged,
+            invalid("confirm that you started this sign-in from the site it names")
+        );
         let chain = self.current_zone().chain;
         let text = a.request.text(&chain, &a.account)?;
         let hash = message::tagged_hash(message::SIGNIN_TAG, text.as_bytes());
@@ -1230,7 +1379,9 @@ impl Service {
         let url = lock(&self.prefs).faucets.get(&zone.id).cloned();
         let faucet = match (zone.id.as_str(), url) {
             (_, Some(url)) => Faucet::Http(HttpFaucet::new("Drip service", &url)?),
-            ("lez-local", None) => Faucet::Key(Box::new(self.local_faucet(&zone)?)),
+            ("lez-local", None) if is_loopback(&zone.sequencer) => {
+                Faucet::Key(Box::new(self.local_faucet(&zone)?))
+            }
             _ => {
                 return Err(coded(
                     6109,
@@ -1416,6 +1567,7 @@ impl Service {
                         }
                     }
                     let mine = s.accounts()?;
+                    let key = s.handle_key()?;
                     let mut out = Vec::new();
                     for (account, caps) in by_account {
                         let Some(info) = mine.iter().find(|m| m.account_id == account) else {
@@ -1428,7 +1580,7 @@ impl Service {
                                 "capabilities": caps,
                             }),
                             AccountKind::Private => json!({
-                                "address": private_handle(&zone, app, &account),
+                                "address": private_handle(&key, &zone, app, &account),
                                 "kind": "private", "chain": chain, "capabilities": caps,
                             }),
                         });
@@ -1464,10 +1616,11 @@ impl Service {
                 .with_session_quiet(async |s| {
                     let zone_id = s.zone().id.clone();
                     let mine = s.accounts()?;
+                    let key = s.handle_key()?;
                     let (id, cap) = if a.account.starts_with("pvt_") {
                         let found = mine.iter().find(|m| {
                             m.kind == AccountKind::Private
-                                && private_handle(&zone_id, &app, &m.account_id) == a.account
+                                && private_handle(&key, &zone_id, &app, &m.account_id) == a.account
                         });
                         (found.map(|m| m.account_id.clone()), Capability::ReadPrivate)
                     } else {
@@ -1580,7 +1733,7 @@ async fn background(svc: &'static Service, engine: Arc<Engine>, generation: u64)
             return;
         }
         if matches!(engine.tick().await, Ok(true)) || !engine.is_unlocked().await {
-            *lock(&svc.snapshot) = Snapshot::default();
+            svc.forget_session();
             svc.emit("wallet_changed", json!({ "locked": true }));
             return;
         }
@@ -1634,8 +1787,11 @@ fn check_password(pw: &str) -> Result<()> {
 
 /// Opaque per-app handle for a private account (LWS-0 §8.4 rule 4): two apps
 /// never see the same handle, and a handle doesn't reveal the account.
-fn private_handle(zone: &str, app: &str, account: &str) -> String {
-    let h = Sha256::digest(format!("logos-kit/handle/v1\0{zone}\0{app}\0{account}"));
+fn private_handle(key: &[u8; 32], zone: &str, app: &str, account: &str) -> String {
+    let mut m = Sha256::new();
+    m.update(key);
+    m.update(format!("logos-kit/handle/v1\0{zone}\0{app}\0{account}"));
+    let h = m.finalize();
     format!("pvt_{}", URL_SAFE_NO_PAD.encode(&h[..16]))
 }
 
@@ -1661,21 +1817,28 @@ fn name_defaults(s: &mut Session) -> Result<()> {
 /// viewing key is an ML-KEM-768 key (1,184 bytes), so the code is long; it
 /// still fits one QR code at error correction L. The fingerprint is what
 /// people compare out loud.
-fn receive_code(npk: &str, vpk: &str) -> Value {
-    let mut bytes = hex::decode(npk).unwrap_or_default();
-    bytes.extend(hex::decode(vpk).unwrap_or_default());
+fn receive_code(npk: &str, vpk: &str) -> Result<Value> {
+    let mut bytes = hex::decode(npk).context("nullifier key")?;
+    bytes.extend(hex::decode(vpk).context("viewing key")?);
+    ensure!(
+        bytes.len() == RECEIVE_LEN,
+        "unexpected key sizes for a receive code"
+    );
     let code = format!("{RECEIVE_PREFIX}{}", URL_SAFE_NO_PAD.encode(&bytes));
     let h = Sha256::digest(&bytes);
     let fp: String = h[..4]
         .iter()
         .map(|b| CROCKFORD[usize::from(b & 31)] as char)
         .collect();
-    json!({
+    Ok(json!({
         "kind": "private",
         "code": code,
         "fingerprint": format!("{}-{}", &fp[..2], &fp[2..]),
-    })
+    }))
 }
+
+/// Nullifier public key (32) + ML-KEM-768 viewing key (1,184).
+const RECEIVE_LEN: usize = 32 + 1184;
 
 const RECEIVE_PREFIX: &str = "lezpriv1:";
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -1689,7 +1852,7 @@ pub fn parse_receive_code(code: &str) -> Result<RecipientKeys> {
     let bytes = URL_SAFE_NO_PAD
         .decode(body)
         .map_err(|_| anyhow::anyhow!("the receive code is damaged"))?;
-    ensure!(bytes.len() > 64, "the receive code is incomplete");
+    ensure!(bytes.len() == RECEIVE_LEN, "the receive code is incomplete");
     let (npk, vpk) = bytes.split_at(32);
     Ok(RecipientKeys {
         npk: hex::encode(npk),
@@ -1698,10 +1861,15 @@ pub fn parse_receive_code(code: &str) -> Result<RecipientKeys> {
     })
 }
 
+/// A sequencer on this machine (the only place the public genesis key may pay from).
+fn is_loopback(url: &str) -> bool {
+    url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:")
+}
+
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
     if prefs.faucets.contains_key(&zone.id) {
         Some("Drip service")
-    } else if zone.id == "lez-local" {
+    } else if zone.id == "lez-local" && is_loopback(&zone.sequencer) {
         Some("Local genesis key")
     } else {
         None
@@ -1825,7 +1993,7 @@ mod tests {
     fn receive_code_round_trips() {
         let npk = "11".repeat(32);
         let vpk = "22".repeat(1184);
-        let v = super::receive_code(&npk, &vpk);
+        let v = super::receive_code(&npk, &vpk).unwrap();
         let code = v["code"].as_str().unwrap();
         assert!(
             code.starts_with("lezpriv1:") && code.len() < 1700,

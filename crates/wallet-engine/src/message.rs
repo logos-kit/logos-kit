@@ -43,6 +43,22 @@ pub struct SignInRequest {
     pub request_id: Option<String>,
 }
 
+/// Invisible or direction-changing characters that could make the approval
+/// screen show something other than what is signed (bidi overrides, line and
+/// paragraph separators, zero-width marks).
+fn deceptive(c: char) -> bool {
+    matches!(c,
+        '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}'
+        | '\u{2060}'..='\u{2069}' | '\u{FEFF}')
+}
+
+/// ASCII-only single-line field (domain, URI, nonce, times, request id).
+fn ascii_line(field: &str, v: &str, max: usize) -> Result<()> {
+    one_line(field, v, max)?;
+    ensure!(v.is_ascii(), "{field} must be plain ASCII");
+    Ok(())
+}
+
 fn one_line(field: &str, v: &str, max: usize) -> Result<()> {
     ensure!(
         !v.is_empty() && v.len() <= max,
@@ -50,17 +66,17 @@ fn one_line(field: &str, v: &str, max: usize) -> Result<()> {
     );
     // A newline would let a field forge another line of the signed text.
     ensure!(
-        !v.chars().any(char::is_control),
-        "{field} must be a single line"
+        !v.chars().any(|c| c.is_control() || deceptive(c)),
+        "{field} must be a single line of visible text"
     );
     Ok(())
 }
 
 impl SignInRequest {
     fn check(&self) -> Result<()> {
-        one_line("domain", &self.domain, 253)?;
-        one_line("uri", &self.uri, 2048)?;
-        one_line("issuedAt", &self.issued_at, 64)?;
+        ascii_line("domain", &self.domain, 253)?;
+        ascii_line("uri", &self.uri, 2048)?;
+        ascii_line("issuedAt", &self.issued_at, 64)?;
         ensure!(
             (8..=64).contains(&self.nonce.len())
                 && self.nonce.bytes().all(|b| b.is_ascii_alphanumeric()),
@@ -75,7 +91,7 @@ impl SignInRequest {
             ("requestId", &self.request_id),
         ] {
             if let Some(v) = v {
-                one_line(f, v, 64)?;
+                ascii_line(f, v, 64)?;
             }
         }
         Ok(())
@@ -144,6 +160,11 @@ mod tests {
         let t = r.text("lez:testnet", "Acct").unwrap();
         assert!(t.starts_with("example.app wants you to sign in with your LEZ account:\nAcct\n\nWelcome\n\nURI: https://example.app\nVersion: 1\nChain ID: lez:testnet\nNonce: abcdefgh1\nIssued At: 2026-09-27T10:00:00Z"));
         r.statement = Some("hi\nURI: https://evil".into());
+        assert!(r.text("lez:testnet", "Acct").is_err());
+        r.statement = Some("hi\u{2028}URI: https://evil".into());
+        assert!(r.text("lez:testnet", "Acct").is_err());
+        r.statement = None;
+        r.domain = "good.example\u{202E}".into();
         assert!(r.text("lez:testnet", "Acct").is_err());
     }
 }

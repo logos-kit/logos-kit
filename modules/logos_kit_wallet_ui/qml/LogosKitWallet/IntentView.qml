@@ -133,7 +133,10 @@ ColumnLayout {
                         for (var j = 0; j < publicAccounts.length; j++)
                             if (publicAccounts[j].accountId === picked[i]) { acct = picked[i]; break }
                     if (!acct) { iv.busy = false; store.answer(true, session, ""); iv.finished(); return }
-                    store.call("signIn", { requester: requester, account: acct, request: p.signIn }, function (si, e4) {
+                    // Connect answers without the sign-in when the user didn't
+                    // confirm the site (Basecamp can't bind a site to an app).
+                    if (!connectSiteAck.checked) { iv.busy = false; store.answer(true, session, ""); iv.finished(); return }
+                    store.call("signIn", { requester: requester, account: acct, request: p.signIn, acknowledged: true }, function (si, e4) {
                         iv.busy = false
                         if (!e4) session.signIn = si
                         store.answer(true, session, "")
@@ -286,6 +289,22 @@ ColumnLayout {
             }
             Txt { Layout.fillWidth: true; text: "Let this app see this private account's balance."; font.pixelSize: 13; wrapMode: Text.Wrap }
         }
+        RowLayout {
+            visible: !!iv.p.signIn
+            Layout.fillWidth: true
+            spacing: 10
+            Rectangle {
+                id: connectSiteAck
+                property bool checked: false
+                implicitWidth: 22; implicitHeight: 22; radius: 7
+                color: checked ? Theme.action : "transparent"
+                border.width: checked ? 0 : 2
+                border.color: Theme.text3
+                Glyph { anchors.centerIn: parent; visible: connectSiteAck.checked; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: connectSiteAck.checked = !connectSiteAck.checked }
+            }
+            Txt { Layout.fillWidth: true; text: "Also sign in to " + (iv.p.signIn ? iv.p.signIn.domain : "") + ": I started this from that site."; font.pixelSize: 13; wrapMode: Text.Wrap }
+        }
         Field { id: cpw; objectName: "connectPassword"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password"; onAccepted: connectBtn.clicked() }
         Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
         RowLayout {
@@ -391,6 +410,22 @@ ColumnLayout {
             }
         }
         Notice { tone: "warn"; text: "Basecamp can't verify the site name an app gives. Sign in only if you started this from that site." }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+            Rectangle {
+                id: siteAck
+                objectName: "signInAck"
+                property bool checked: false
+                implicitWidth: 22; implicitHeight: 22; radius: 7
+                color: checked ? Theme.action : "transparent"
+                border.width: checked ? 0 : 2
+                border.color: Theme.text3
+                Glyph { anchors.centerIn: parent; visible: siteAck.checked; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: siteAck.checked = !siteAck.checked }
+            }
+            Txt { Layout.fillWidth: true; text: "I started this sign-in from " + (iv.p.domain || "that site") + "."; font.pixelSize: 13; wrapMode: Text.Wrap }
+        }
         Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
         RowLayout {
             Layout.fillWidth: true
@@ -398,10 +433,10 @@ ColumnLayout {
             Btn { Layout.fillWidth: true; large: true; text: "Cancel"; enabled: !iv.busy; onClicked: iv.cancel() }
             Btn {
                 Layout.fillWidth: true; large: true; tone: "action"; text: "Sign in"; armDelay: 500; busy: iv.busy
-                enabled: iv.picked.length === 1
+                enabled: iv.picked.length === 1 && siteAck.checked
                 onClicked: {
                     iv.busy = true
-                    iv.store.call("signIn", { requester: iv.requester, account: iv.picked[0], request: iv.p }, function (v, e) {
+                    iv.store.call("signIn", { requester: iv.requester, account: iv.picked[0], request: iv.p, acknowledged: true }, function (v, e) {
                         iv.busy = false
                         if (e) { iv.problem = Fmt.errorText(e); return }
                         iv.store.answer(true, v, "")

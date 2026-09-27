@@ -276,6 +276,8 @@ impl Default for Config {
 
 pub struct Engine {
     wallet: tokio::sync::Mutex<AutoLock>,
+    /// The user acted while something held the wallet: applied at the next tick.
+    touched: std::sync::atomic::AtomicBool,
     state: Mutex<State>,
     config: Config,
 }
@@ -314,6 +316,7 @@ impl Engine {
     pub fn new(session: Session, config: Config) -> Self {
         Self {
             wallet: tokio::sync::Mutex::new(AutoLock::new(session)),
+            touched: std::sync::atomic::AtomicBool::new(false),
             state: Mutex::new(State::default()),
             config,
         }
@@ -348,7 +351,15 @@ impl Engine {
         if self.state().proving.is_some() {
             return Ok(false);
         }
-        let locked = self.wallet.lock().await.tick()?;
+        let mut wallet = self.wallet.lock().await;
+        if self
+            .touched
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            wallet.touch();
+        }
+        let locked = wallet.tick()?;
+        drop(wallet);
         if locked {
             self.expire_pending("wallet locked");
         }
@@ -784,11 +795,14 @@ impl Engine {
         f(wallet.session_quiet()?).await
     }
 
-    /// Count now as use (the user acted in the wallet UI). Skipped while
-    /// something holds the wallet: that work counts as use itself.
+    /// Count now as use (the user acted in the wallet UI). Never waits: while
+    /// something holds the wallet, the touch is applied at the next tick.
     pub fn touch(&self) {
-        if let Ok(mut wallet) = self.wallet.try_lock() {
-            wallet.touch();
+        match self.wallet.try_lock() {
+            Ok(mut wallet) => wallet.touch(),
+            Err(_) => self
+                .touched
+                .store(true, std::sync::atomic::Ordering::SeqCst),
         }
     }
 
@@ -1017,6 +1031,19 @@ impl Engine {
         }
     }
 
+    /// Whether another unfinished transaction spends from the same account.
+    fn others_in_flight(&self, handle: &str, watch: Option<&(String, u128, u128)>) -> bool {
+        let Some((from, _, _)) = watch else {
+            return false;
+        };
+        self.state().statuses.values().any(|s| {
+            s.handle != handle
+                && !s.is_final()
+                && s.lifecycle != Lifecycle::AwaitingApproval
+                && s.from.as_deref() == Some(from.as_str())
+        })
+    }
+
     /// The session is still the one the request was built for.
     fn same_wallet(&self, epoch: u64, zone: &str, s: &Session) -> Result<()> {
         if self.state().epoch != epoch || s.zone().id != zone {
@@ -1173,8 +1200,18 @@ impl Engine {
         let pollers = self
             .with_session_quiet(async |s| Ok(s.core().context("not connected")?.poller_vec()))
             .await;
-        if let (Ok(pollers), Ok(hash)) = (pollers, tx_hash.parse()) {
-            let _ = wallet::poller::multi_poll(pollers, hash).await;
+        let seen = match (pollers, tx_hash.parse()) {
+            (Ok(pollers), Ok(hash)) => wallet::poller::multi_poll(pollers, hash).await.map(|_| ()),
+            (Err(e), _) => Err(e),
+            (_, Err(_)) => Err(anyhow::anyhow!("bad transaction hash")),
+        };
+        // Not seen: stop here rather than wait again under the lock.
+        if let Err(e) = seen {
+            let e = Denied::err(
+                Code::Timeout,
+                format!("sent, not seen in a block yet: {e:#}"),
+            );
+            return Err(self.fail(handle, Lifecycle::Submitted, e, progress));
         }
         let included = self
             .with_session(async |s| s.wait_included(&tx_hash).await)
@@ -1218,6 +1255,10 @@ impl Engine {
             // Public native outflow: the sender dropped by the amount plus a
             // fee within the approved cap. Anything else (an incoming payment
             // in between, only the fee charged) proves nothing either way.
+            // Another send from this account in flight could move it too.
+            (None, Some(_)) if self.others_in_flight(handle, public_watch.as_ref()) => {
+                (Outcome::Unknown, OutcomeSource::None)
+            }
             (None, Some(before)) if public_watch.is_some() && post.is_none() => {
                 let (from, out, max_fee) = public_watch.clone().unwrap_or_default();
                 let after = self

@@ -35,7 +35,12 @@ Item {
     // -- intents and direct requests --------------------------------------------------
     Connections {
         target: store
-        function onIntentArrived() { if (store.unlocked) root.sheet = "intent" }
+        function onIntentArrived() {
+            if (!store.unlocked) return
+            // An app's request replaces an unfinished send: drop its prepared request.
+            if (root.sheet === "send") { sendFlow.back(); sendFlow.reset() }
+            root.sheet = "intent"
+        }
         function onUnlockedChanged() {
             if (store.unlocked && store.intent !== null) root.sheet = "intent"
             if (!store.unlocked && root.sheet !== "") root.sheet = ""

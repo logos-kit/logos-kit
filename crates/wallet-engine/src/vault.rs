@@ -423,6 +423,19 @@ impl Vault {
         Ok(())
     }
 
+    /// A copy of what checking the password needs, usable without the vault
+    /// (the service checks an approval's password without the wallet lock).
+    pub fn checker(&self) -> Result<PasswordCheck> {
+        let Seal::Password { cost, salt } = &self.seal else {
+            bail!("this vault is not unlocked by a password");
+        };
+        Ok(PasswordCheck {
+            cost: *cost,
+            salt: *salt,
+            key: Zeroizing::new(*self.key),
+        })
+    }
+
     /// Check `password` against this password-sealed vault without touching disk.
     pub fn verify_password(&self, password: &str) -> Result<bool> {
         let Seal::Password { cost, salt } = &self.seal else {
@@ -570,5 +583,18 @@ impl wallet::storage::StorageBackend for EncryptedBackend {
             Self::write_pending(&self.vault, &mut state)?;
         }
         Ok(())
+    }
+}
+
+/// Checks a password against one vault's key (see [`Vault::checker`]).
+pub struct PasswordCheck {
+    cost: KdfCost,
+    salt: [u8; 16],
+    key: Zeroizing<[u8; 32]>,
+}
+
+impl PasswordCheck {
+    pub fn verify(&self, password: &str) -> Result<bool> {
+        Ok(*derive(password, &self.salt, self.cost)? == *self.key)
     }
 }

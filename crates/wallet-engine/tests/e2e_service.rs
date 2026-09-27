@@ -193,6 +193,19 @@ fn approval_path_through_the_service() {
     let e = call("lez_signAndSendTransaction", bad, &dapp).unwrap_err();
     assert_eq!(e["code"], 6104, "{e}");
 
+    // Same answer whether an unconnected signer is ours or a stranger's:
+    // the app can't probe which accounts this wallet holds.
+    for signer in [
+        payee.as_str(),
+        "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+    ] {
+        let mut probe = proposal(&format!("probe-{signer}")[..20]);
+        probe["instructions"][0]["accounts"][1] =
+            json!({ "account": signer, "writable": true, "signer": true });
+        let e = call("lez_signAndSendTransaction", probe, &dapp).unwrap_err();
+        assert_eq!(e["code"], 4100, "{e}");
+    }
+
     // The app proposes directly; the owner approves in the wallet.
     let sent = call("lez_signAndSendTransaction", proposal("t-1"), &dapp).unwrap();
     let handle = sent["handle"].as_str().unwrap().to_owned();
@@ -261,6 +274,15 @@ fn approval_path_through_the_service() {
     assert_eq!(ticket["needsPassword"], true);
     let handle = ticket["handle"].as_str().unwrap().to_owned();
     let hash = ticket["request"]["requestHash"].as_str().unwrap();
+    // A wrong password is refused before anything is reported as accepted,
+    // and the request stays open.
+    let wrong = call(
+        "ui_approve",
+        json!({ "handle": handle, "requestHash": hash, "password": "definitely-wrong" }),
+        &wallet_ui,
+    );
+    assert_eq!(code(wrong), 4100);
+    assert_eq!(ui("ui_pending", json!({}))["handle"], handle.as_str());
     let ok = ui(
         "ui_approve",
         json!({ "handle": handle, "requestHash": hash, "password": PW }),

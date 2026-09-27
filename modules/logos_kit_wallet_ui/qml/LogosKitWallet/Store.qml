@@ -113,6 +113,7 @@ QtObject {
                 return
             }
             store.unreachable = ""
+            if (v && v.zone && store.zone.id && v.zone.id !== store.zone.id) store.selected = ""
             var k = JSON.stringify(v || {})
             if (k !== store._stateKey) { store._stateKey = k; store.state = v || {} }
             store.loaded = true
@@ -129,6 +130,10 @@ QtObject {
         if (!unlocked) return
         call("snapshot", {}, function (v, e) {
             if (e || !v) return
+            // A fresh session (unlock, zone switch) starts empty: drop the old list.
+            if (!v.updatedMs && store.accounts.length) {
+                store.accounts = []; store._accountsKey = ""; store.selected = ""
+            }
             if (v.accounts && v.accounts.length) {
                 var k = JSON.stringify(v.accounts)
                 if (k !== store._accountsKey) { store._accountsKey = k; store.accounts = v.accounts }
