@@ -53,6 +53,30 @@ pub unsafe extern "C" fn lk_engine_call(request_json: *const c_char) -> *mut c_c
     })
 }
 
+/// Start the service: `{"dataDir": "<module data directory>"}`. Idempotent.
+///
+/// # Safety
+/// `config_json` must be a valid NUL-terminated UTF-8 string, or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lk_engine_init(config_json: *const c_char) -> *mut c_char {
+    guarded(|| {
+        if config_json.is_null() {
+            return api::err(-32600, "null config");
+        }
+        // SAFETY: non-null and NUL-terminated per the contract above.
+        match unsafe { CStr::from_ptr(config_json) }.to_str() {
+            Ok(s) => crate::service::init(s),
+            Err(_) => api::err(-32600, "config is not UTF-8"),
+        }
+    })
+}
+
+/// Queued events (JSON array, oldest first) since the last call.
+#[unsafe(no_mangle)]
+pub extern "C" fn lk_engine_events() -> *mut c_char {
+    guarded(crate::service::drain_events)
+}
+
 /// # Safety
 /// `s` must be a pointer returned by this library, freed at most once.
 #[unsafe(no_mangle)]

@@ -1,93 +1,82 @@
 import QtQuick
 import QtQuick.Layouts
-import Logos.Theme
-import Logos.Controls
+import "LogosKit"
 
-// S0 throwaway probe. NEVER published.
-// 1. Identity hop: requesterName (intent, attested by the shell) vs the
-//    caller name the core sees when this dApp calls it directly.
-// 2. Sandbox: Canvas paint, Qt.openUrlExternally, bundled SVG, rich-text.
-// Every result is also console.log'd with a PROBE: prefix for basecamp.log.
+// Dev-only dApp: the prize's core flow through the QML SDK (connect → send →
+// status), plus sign and test funds. Every result is shown as plain text.
 Item {
     id: root
-    width: 560
-    height: 520
+    width: 480
+    height: 640
 
-    property var results: ({})
-    property bool canvasPainted: false
+    property var session: null
+    property string account: session && session.accounts.length ? session.accounts[0].address : ""
+    property string log: "not connected"
+    property string status: ""
 
-    function record(key, value) {
-        var r = root.results
-        r[key] = value
-        root.results = r
-        console.log("PROBE: " + key + " = " + JSON.stringify(value))
-    }
+    LogosKit { id: kit; chain: "lez:local"; visible: root.visible }
 
-    function parse(raw) {
-        var v = raw
-        for (var i = 0; i < 2 && typeof v === "string"; i++) {
-            try { v = JSON.parse(v) } catch (e) { break }
-        }
-        return v
-    }
+    function say(t) { root.log = t; console.log("[probe] " + t) }
+    function fail(what) { return function (e) { root.say(what + " failed: " + (e && e.code) + " " + (e && e.message)) } }
 
-    function runDirect() {
-        logos.callModuleAsync("logos_kit_wallet", "whoami", [], function (raw) {
-            record("dappSeenByCore", parse(raw))
-        }, 10000)
-    }
-
-    function runIntent() {
-        logos.request("lez.wallet.connect", { chains: ["lez:testnet"] }, function (res) {
-            record("intentResult", { ok: res.ok, error: res.error, data: res.data })
-        })
-    }
-
-    function runSandbox() {
-        record("openUrlExternally_https", Qt.openUrlExternally("https://explorer.testnet.lez.logos.co/"))
-        record("canvasPaintedAfterShow", root.canvasPainted)
-        record("svgStatus", svg.status === Image.Ready ? "ready" : ("status=" + svg.status))
-    }
-
-    Rectangle { anchors.fill: parent; color: Theme.palette.background }
+    Rectangle { anchors.fill: parent; color: "#101014" }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacing.large
-        spacing: Theme.spacing.medium
+        anchors.margins: 20
+        spacing: 10
 
-        LogosText { text: "Logos Kit probe (dev)"; font.pixelSize: 24 }
+        Text { text: "Probe dApp"; color: "white"; font.pixelSize: 22; font.bold: true }
+        Text { objectName: "probeAccount"; text: root.account || "—"; color: "#9a9aa5"; textFormat: Text.PlainText; font.family: "Menlo" }
 
-        RowLayout {
-            spacing: Theme.spacing.small
-            LogosButton { objectName: "btnDirect"; text: "1. Direct call"; onClicked: root.runDirect() }
-            LogosButton { objectName: "btnIntent"; text: "2. Intent"; onClicked: root.runIntent() }
-            LogosButton { objectName: "btnSandbox"; text: "3. Sandbox"; onClicked: root.runSandbox() }
-        }
-
-        RowLayout {
-            spacing: Theme.spacing.large
-            Image { id: svg; source: "logo.svg"; sourceSize.width: 48; sourceSize.height: 48 }
-            Canvas {
-                width: 48; height: 48
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.fillStyle = "#22C55E"
-                    ctx.fillRect(0, 0, width, height)
-                    root.canvasPainted = true
-                }
-            }
-            // Rich-text probe: rendered as PlainText, so tags must show literally.
-            LogosText { text: "<b>bold?</b>"; textFormat: Text.PlainText; objectName: "plainTextProbe" }
-        }
-
-        LogosText {
-            objectName: "results"
+        component Action: Rectangle {
+            property string label
+            signal go()
             Layout.fillWidth: true
-            wrapMode: Text.WrapAnywhere
-            textFormat: Text.PlainText
-            color: Theme.palette.textSecondary
-            text: JSON.stringify(root.results, null, 2)
+            implicitHeight: 40
+            radius: 20
+            color: m.pressed ? "#3a3a44" : "#26262c"
+            Text { anchors.centerIn: parent; text: parent.label; color: "white"; font.pixelSize: 14 }
+            MouseArea { id: m; anchors.fill: parent; onClicked: parent.go() }
         }
+
+        Action {
+            objectName: "probeConnect"; label: "Connect"
+            onGo: kit.api.connect({ accountKinds: ["public"] }).then(function (s) {
+                root.session = s
+                root.say("connected: " + s.accounts.length + " account(s), session " + s.sessionId)
+            }, fail("connect"))
+        }
+        Action {
+            objectName: "probeSend"; label: "Send 7 LEZ"
+            onGo: kit.api.transfer(root.account, "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx", "7").then(function (r) {
+                root.say("approved, handle " + r.handle)
+                kit.api.watchTransaction(r.handle, function (s) {
+                    root.status = s.lifecycle + " / " + s.outcome + (s.txHash ? " " + s.txHash.substring(0, 12) + "…" : "")
+                }, fail("watch"))
+            }, fail("send"))
+        }
+        Action {
+            objectName: "probeSign"; label: "Sign a message"
+            onGo: kit.api.signMessage(root.account, Qt.btoa("hello from probe_dapp")).then(function (r) {
+                root.say("signature " + r.signature.substring(0, 16) + "…")
+            }, fail("sign"))
+        }
+        Action {
+            objectName: "probeFunds"; label: "Get test funds"
+            onGo: kit.api.requestFunds(root.account).then(function (r) {
+                root.say("faucet: " + r.status + (r.amount ? " +" + r.amount : ""))
+            }, fail("funds"))
+        }
+        Action {
+            objectName: "probeBalance"; label: "Read balance"
+            onGo: kit.api.getWalletBalance(root.account).then(function (b) {
+                root.say("balance " + b.amount + " (block " + b.asOfBlock + ")")
+            }, fail("balance"))
+        }
+
+        Text { objectName: "probeLog"; Layout.fillWidth: true; text: root.log; color: "white"; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+        Text { objectName: "probeStatus"; Layout.fillWidth: true; text: root.status; color: "#4bd166"; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+        Item { Layout.fillHeight: true }
     }
 }

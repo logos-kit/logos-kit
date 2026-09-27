@@ -92,6 +92,15 @@ pub struct TxStatus {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<i64>,
+    /// One line for activity rows ("Send 12.5 LEZ to …"); owner views only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// How a transfer travels (private routes prove for minutes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route: Option<tx::Route>,
+    /// The wallet account it spends from or signs with.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
     #[serde(skip)]
     requester: Option<String>,
 }
@@ -109,11 +118,19 @@ impl TxStatus {
             phase_started_ms: now_ms(),
             error: None,
             error_code: None,
+            title: None,
+            route: None,
+            from: None,
             requester,
         }
     }
 
-    const fn is_final(&self) -> bool {
+    /// The app that asked (None: the owner).
+    pub fn requester(&self) -> Option<&str> {
+        self.requester.as_deref()
+    }
+
+    pub const fn is_final(&self) -> bool {
         !matches!(
             self.lifecycle,
             Lifecycle::AwaitingApproval
@@ -191,6 +208,8 @@ struct Pending {
     /// The wallet/zone generation it was built in, and its zone.
     epoch: u64,
     zone: String,
+    /// What the approving UI was shown (re-read after a restart of the view).
+    ticket: Ticket,
 }
 
 #[derive(Default)]
@@ -257,6 +276,8 @@ impl Default for Config {
 
 pub struct Engine {
     wallet: tokio::sync::Mutex<AutoLock>,
+    /// The user acted while something held the wallet: applied at the next tick.
+    touched: std::sync::atomic::AtomicBool,
     state: Mutex<State>,
     config: Config,
 }
@@ -295,6 +316,7 @@ impl Engine {
     pub fn new(session: Session, config: Config) -> Self {
         Self {
             wallet: tokio::sync::Mutex::new(AutoLock::new(session)),
+            touched: std::sync::atomic::AtomicBool::new(false),
             state: Mutex::new(State::default()),
             config,
         }
@@ -329,7 +351,15 @@ impl Engine {
         if self.state().proving.is_some() {
             return Ok(false);
         }
-        let locked = self.wallet.lock().await.tick()?;
+        let mut wallet = self.wallet.lock().await;
+        if self
+            .touched
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            wallet.touch();
+        }
+        let locked = wallet.tick()?;
+        drop(wallet);
         if locked {
             self.expire_pending("wallet locked");
         }
@@ -488,13 +518,24 @@ impl Engine {
 
         let handle = new_handle();
         let review = prepared.review.clone();
+        let ticket = Ticket {
+            handle: handle.clone(),
+            request: RequestView::Transaction(Box::new(review.clone())),
+            needs_password,
+            needs_acknowledgement: needs_ack,
+            expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
+        };
         let mut state = self.state();
         // Checked again: the wallet or the slot may have changed while we built.
         Self::check_epoch(&state, epoch)?;
         Self::check_free(&mut state, requester.as_deref())?;
-        state.insert_status(TxStatus::new(&handle, &review.chain, requester.clone()));
+        let mut status = TxStatus::new(&handle, &review.chain, requester.clone());
+        status.title = Some(review.summary.title.clone());
+        status.route = review.route;
+        status.from = Some(review.intent.from_account().to_owned());
+        state.insert_status(status);
         state.pending = Some(Pending {
-            handle: handle.clone(),
+            handle,
             requester,
             hash: *prepared.hash(),
             kind: Kind::Tx(Box::new(prepared)),
@@ -503,14 +544,9 @@ impl Engine {
             deadline: Instant::now() + REQUEST_TTL,
             epoch,
             zone,
+            ticket: ticket.clone(),
         });
-        Ok(Ticket {
-            handle,
-            request: RequestView::Transaction(Box::new(review)),
-            needs_password,
-            needs_acknowledgement: needs_ack,
-            expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
-        })
+        Ok(ticket)
     }
 
     /// `lez_requestFunds`: testnet funds for one of this wallet's accounts.
@@ -659,17 +695,32 @@ impl Engine {
             .await?;
         let hash = connect_hash(&chain, &zone, &requester, &accounts, &capabilities);
         let handle = new_handle();
+        let ticket = Ticket {
+            handle: handle.clone(),
+            request: RequestView::Connect {
+                requester: requester.clone(),
+                chain: chain.clone(),
+                accounts: accounts.clone(),
+                capabilities: capabilities.clone(),
+                request_hash: hex::encode(hash),
+            },
+            needs_password: true,
+            needs_acknowledgement: false,
+            expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
+        };
         let mut state = self.state();
         Self::check_epoch(&state, epoch)?;
         Self::check_free(&mut state, Some(&requester))?;
-        state.insert_status(TxStatus::new(&handle, &chain, Some(requester.clone())));
+        let mut status = TxStatus::new(&handle, &chain, Some(requester.clone()));
+        status.title = Some(format!("Connect {requester}"));
+        state.insert_status(status);
         state.pending = Some(Pending {
-            handle: handle.clone(),
+            handle,
             requester: Some(requester.clone()),
             kind: Kind::Connect {
-                requester: requester.clone(),
-                accounts: accounts.clone(),
-                capabilities: capabilities.clone(),
+                requester,
+                accounts,
+                capabilities,
             },
             hash,
             needs_password: true,
@@ -677,20 +728,116 @@ impl Engine {
             deadline: Instant::now() + REQUEST_TTL,
             epoch,
             zone,
+            ticket: ticket.clone(),
         });
-        Ok(Ticket {
-            handle,
-            request: RequestView::Connect {
-                requester,
-                chain,
-                accounts,
-                capabilities,
-                request_hash: hex::encode(hash),
-            },
-            needs_password: true,
-            needs_acknowledgement: false,
-            expires_in_ms: u64::try_from(REQUEST_TTL.as_millis()).unwrap_or(u64::MAX),
+        Ok(ticket)
+    }
+
+    /// The open request as the approving UI saw it, with the time left
+    /// (None when nothing is open or it just ran out). Owner only.
+    pub fn pending(&self, caller: &Caller) -> Option<Ticket> {
+        if !caller.is_owner() {
+            return None;
+        }
+        let state = self.state();
+        let p = state.pending.as_ref()?;
+        let left = p.deadline.checked_duration_since(Instant::now())?;
+        let mut ticket = p.ticket.clone();
+        ticket.expires_in_ms = u64::try_from(left.as_millis()).unwrap_or(u64::MAX);
+        Some(ticket)
+    }
+
+    /// Every status this caller may read, newest first.
+    pub fn statuses(&self, caller: &Caller) -> Vec<TxStatus> {
+        let state = self.state();
+        let mut out: Vec<TxStatus> = state
+            .statuses
+            .values()
+            .filter(|s| Self::may_read(caller, s))
+            .cloned()
+            .collect();
+        out.sort_by_key(|s| std::cmp::Reverse(s.phase_started_ms));
+        out
+    }
+
+    /// Unlocked, time to auto-lock and zone status, without waiting: None
+    /// while something holds the wallet (a long sync), so a status poll never
+    /// queues behind it.
+    pub fn peek(&self) -> Option<(bool, Option<Duration>, Option<crate::session::ZoneStatus>)> {
+        let mut wallet = self.wallet.try_lock().ok()?;
+        let remaining = wallet.remaining();
+        let unlocked = wallet.is_unlocked();
+        let status = if unlocked {
+            wallet.session_quiet().ok().and_then(|s| s.status().ok())
+        } else {
+            None
+        };
+        Some((unlocked, remaining, status))
+    }
+
+    /// Whether a session is open (not locked).
+    pub async fn is_unlocked(&self) -> bool {
+        self.wallet.lock().await.is_unlocked()
+    }
+
+    /// Time left before auto-lock (None: locked).
+    pub async fn remaining(&self) -> Option<Duration> {
+        self.wallet.lock().await.remaining()
+    }
+
+    /// Like [`Engine::with_session`], without counting as use: background
+    /// sync and the UI's own reads must not keep the wallet unlocked.
+    pub async fn with_session_quiet<T>(
+        &self,
+        f: impl AsyncFnOnce(&mut Session) -> Result<T>,
+    ) -> Result<T> {
+        let mut wallet = self.wallet.lock().await;
+        f(wallet.session_quiet()?).await
+    }
+
+    /// Count now as use (the user acted in the wallet UI). Never waits: while
+    /// something holds the wallet, the touch is applied at the next tick.
+    pub fn touch(&self) {
+        match self.wallet.try_lock() {
+            Ok(mut wallet) => wallet.touch(),
+            Err(_) => self
+                .touched
+                .store(true, std::sync::atomic::Ordering::SeqCst),
+        }
+    }
+
+    /// Drop every grant of `requester` (optionally only on `account`) in the
+    /// current zone. Owner, or the app itself (disconnect).
+    pub async fn revoke(
+        &self,
+        caller: &Caller,
+        requester: &str,
+        account: Option<&str>,
+    ) -> Result<usize> {
+        let own = matches!(caller, Caller::Module(n) if n == requester);
+        if !caller.is_owner() && !own {
+            return Err(Denied::err(Code::Unauthorized, "not your grants"));
+        }
+        self.with_session_quiet(async |s| {
+            let zone = s.zone().id.clone();
+            let before = s.grants().len();
+            let kept: Vec<Grant> = s
+                .grants()
+                .iter()
+                .filter(|g| {
+                    !(g.zone == zone
+                        && g.requester == requester
+                        && account.is_none_or(|a| g.account == a))
+                })
+                .cloned()
+                .collect();
+            let removed = before - kept.len();
+            if removed > 0 {
+                s.set_grants(kept)?;
+            }
+            Ok(removed)
         })
+        .await
     }
 
     /// Decline a pending request: the owner, or the app that asked (cancel).
@@ -884,6 +1031,19 @@ impl Engine {
         }
     }
 
+    /// Whether another unfinished transaction spends from the same account.
+    fn others_in_flight(&self, handle: &str, watch: Option<&(String, u128, u128)>) -> bool {
+        let Some((from, _, _)) = watch else {
+            return false;
+        };
+        self.state().statuses.values().any(|s| {
+            s.handle != handle
+                && !s.is_final()
+                && s.lifecycle != Lifecycle::AwaitingApproval
+                && s.from.as_deref() == Some(from.as_str())
+        })
+    }
+
     /// The session is still the one the request was built for.
     fn same_wallet(&self, epoch: u64, zone: &str, s: &Session) -> Result<()> {
         if self.state().epoch != epoch || s.zone().id != zone {
@@ -952,6 +1112,8 @@ impl Engine {
     ) -> Result<TxStatus> {
         // Own-account invariant: which of our private accounts must move, by how much.
         let watch = own_invariant(&prepared.review);
+        // Public: our sender's native outflow and the fee cap.
+        let public_watch = public_invariant(&prepared.review);
         // A testimonial post proves itself by the record it writes.
         let post =
             crate::testimonial::watch(prepared.review.program.as_ref(), prepared.public_message());
@@ -1011,11 +1173,16 @@ impl Engine {
             match self
                 .with_session(async |s| {
                     self.same_wallet(epoch, zone, s)?;
-                    s.submit_public(prepared).await
+                    // Public native outflow: the sender's balance is the evidence.
+                    let before = match &public_watch {
+                        Some((from, _, _)) => s.balance_of(from, None).await.ok(),
+                        None => None,
+                    };
+                    Ok((s.submit_public(prepared).await?, before))
                 })
                 .await
             {
-                Ok(h) => (h, None),
+                Ok((h, before)) => (h, before),
                 Err(e) => return Err(self.fail(handle, Lifecycle::Dropped, e, progress)),
             }
         };
@@ -1028,6 +1195,24 @@ impl Engine {
         });
         // A poll that gives up leaves the outcome unknown, not failed: the
         // transaction may still land (retrying could send it twice).
+        // Wait for the block without the wallet lock (it can take minutes);
+        // then record the result under it (the poll answers at once).
+        let pollers = self
+            .with_session_quiet(async |s| Ok(s.core().context("not connected")?.poller_vec()))
+            .await;
+        let seen = match (pollers, tx_hash.parse()) {
+            (Ok(pollers), Ok(hash)) => wallet::poller::multi_poll(pollers, hash).await.map(|_| ()),
+            (Err(e), _) => Err(e),
+            (_, Err(_)) => Err(anyhow::anyhow!("bad transaction hash")),
+        };
+        // Not seen: stop here rather than wait again under the lock.
+        if let Err(e) = seen {
+            let e = Denied::err(
+                Code::Timeout,
+                format!("sent, not seen in a block yet: {e:#}"),
+            );
+            return Err(self.fail(handle, Lifecycle::Submitted, e, progress));
+        }
         let included = self
             .with_session(async |s| s.wait_included(&tx_hash).await)
             .await
@@ -1067,6 +1252,26 @@ impl Engine {
                     _ => (Outcome::Unknown, OutcomeSource::None),
                 }
             }
+            // Public native outflow: the sender dropped by the amount plus a
+            // fee within the approved cap. Anything else (an incoming payment
+            // in between, only the fee charged) proves nothing either way.
+            // Another send from this account in flight could move it too.
+            (None, Some(_)) if self.others_in_flight(handle, public_watch.as_ref()) => {
+                (Outcome::Unknown, OutcomeSource::None)
+            }
+            (None, Some(before)) if public_watch.is_some() && post.is_none() => {
+                let (from, out, max_fee) = public_watch.clone().unwrap_or_default();
+                let after = self
+                    .with_session(async |s| s.balance_of(&from, None).await)
+                    .await
+                    .ok();
+                match after.and_then(|a| before.checked_sub(a)) {
+                    Some(d) if d >= out && d <= out.saturating_add(max_fee) => {
+                        (Outcome::Success, OutcomeSource::OwnAccountInvariant)
+                    }
+                    _ => (Outcome::Unknown, OutcomeSource::None),
+                }
+            }
             _ => match post {
                 Some(post) => match self
                     .with_session(async |s| {
@@ -1091,6 +1296,23 @@ impl Engine {
             s.error = warning;
         }))
     }
+}
+
+/// For public transactions: the sending account of ours, its native outflow,
+/// and the fee cap it approved.
+fn public_invariant(review: &Review) -> Option<(String, u128, u128)> {
+    if review.route.is_some_and(tx::Route::is_private) {
+        return None;
+    }
+    let from = review.intent.from_account().to_owned();
+    let out: u128 = review
+        .summary
+        .outflows
+        .iter()
+        .filter(|f| f.asset == crate::decode::Asset::Native && f.account == from)
+        .fold(0u128, |a, f| a.saturating_add(f.amount));
+    let max_fee: u128 = review.fee.max_fee.as_deref()?.parse().ok()?;
+    (out > 0).then_some((from, out, max_fee))
 }
 
 /// For private routes: the private account of ours whose balance must change,

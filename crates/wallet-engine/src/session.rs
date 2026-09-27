@@ -255,6 +255,9 @@ struct Meta {
     /// zone id → token definitions to look for (ATAs, token list).
     #[serde(default)]
     tokens: BTreeMap<String, Vec<String>>,
+    /// Base64 key for per-app private account handles (made on first use).
+    #[serde(default)]
+    handle_key: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -927,6 +930,38 @@ impl Session {
         ))
     }
 
+    /// x-only public key of one of this wallet's public accounts.
+    pub(crate) fn public_key(&self, account_id: &str) -> Result<[u8; 32]> {
+        let id: lee::AccountId = crate::decode::account_id(account_id)?;
+        let key = self
+            .storage()?
+            .key_chain()
+            .pub_account_signing_key(id)
+            .context("not a public account of this wallet")?;
+        Ok(*lee::PublicKey::new_from_private_key(key).value())
+    }
+
+    /// BIP-340 signature by one of this wallet's public accounts over a
+    /// 32-byte prehash (message signing), and its x-only public key. The key
+    /// never leaves the key chain.
+    pub(crate) fn sign_prehash(
+        &self,
+        account_id: &str,
+        prehash: &[u8; 32],
+    ) -> Result<([u8; 64], [u8; 32])> {
+        let id: lee::AccountId = crate::decode::account_id(account_id)?;
+        let key = self
+            .storage()?
+            .key_chain()
+            .pub_account_signing_key(id)
+            .context("not a public account of this wallet")?;
+        let signature = lee::Signature::new(key, prehash);
+        Ok((
+            signature.value,
+            *lee::PublicKey::new_from_private_key(key).value(),
+        ))
+    }
+
     /// Name an account (`None` clears it). One label per account; names are
     /// unique within the wallet. Stored in LEZ's own label map, so the
     /// official CLI sees it too.
@@ -1168,6 +1203,29 @@ impl Session {
 
     /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be
     /// used to guess its own password.
+    /// Checks the password without this session (see `vault::PasswordCheck`).
+    pub fn password_checker(&self) -> Result<crate::vault::PasswordCheck> {
+        self.keys.checker()
+    }
+
+    /// The wallet's secret for per-app private account handles: random,
+    /// stored encrypted with the keys, so handles can't be computed outside
+    /// the wallet.
+    pub fn handle_key(&mut self) -> Result<[u8; 32]> {
+        use base64::Engine as _;
+        let b64 = base64::engine::general_purpose::STANDARD;
+        if let Some(k) = &self.meta.handle_key
+            && let Ok(bytes) = b64.decode(k)
+            && let Ok(key) = <[u8; 32]>::try_from(bytes.as_slice())
+        {
+            return Ok(key);
+        }
+        let key = *crate::vault::new_key();
+        let encoded = b64.encode(key);
+        self.update_meta(|m| m.handle_key = Some(encoded))?;
+        Ok(key)
+    }
+
     fn verify_current(&mut self, password: &str) -> Result<()> {
         self.reveal.check()?;
         if !self.keys.verify_password(password)? {

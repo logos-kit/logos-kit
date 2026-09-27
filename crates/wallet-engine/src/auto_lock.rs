@@ -88,6 +88,15 @@ impl AutoLock {
         }
     }
 
+    /// The session without counting this as use (background sync, UI reads).
+    pub fn session_quiet(&mut self) -> Result<&mut Session> {
+        self.tick().map_err(|e| e.context(Locked))?;
+        match &mut self.unlocked {
+            Some((session, _)) => Ok(session),
+            None => Err(Locked.into()),
+        }
+    }
+
     /// Count now as use (e.g. the user just sat through a proof).
     pub fn touch(&mut self) {
         if let Some((_, last_used)) = &mut self.unlocked {

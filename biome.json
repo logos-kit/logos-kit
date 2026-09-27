@@ -13,6 +13,7 @@
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
       "!sdk/qml/**/Tokens.js",
+      "!modules/*/qml",
       "!packages/qml-bundle/src/qml-shims.js",
       "!packages/qml-bundle/babel-plugin-qml-v4.cjs",
       "!packages/qml-bundle/gate/noderun.cjs",

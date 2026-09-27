@@ -154,10 +154,11 @@ export function basecampModule(options: BasecampModuleOptions): Transport {
             done = true
             clearTimeout(timer)
             try {
-              const r = (typeof payload === 'string' ? parseJson(payload) : payload) as {
-                value?: unknown
-                error?: unknown
-              } | null
+              let parsed: unknown = typeof payload === 'string' ? parseJson(payload) : payload
+              // A module returning its answer as text arrives encoded twice
+              // (the bridge serializes the string itself): unwrap one layer.
+              if (typeof parsed === 'string') parsed = parseJson(parsed)
+              const r = parsed as { value?: unknown; error?: unknown } | null
               if (!r || typeof r !== 'object')
                 throw new LezError(ErrorCode.Internal, 'malformed module answer')
               if ('error' in r && r.error !== undefined) reject(moduleError(r.error))

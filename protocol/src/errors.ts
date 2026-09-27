@@ -139,6 +139,10 @@ export function fromIntentError(code: string): LezError {
       return new LezError(ErrorCode.Unavailable)
     case 'bad_request':
       return new LezError(ErrorCode.InvalidParams, 'Invalid request')
+    // The shell coerces every other provider error to `failed` and carries no
+    // detail; the wallet showed the reason to the user.
+    case 'failed':
+      return new LezError(ErrorCode.Internal, "The wallet couldn't complete the request")
     case 'not_declared':
       return new LezError(
         ErrorCode.Internal,

@@ -60,14 +60,21 @@
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
           cargoLock = builtins.fromTOML (builtins.readFile ./Cargo.lock);
 
-          # Our Rust sources (manifests, lockfile, .rs, the C header) plus the
+          # Our Rust sources (manifests, lockfile, .rs, the C header, the JSON
+          # the engine compiles in) plus the
           # patched LEZ tree at vendor/lez, which the workspace path-depends on.
           ownSrc = lib.cleanSourceWith {
             src = ./.;
             name = "logos-kit-rust";
             filter =
               path: type:
-              (craneLib.filterCargoSources path type) || (lib.hasSuffix ".h" path) || (lib.hasInfix "/.cargo/" path);
+              (craneLib.filterCargoSources path type)
+              || (lib.hasSuffix ".h" path)
+              || (lib.hasInfix "/.cargo/" path)
+              # Compiled into the engine with include_str! (verify.rs, testimonial.rs).
+              || (type == "directory" && (lib.hasSuffix "/registry" path || lib.hasSuffix "/artifacts" path))
+              || (lib.hasInfix "/registry/" path && lib.hasSuffix ".json" path)
+              || (lib.hasSuffix "/programs/testimonial/artifacts/build.json" path);
           };
           lezPatched = pkgs.applyPatches {
             name = "lez-patched";
