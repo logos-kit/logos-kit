@@ -111,6 +111,8 @@ pub struct Service {
     /// Checks approval passwords without the wallet lock (set while unlocked).
     checker: Mutex<Option<crate::vault::PasswordCheck>>,
     throttle: Mutex<Throttle>,
+    /// The local genesis-key faucet (see `local_faucet`).
+    local_faucet: Mutex<Option<(String, Arc<KeyFaucet>)>>,
     /// When an app last opened an explorer page (one per second at most).
     last_explorer: Mutex<Option<Instant>>,
     /// Bumped on every unlock; an older background loop stops.
@@ -272,6 +274,7 @@ impl Service {
                 fails: 0,
                 until: None,
             }),
+            local_faucet: Mutex::new(None),
             last_explorer: Mutex::new(None),
             generation: Mutex::new(0),
             refresh: tokio::sync::Notify::new(),
@@ -1375,16 +1378,21 @@ impl Service {
             #[serde(default)]
             via: Option<String>,
         }
-        let a: P = params(p)?;
+        let mut a: P = params(p)?;
         if let Some(r) = &a.requester {
             check_requester(r)?;
+        }
+        // An app names a private account by its per-app handle.
+        if a.account.starts_with("pvt_") {
+            let app = a.requester.clone().ok_or_else(|| invalid("a private handle needs its app"))?;
+            a.account = self.private_account(&app, &a.account)?;
         }
         let zone = self.current_zone();
         let url = lock(&self.prefs).faucets.get(&zone.id).cloned();
         let faucet = match (zone.id.as_str(), url) {
             (_, Some(url)) => Faucet::Http(HttpFaucet::new("Drip service", &url)?),
             ("lez-local", None) if is_loopback(&zone.sequencer) => {
-                Faucet::Key(Box::new(self.local_faucet(&zone)?))
+                Faucet::Key(self.local_faucet(&zone)?)
             }
             _ => {
                 return Err(coded(
@@ -1454,14 +1462,45 @@ impl Service {
         }
     }
 
-    fn local_faucet(&self, zone: &Zone) -> Result<KeyFaucet> {
-        KeyFaucet::new(
+    /// The wallet account behind `app`'s private handle.
+    fn private_account(&self, app: &str, handle: &str) -> Result<String> {
+        let engine = self.engine()?;
+        self.block(async {
+            engine
+                .with_session_quiet(async |s| {
+                    let zone_id = s.zone().id.clone();
+                    let key = s.handle_key()?;
+                    s.accounts()?
+                        .into_iter()
+                        .find(|m| {
+                            m.kind == AccountKind::Private
+                                && private_handle(&key, &zone_id, app, &m.account_id) == handle
+                        })
+                        .map(|m| m.account_id)
+                        .ok_or_else(|| invalid("unknown private account"))
+                })
+                .await
+        })
+    }
+
+    /// One faucet per sequencer, kept: its ledger holds the per-account
+    /// rate limit and the idempotent request keys.
+    fn local_faucet(&self, zone: &Zone) -> Result<Arc<KeyFaucet>> {
+        let mut cached = lock(&self.local_faucet);
+        if let Some((url, f)) = &*cached
+            && *url == zone.sequencer
+        {
+            return Ok(f.clone());
+        }
+        let f = Arc::new(KeyFaucet::new(
             "Local genesis key",
             &zone.sequencer,
             LOCAL_GENESIS_KEY,
             1_000_000_000,
-            Duration::from_secs(20),
-        )
+            Duration::from_secs(60),
+        )?);
+        *cached = Some((zone.sequencer.clone(), f.clone()));
+        Ok(f)
     }
 
     // -- LWS-0 reads --------------------------------------------------------------
@@ -1770,7 +1809,7 @@ impl Service {
 
 enum Faucet {
     Http(HttpFaucet),
-    Key(Box<KeyFaucet>),
+    Key(Arc<KeyFaucet>),
 }
 
 struct ZoneStatusTip(u64);

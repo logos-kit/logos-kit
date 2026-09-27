@@ -25,9 +25,13 @@ ColumnLayout {
     width: parent ? parent.width : 400
     spacing: 10
 
-    readonly property string kind: req ? req.intent : ""
-    readonly property var p: req ? req.params || ({}) : ({})
-    readonly property string requester: req ? req.requester : ""
+    // The request on screen: an answered one (req → null) stays until the
+    // sheet closes, so its result (faucet outcome, proof) keeps its Done.
+    property var shown: null
+    readonly property var cur: req || shown
+    readonly property string kind: cur ? cur.intent : ""
+    readonly property var p: cur ? cur.params || ({}) : ({})
+    readonly property string requester: cur ? cur.requester : ""
     readonly property var publicAccounts: store.accounts.filter(function (a) { return a.kind === "public" })
     readonly property var privateAccounts: store.accounts.filter(function (a) { return a.kind === "private" })
     readonly property bool wantsPrivate: (p.accountKinds || []).indexOf("private") >= 0
@@ -55,6 +59,7 @@ ColumnLayout {
     function start() {
         // An answered request (req → null) keeps its proof on screen.
         if (!req) return
+        shown = req
         ticket = null; handle = ""; busy = false; problem = ""; blocked = false
         picked = []; privConsent = false; job = ""; fundResult = null
         // Read the request itself: sibling bindings (kind, p, requester) may
@@ -188,7 +193,7 @@ ColumnLayout {
     // == header (all kinds) ================================================================
     RowLayout {
         // Transactions show the requester inside the approval sheet itself.
-        visible: !!iv.req && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
+        visible: !!iv.cur && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
         Layout.fillWidth: true
         spacing: 12
         Rectangle {
@@ -204,7 +209,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
     }
     Txt {
-        visible: !!iv.req && (iv.kind !== "lez.transaction.send" || iv.blocked)
+        visible: !!iv.cur && (iv.kind !== "lez.transaction.send" || iv.blocked)
         Layout.fillWidth: true
         wrapMode: Text.Wrap
         font.pixelSize: 20
@@ -495,6 +500,6 @@ ColumnLayout {
                 }
             }
         }
-        Btn { visible: iv.fundResult !== null; Layout.fillWidth: true; large: true; text: "Done"; onClicked: iv.finished() }
+        Btn { objectName: "fundsDone"; visible: iv.fundResult !== null; Layout.fillWidth: true; large: true; text: "Done"; onClicked: iv.finished() }
     }
 }

@@ -17,6 +17,13 @@ Item {
 
     // Sheet state: "" | send | receive | accounts | settings | proof | intent | pending
     property string sheet: ""
+    // A request that arrived while another sheet was open (e.g. the private
+    // move after a faucet claim) shows once that sheet closes.
+    function showPending() {
+        var p = store.pending
+        if (p && root.sheet === "" && store.intent === null && !root.ownTickets[p.handle]) root.sheet = "pending"
+    }
+    onSheetChanged: if (sheet === "") Qt.callLater(showPending)
     property string proofHandle: ""
     // Tickets our own flows opened: never shown again as "pending".
     property var ownTickets: ({})
@@ -45,10 +52,7 @@ Item {
             if (store.unlocked && store.intent !== null) root.sheet = "intent"
             if (!store.unlocked && root.sheet !== "") root.sheet = ""
         }
-        function onPendingChanged() {
-            var p = store.pending
-            if (p && root.sheet === "" && store.intent === null && !root.ownTickets[p.handle]) root.sheet = "pending"
-        }
+        function onPendingChanged() { root.showPending() }
         function onToast(text, tone) { toast.show(text) }
     }
 
