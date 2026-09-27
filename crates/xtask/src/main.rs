@@ -96,7 +96,10 @@ fn fingerprint(url: &str) -> Result<()> {
     // we're pinned to (v0.3.0-rc1)? 0.2.5 already had getFeeState and no
     // piñata, so those alone mislabel it (2026-09-27, the halted devnet).
     let head = match &last_block {
-        Ok(v) => v.as_u64().map(|id| rpc(&agent, url, "getBlock", json!([id]))).transpose()?,
+        Ok(v) => v
+            .as_u64()
+            .map(|id| rpc(&agent, url, "getBlock", json!([id])))
+            .transpose()?,
         Err(_) => None,
     };
     let (decodes, head_ms) = match head {
