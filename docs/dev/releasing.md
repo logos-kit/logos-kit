@@ -51,8 +51,25 @@ Packages are signed inline in CI with an Ed25519 key made by
 `lgx keygen --name logos-kit-release`.
 
 - The secret key is the catalog's `LOGOS_SIGNING_KEY` Actions secret. The
-  maintainer's copy is `~/.config/logos/keys/logos-kit-release.jwk`; keep an
-  offline backup.
+  maintainer's copy is `~/.config/logos/keys/logos-kit-release.jwk`. Backups
+  (made 2026-09-27, each checked against the key's SHA-256):
+  - `~/.config/logos/keys-backup/logos-kit-release-keys.tar.age`: the whole
+    `keys/` directory, encrypted with [age](https://age-encryption.org) to the
+    maintainer's SSH keys (`id_ed25519`, `id_ed25519_20260922`);
+  - the same file on agari-box at `/root/backups/logos-kit/`;
+  - macOS login Keychain, service `logos-kit-release.jwk`, account `logos-kit`
+    (stored base64).
+
+  To restore:
+
+  ```sh
+  age -d -i ~/.ssh/id_ed25519 logos-kit-release-keys.tar.age | tar -xf - -C ~/.config/logos
+  # or, from the Keychain:
+  security find-generic-password -a logos-kit -s logos-kit-release.jwk -w | base64 -d > ~/.config/logos/keys/logos-kit-release.jwk
+  ```
+
+  The encrypted copies are only as safe as the SSH private key; keep that key
+  backed up too.
 - The public DID is the only `trustedSigners` entry in the catalog's
   `logos-repo.json`.
 
