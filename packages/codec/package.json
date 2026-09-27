@@ -1,0 +1,48 @@
+{
+  "name": "@logos-kit/codec",
+  "version": "0.0.0",
+  "description": "Byte-exact LEZ 0.3 encoding: borsh, messages, transactions, account ids, u128 amounts (no BigInt, no bignum library). QML-safe root; BIP-340 signing in ./sign.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logos-kit/logos-kit.git",
+    "directory": "packages/codec"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./sign": {
+      "types": "./dist/sign.d.ts",
+      "default": "./dist/sign.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check:types": "tsc --noEmit && tsc --noEmit -p tsconfig.qml.json",
+    "test": "vitest run",
+    "test:build": "publint --strict && attw --pack --profile esm-only",
+    "check:qml": "node ../../scripts/check-es2017.ts dist sign.js"
+  },
+  "dependencies": {
+    "@noble/curves": "catalog:",
+    "@noble/hashes": "catalog:",
+    "@scure/base": "catalog:"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "publint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

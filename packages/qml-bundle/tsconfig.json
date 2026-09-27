@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.qml.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "allowJs": false,
+    "resolveJsonModule": true
+  },
+  "include": ["src", "gate/suite.ts"]
+}

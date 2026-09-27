@@ -50,3 +50,17 @@ export const BalanceResult = Type.Object({
   /** Last block the value reflects. */
   asOfBlock: Type.Optional(Type.String({ pattern: '^[0-9]+$' })),
 })
+
+/** `lez_readAccount`: a public account's slot for one program, as the node holds it now. */
+export const ReadAccountParams = Type.Object({
+  chain: ChainId,
+  account: AccountId,
+  /** The program whose data to read (the native token program for balances). */
+  program: AccountId,
+})
+
+export const ReadAccountResult = Type.Object({
+  nonce: U128,
+  /** The program's data on this account (borsh), base64; empty if none. */
+  data: Base64,
+})

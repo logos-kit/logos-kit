@@ -37,6 +37,8 @@ export type RequestFundsParams = Static<typeof M.RequestFundsParams>
 export type RequestFundsResult = Static<typeof M.RequestFundsResult>
 export type BalanceParams = Static<typeof M.BalanceParams>
 export type BalanceResult = Static<typeof M.BalanceResult>
+export type ReadAccountParams = Static<typeof M.ReadAccountParams>
+export type ReadAccountResult = Static<typeof M.ReadAccountResult>
 
 export type MethodName = Mt.MethodName
 export type NotificationName = Mt.NotificationName

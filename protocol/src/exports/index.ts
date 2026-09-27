@@ -47,6 +47,8 @@ export type {
   Outcome,
   OutcomeSource,
   PrivateHandle,
+  ReadAccountParams,
+  ReadAccountResult,
   RequestFundsParams,
   RequestFundsResult,
   Session,

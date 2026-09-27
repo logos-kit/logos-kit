@@ -2,6 +2,8 @@ import Type from 'typebox'
 import {
   BalanceParams,
   BalanceResult,
+  ReadAccountParams,
+  ReadAccountResult,
   RequestFundsParams,
   RequestFundsResult,
   SignMessageParams,
@@ -45,6 +47,8 @@ export const Methods = {
     userFacing: false,
   },
   lez_getBalance: { params: BalanceParams, result: BalanceResult, userFacing: false },
+  /** Read one program's public data on an account (chain state: no grant needed). */
+  lez_readAccount: { params: ReadAccountParams, result: ReadAccountResult, userFacing: false },
   lez_signAndSendTransaction: {
     params: TransactionProposal,
     result: SubmitResult,

@@ -1237,6 +1237,19 @@ impl<'de> ::serde::Deserialize<'de> for PrivateHandle {
             })
     }
 }
+///`ReadAccountParams`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct ReadAccountParams {
+    pub account: AccountId,
+    pub chain: ChainId,
+    pub program: AccountId,
+}
+///`ReadAccountResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct ReadAccountResult {
+    pub data: Base64,
+    pub nonce: U128,
+}
 ///`RequestFundsParams`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct RequestFundsParams {

@@ -9744,10 +9744,13 @@ dependencies = [
  "lee",
  "lee_core",
  "prettyplease",
+ "programs",
  "schemars 0.8.22",
  "serde_json",
  "sha2",
  "syn 2.0.119",
+ "testimonial_core",
+ "token_core",
  "typify",
  "ureq",
 ]

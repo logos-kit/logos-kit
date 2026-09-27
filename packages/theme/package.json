@@ -1,0 +1,39 @@
+{
+  "name": "@logos-kit/theme",
+  "version": "0.0.0",
+  "description": "Logos Kit design tokens (Tray light and dark) for web, React Native and QML.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logos-kit/logos-kit.git",
+    "directory": "packages/theme"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check:types": "tsc --noEmit && tsc --noEmit -p tsconfig.qml.json",
+    "check:qml": "node ../../scripts/check-es2017.ts dist",
+    "test": "vitest run",
+    "test:build": "publint --strict && attw --pack --profile esm-only"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "publint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

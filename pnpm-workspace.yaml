@@ -13,6 +13,8 @@ allowBuilds:
 
 catalog:
   acorn: ^8.15.0
+  '@babel/core': ^7.29.7
+  esbuild: ^0.28.2
   # tooling
   '@arethetypeswrong/cli': ^0.18.5
   '@biomejs/biome': ^2.5.14
@@ -36,6 +38,7 @@ catalog:
   '@tanstack/react-query': ^5.104.0
   '@wallet-standard/app': ^1.1.1
   bn.js: ^5.2.5
+  '@types/bn.js': ^5.2.0
   ox: ^1.8.1
   react: ^19.3.0
   react-dom: ^19.3.0

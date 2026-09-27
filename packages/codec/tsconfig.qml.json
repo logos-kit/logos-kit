@@ -1,0 +1,15 @@
+{
+  // QML gate: the root entry ships into Basecamp's QML engine (ES2017, no BigInt).
+  // ./sign (noble curves, BigInt) is deliberately excluded.
+  "extends": "../../tsconfig.qml.json",
+  "include": [
+    "src/index.ts",
+    "src/account.ts",
+    "src/amount.ts",
+    "src/borsh.ts",
+    "src/bytes.ts",
+    "src/message.ts",
+    "src/programs.ts",
+    "src/sha256.ts"
+  ]
+}

@@ -116,3 +116,13 @@ The succinct proof was 225,883 B for fully private and 224,643 B for public+priv
 | Program | Image id | Source | Built |
 |---|---|---|---|
 | testimonial | `8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e` | this repo @ `bb7764af54455eba33ee0a81c05cce94ab64778f`, `programs/testimonial/methods/guest`, docker `r0.1.91.1` | 2026-09-26 (`programs/testimonial/artifacts/build.json`; lockfile seeded from LEZ's, risc0-zkvm 3.0.5) |
+
+## QML engine gate and bundler (2026-09-27, S6)
+
+| Item | Version | Why |
+|---|---|---|
+| PySide6-Essentials (desktop Basecamp) | 6.9.2 | Qt of Basecamp 0.3.0 desktop; `.qt/q692` via uv (`just qt-setup`) |
+| PySide6-Essentials (mobile / next desktop) | 6.11.1 | logos-nix #7/#8; `.qt/q611` |
+| esbuild | 0.28.x (catalog) | QML bundle stages A and C |
+| @babel/core | 7.29.x (catalog) | Qt V4 `apply(TypedArray)` workaround plugin |
+| @noble/curves | 2.4.0 | `@logos-kit/codec/sign` only (BIP-340) |

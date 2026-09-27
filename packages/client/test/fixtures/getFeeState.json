@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "height": 3,
+    "base_fee_exec": 8,
+    "base_fee_stor": 8,
+    "next_base_fee_exec_floor": 8,
+    "next_base_fee_exec_ceiling": 9,
+    "next_base_fee_stor_floor": 8,
+    "next_base_fee_stor_ceiling": 9,
+    "max_gas_exec": 10000000,
+    "max_gas_stor": 1000000
+  }
+}

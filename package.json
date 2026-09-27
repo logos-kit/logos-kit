@@ -25,6 +25,7 @@
     "@changesets/cli": "catalog:",
     "@svitejs/changesets-changelog-github-compact": "catalog:",
     "@types/node": "catalog:",
+    "acorn": "catalog:",
     "knip": "catalog:",
     "publint": "catalog:",
     "sherif": "catalog:",

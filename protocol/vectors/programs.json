@@ -1,0 +1,51 @@
+{
+  "builtins": {
+    "associatedTokenAccount": "8MJEJ2fLneAYDx3KgnstHTs1HAvyGQvC213P3YQxCCrm",
+    "native": "11111111111111111111111111111111",
+    "programLoader": "JAQ5MVHbCkSYRzXunsrNuM2m1LS859PGveHfoYPAmcvZ",
+    "token": "AxDdLwqkWgR9qaSctvABV1ZtvWJJyzXB8199xZueifPj"
+  },
+  "meta": {
+    "generator": "cargo xtask vectors",
+    "lezRev": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+    "note": "Generated from LEZ code at lezRev. Do not edit by hand."
+  },
+  "nativeTransfer": {
+    "amount": "12345678901234567890123",
+    "data": "00cb444271764eb6429d02000000000000"
+  },
+  "testimonial": [
+    {
+      "author": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+      "data": "00110000004c502d303032312f6c6f676f732d6b69740000000001030000006162751f0000004920757365204c6f676f73204b697420e29c930a7365636f6e64206c696e6500505c18a3010000",
+      "page": 0,
+      "previousStats": null,
+      "program": "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN",
+      "record": "Ef9AhUpZFjgDc5LkjYoGD9krhXbykg6CBut2t4m2xnZX",
+      "stats": "2mVYZprgp3dVPeNjL5SBx6vm2k5UmhtM2z3DVGS9AyML",
+      "submission": "LP-0021/logos-kit",
+      "text": "I use Logos Kit ✓\nsecond line",
+      "timestampMs": 1800000000000,
+      "username": "abu"
+    },
+    {
+      "author": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+      "data": "00110000004c502d303032312f6c6f676f732d6b69740300000000070000006e6f206e616d6500505c18a3010000",
+      "page": 3,
+      "previousStats": "4Vm5i8sQdnMM88qYa54Q7diydaxFAcuoUbQ24RMrRerK",
+      "program": "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN",
+      "record": "Ef9AhUpZFjgDc5LkjYoGD9krhXbykg6CBut2t4m2xnZX",
+      "stats": "3qngt68ThAqCXihkYcsS9DaWx4LL2xe3ZBUJwavr8vZF",
+      "submission": "LP-0021/logos-kit",
+      "text": "no name",
+      "timestampMs": 1800000000000,
+      "username": null
+    }
+  ],
+  "tokenTransfer": {
+    "amount": "340282366920938463463374607431768211455",
+    "data": "00ffffffffffffffffffffffffffffffff070707070707070707070707070707070707070707070707070707070707070700",
+    "definition": "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+    "kind": "fungible"
+  }
+}

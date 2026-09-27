@@ -1,0 +1,24 @@
+{
+  "name": "@logos-kit/qml-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Builds the Logos Kit QML SDK (sdk/qml/LogosKit): one ES2016 .pragma library for Basecamp's Qt V4 engine.",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check:types": "tsc --noEmit",
+    "gate": "bash gate/run.sh"
+  },
+  "dependencies": {
+    "@logos-kit/client": "workspace:*",
+    "@logos-kit/codec": "workspace:*",
+    "@logos-kit/protocol": "workspace:*",
+    "@logos-kit/theme": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:"
+  }
+}

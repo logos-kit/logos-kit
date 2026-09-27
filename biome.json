@@ -12,6 +12,10 @@
       "!**/pnpm-lock.yaml",
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
+      "!sdk/qml/**/Tokens.js",
+      "!packages/qml-bundle/src/qml-shims.js",
+      "!packages/qml-bundle/babel-plugin-qml-v4.cjs",
+      "!packages/qml-bundle/gate/noderun.cjs",
       "!docs/dev/PLAN.md",
       "!assets/logos",
       "!protocol/vectors",
@@ -109,6 +113,22 @@
         "rules": {
           "suspicious": {
             "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "protocol/src/**",
+        "packages/codec/src/**",
+        "packages/client/src/**",
+        "packages/theme/src/**",
+        "packages/qml-bundle/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noPrototypeBuiltins": "off"
           }
         }
       }

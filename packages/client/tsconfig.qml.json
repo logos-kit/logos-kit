@@ -1,0 +1,8 @@
+{
+  // QML gate: the root entry ships into Basecamp's QML engine (ES2017, no BigInt).
+  // ./local (BIP-340 signing, BigInt) is excluded. `fetch`/AbortController types
+  // come from DOM; the http transport is never used inside QML.
+  "extends": "../../tsconfig.qml.json",
+  "compilerOptions": { "lib": ["ES2017", "DOM"] },
+  "include": ["src/index.ts"]
+}

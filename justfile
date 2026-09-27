@@ -62,3 +62,21 @@ e2e-testimonial:
 # Rebuild the testimonial program at HEAD in the pinned docker builder (artifacts/).
 build-testimonial:
     cargo run -q -p logos-kit-cli -- testimonial build
+
+# One-time: PySide6 envs for the QML engine gate (Basecamp desktop 6.9.2, mobile 6.11.1).
+qt-setup:
+    mkdir -p .qt && cd .qt && uv venv -q -p 3.12 q692 && VIRTUAL_ENV=q692 uv pip install -q "PySide6-Essentials==6.9.2" && uv venv -q -p 3.12 q611 && VIRTUAL_ENV=q611 uv pip install -q "PySide6-Essentials==6.11.1"
+
+# Build the QML SDK (sdk/qml/LogosKit) from the TS packages.
+qml-sdk:
+    pnpm --filter @logos-kit/protocol --filter @logos-kit/codec --filter @logos-kit/client --filter @logos-kit/theme build
+    pnpm --filter @logos-kit/qml-bundle build
+
+# QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
+qml-gate: qml-sdk
+    pnpm --filter @logos-kit/qml-bundle gate
+
+# S6 exit proof: a transfer built and signed in TypeScript lands on the standalone sequencer.
+e2e-client:
+    e2e/standalone.sh
+    node e2e/ts/client.ts; status=$?; e2e/standalone.sh stop; exit $status
