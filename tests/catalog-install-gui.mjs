@@ -94,34 +94,27 @@ await app.waitFor(() => app.expectTexts(['Install and manage applications.']), {
 })
 await evalOn(await byName('appManager.searchField'), 'text = "Logos Kit"')
 
-let menu = null
+// The visible grid tile for the wallet (hidden delegates for other sections
+// share the type). A real click on an uninstalled app opens the install dialog.
+let tile = null
 await app.waitFor(
   async () => {
-    for (const m of await byType('AppContextMenu')) {
+    for (const m of await byType('AppGridDelegate')) {
       const got = await ins.send('evaluate', {
         objectId: m.id,
-        expression:
-          'JSON.stringify({ name: String(d.nameText), installed: d.isInstalled === true })',
+        expression: 'visible && appData.name === "logos_kit_wallet_ui"',
       })
-      if (got.error) continue
-      const row = JSON.parse(got.result)
-      if (row.name === 'logos_kit_wallet_ui' && !row.installed) {
-        menu = m.id
+      if (got.result === true) {
+        tile = m.id
         return
       }
     }
-    throw new Error('no uninstalled logos_kit_wallet_ui row yet')
+    throw new Error('no visible logos_kit_wallet_ui tile yet')
   },
   { timeout: 60000, interval: 1000, description: 'the wallet to appear in the catalog' },
 )
 await shot('03-catalog-lists-wallet')
-await evalOn(menu, 'openFor(d.snapshot())')
-await evalOn(
-  menu,
-  `(() => { for (let i = 0; i < count; i++) { const it = itemAt(i);
-     if (it && it.objectName === "appContextMenu.install") { it.triggered(); return true } } return false })()`,
-)
-await evalOn(menu, 'close()')
+await ins.send('click', { objectId: tile })
 
 const primary = await byName('addApplicationDialog.primaryButton')
 await app.waitFor(
@@ -139,29 +132,32 @@ await ins.send('callMethod', { objectId: primary, method: 'clicked' })
 
 // 3. Both packages land, then the wallet opens.
 say('3. waiting for logos_kit_wallet_ui + logos_kit_wallet to install')
+// The dialog's button turns into "Launch" once the UI and its core are on disk.
 await app.waitFor(
-  async () => {
-    const r = await ins.send('findByProperty', {
-      property: 'objectName',
-      value: 'sidebar.app.logos_kit_wallet_ui',
-    })
-    if (!r.matches?.length) throw new Error('no sidebar tile yet')
-  },
-  { timeout: 300000, interval: 2000, description: 'the wallet sidebar tile' },
+  async () =>
+    (await evalOn(primary, 'visible && enabled && text === "Launch"')) ||
+    Promise.reject(new Error(`button says ${await evalOn(primary, 'text')}`)),
+  { timeout: 600000, interval: 2000, description: 'the install to finish' },
 )
 await shot('05-installed')
-
-await ins.send('callMethod', {
-  objectId: await byName('sidebar.app.logos_kit_wallet_ui'),
-  method: 'clicked',
-})
+await ins.send('click', { objectId: primary })
 await app.waitFor(
   async () => {
+    // In the tree is not enough: Basecamp shows a spinner until the view is
+    // ready, so wait for the button and every ancestor to be visible.
     const r = await ins.send('findByProperty', { property: 'objectName', value: 'createWallet' })
-    if (!r.matches?.length) throw new Error('wallet not on its welcome screen yet')
+    for (const m of r.matches ?? []) {
+      const shown = await evalOn(
+        m.id,
+        '(function(o){ while (o) { if (o.visible === false) return false; o = o.parent } return true })(this)',
+      )
+      if (shown === true) return
+    }
+    throw new Error('wallet not on its welcome screen yet')
   },
   { timeout: 60000, interval: 1000, description: 'the wallet welcome screen' },
 )
+await new Promise((r) => setTimeout(r, 1500)) // let the first frame paint
 await shot('06-wallet-opens')
 say('CATALOG GUI INSTALL OK')
 process.exit(0)

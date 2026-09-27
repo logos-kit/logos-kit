@@ -42,7 +42,11 @@ cd "$work"
 step "logosctl $LOGOSCTL_VERSION ($asset)"
 curl -fsSL -o ctl.tgz "https://github.com/logos-co/logos-logoscore-cli/releases/download/$LOGOSCTL_VERSION/$asset.tar.gz"
 tar xzf ctl.tgz
-ctl="$(find "$work" -name logosctl -type f -perm -u+x | head -1)"
+# macOS ships bin/logosctl; Linux ships an AppImage. Containers have no FUSE,
+# so the AppImage runs by extracting itself.
+ctl="$(find "$work" \( -name logosctl -o -name 'logosctl-*.AppImage' \) -type f -perm -u+x | head -1)"
+[[ -n "$ctl" ]] || { echo "FAIL: no logosctl in $asset.tar.gz" >&2; exit 1; }
+export APPIMAGE_EXTRACT_AND_RUN=1
 export LOGOSCTL_CONFIG_DIR="$work/session"
 "$ctl" --version
 

@@ -5,7 +5,7 @@
 - **Testimonial wording:** "I use Logos Kit wallet …"
 - **Colours:** come from `@logos-kit/theme`. The accent and status tokens follow RainbowKit and wagmi conventions, not the Logos site palette (maintainer rule).
   - In Basecamp, native surfaces (background, surfaces, borders, typography) still come from `Logos.Theme`, so the app feels at home.
-- **App icon (256×256):** a placeholder for now, from the module-builder template. It will be designed in S7 using the official Logos mark, unmodified, on our surface colour.
+- **App icon (256×256):** the official Logos mark (`Logos-Mark-White.svg`), unmodified, on Tray dark `surface` `#161618`, the mark's longer side 150 px. Source `assets/app-icon/logos-kit-wallet.svg`; rendered with `rsvg-convert -w 256 -h 256 … -o modules/logos_kit_wallet_ui/src/icons/icon.png`. 0.1.0 shipped the template placeholder by mistake; fixed in 0.1.1.
 
 ## Design direction: Tray (locked 2026-09-26, D14)
 
