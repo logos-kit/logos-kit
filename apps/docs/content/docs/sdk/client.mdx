@@ -1,0 +1,116 @@
+---
+title: 'TypeScript client'
+description: 'Typed reads against a LEZ node and LWS-0 wallet actions, viem-style.'
+---
+
+`@logos-kit/client` is the typed layer the QML SDK is built on. You can use it
+directly from Node scripts, tests and tools. It has two sets of actions on one
+client:
+
+- **`nodeActions`**: reads and raw submission against a LEZ node (the
+  sequencer's JSON-RPC).
+- **`walletActions`**: LWS-0 requests to the Logos Kit wallet (connect, read
+  shared accounts, propose transactions, follow them).
+
+Amounts are decimal strings (`u128` never becomes a JS number), and the root
+entry point stays QML-safe: no native `BigInt`, no `Intl`.
+
+Hover over the code below to see the types.
+
+## Read the chain
+
+```ts twoslash
+import { createClient, http, nodeActions } from '@logos-kit/client'
+
+const node = createClient({
+  transport: http('https://testnet.lez.logos.co', { retryCount: 2 }),
+  chain: 'lez:testnet',
+}).extend(nodeActions)
+
+async function main() {
+  const height = await node.getBlockNumber()
+  //    ^?
+  const fees = await node.getFeeState()
+  //    ^?
+  console.log(height, fees.baseFeeExec)
+}
+```
+
+<Callout type="warn">
+The LEZ sequencer doesn't send CORS headers, so `http()` works from Node and
+other non-browser runtimes, not from a web page. In Basecamp, read through the
+wallet instead (`readAccount`, `getWalletBalance`).
+</Callout>
+
+## Talk to the wallet
+
+In a Basecamp module, the `basecampModule` transport carries LWS-0 calls to the
+wallet core module over `logos.callModuleAsync`. The QML SDK sets this up for
+you; this is what it does underneath:
+
+```ts twoslash
+import { basecampModule, createClient, walletActions } from '@logos-kit/client'
+import { nativeTransfer } from '@logos-kit/codec'
+
+declare const logos: {
+  callModuleAsync(
+    module: string,
+    method: string,
+    args: unknown[],
+    callback: (payload: string) => void,
+    timeoutMs?: number,
+  ): void
+}
+
+const wallet = createClient({
+  transport: basecampModule({ callModuleAsync: logos.callModuleAsync }),
+  chain: 'lez:testnet',
+}).extend(walletActions)
+
+async function pay(to: string) {
+  const session = await wallet.connect({ chains: ['lez:testnet'] })
+  const from = session.accounts[0].address
+  //    ^?
+
+  // Resolves when the user approves, not when the transaction lands.
+  const { handle } = await wallet.sendCall(from, nativeTransfer(from, to, '1000'))
+  const status = await wallet.waitForTransactionStatus(handle)
+  //    ^?
+  return status.outcome === 'success'
+}
+```
+
+User-facing steps (connect, send, sign, faucet) open a wallet sheet through a
+Basecamp intent; the rest are reads. See the [QML SDK](/docs/sdk/qml) for the
+transaction lifecycle and what `outcome` means.
+
+## Types
+
+### `ClientConfig`
+
+<auto-type-table cwd path="../../packages/client/src/client.ts" name="ClientConfig" />
+
+### `HttpOptions`
+
+<auto-type-table cwd path="../../packages/client/src/transports.ts" name="HttpOptions" />
+
+### `PollOptions`
+
+Used by every `wait…` action.
+
+<auto-type-table cwd path="../../packages/client/src/poll.ts" name="PollOptions" />
+
+### `NodeActions`
+
+<auto-type-table cwd path="../../packages/client/src/actions/node.ts" name="NodeActions" />
+
+### `WalletActions`
+
+<auto-type-table cwd path="../../packages/client/src/actions/wallet.ts" name="WalletActions" />
+
+### `ProgramCall` (`@logos-kit/codec`)
+
+What `sendCall` takes. Build one with the codec's helpers (`nativeTransfer`,
+the token and testimonial builders) rather than by hand.
+
+<auto-type-table cwd path="../../packages/codec/src/programs.ts" name="ProgramCall" />

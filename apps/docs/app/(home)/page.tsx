@@ -25,7 +25,7 @@ const features = [
   },
   {
     title: 'Real apps to copy',
-    body: 'A testimonial app and a faucet, every state handled, plus a template you can init.',
+    body: 'A testimonial app and a faucet with loading, pending, error and unconfirmed states, plus a template you can init.',
   },
 ]
 

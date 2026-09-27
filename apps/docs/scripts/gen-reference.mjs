@@ -1,8 +1,10 @@
 // Generates content/docs/reference/methods.mdx from the protocol's own
 // schema (protocol/schema/*.json) and the wallet module's contract (.lidl),
-// so the reference can't drift from what the wallet answers.
+// so the reference can't drift from what the wallet answers. Hand-written
+// behaviour notes (scripts/method-notes.mjs) go under each method.
 import fs from 'node:fs'
 import path from 'node:path'
+import { notes } from './method-notes.mjs'
 
 const root = path.resolve(import.meta.dirname, '../../..')
 const methods = JSON.parse(fs.readFileSync(path.join(root, 'protocol/schema/methods.json'), 'utf8'))
@@ -62,6 +64,7 @@ for (const [name, m] of Object.entries(methods.methods)) {
   out += m.userFacing
     ? `**User-facing.** Open it with the \`${intentOf[name] || '(wallet UI only)'}\` intent; the wallet shows its own sheet.\n\n`
     : '**Read.** A module call; no prompt.\n\n'
+  if (notes[name]) out += `### Behaviour\n\n${notes[name].trim()}\n\n`
   out += `### Params\n\n${table(m.params)}\n### Result\n\n`
   out += `\`${type(m.result)}\`${
     m.result?.properties

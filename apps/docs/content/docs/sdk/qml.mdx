@@ -50,8 +50,8 @@ reads.
 | `getTestimonials(program, { limit })` | read | `{ count, monthly, latest[] }` |
 | `getTestimonial(program, author)` | read | the author's post, or `null` |
 | `getTransactionStatus(handle)` | read | `TransactionStatus` |
-| `watchTransaction(handle, onUpdate, onError?)` | read (polls) | a handle with `stop()`; `onUpdate` on each change until final |
-| `waitForTransactionStatus(handle)` | read (polls) | the final `TransactionStatus` |
+| `watchTransaction(handle, onUpdate, onError?)` | read (polls) | a handle with `stop()`; `onUpdate` on each change, stops at the first final lifecycle (`included` counts) |
+| `waitForTransactionStatus(handle)` | read (polls) | the first final `TransactionStatus` (`included`, `rejected`, `dropped`, `expired`) |
 | `signMessage(account, base64)` | wallet sheet | `{ signature, publicKey, tag }` |
 | `signIn(request)` | wallet sheet | `{ account, signedMessage, signature }` |
 | `requestFunds(account)` | wallet sheet | `{ status, amount?, retryAfterSeconds?, shieldHandle? }` |
@@ -64,16 +64,52 @@ A proposal resolves when the user **approves**, not when it lands. Follow the
 handle:
 
 ```
-awaiting_approval → building → proving → signing → submitted → included → finalized
+awaiting_approval → building → proving → signing → submitted → included
                                                           ↘ rejected | dropped | expired
 ```
 
-`outcome` is `success`, `failure` or `unknown`; `proving.phase` is set while a
+`watchTransaction` and `waitForTransactionStatus` stop at the first **final**
+lifecycle: `included`, `rejected`, `dropped` or `expired`. The protocol also
+reserves `finalized`, but the Logos Kit wallet doesn't report it yet: a
+transaction's status ends at `included`, with `block.id` set to the block it
+landed in. If your app needs depth, compare `status.block.id` with the chain's
+current block later (a node read) instead of waiting on the watcher.
+
+Inclusion alone isn't success: LEZ 0.3 includes failed transactions too.
+Read `outcome` on the final status:
+
+| `outcome` | Meaning | Show |
+|---|---|---|
+| `success` | The wallet proved the effect (e.g. your record exists, the balance moved by the amount). | Done |
+| `failure` | Included, but the program refused it. The fee was charged. | The error, and a retry |
+| `unknown` | Included, but the wallet couldn't prove the effect either way. | "Included, outcome unconfirmed", then re-read the state you expected to change |
+
+Only `success` should show a Done screen. `proving.phase` is set while a
 private transaction proves (minutes on a laptop). Public calls skip proving.
 
 ## One sheet at a time
 
 While a wallet sheet is open for your app, another user-facing call rejects
 with `6107` (`RequestPending`). A call that waits 45 s rejects with `6108`
-(`Timeout`), but the wallet may still be showing it: nothing is lost, and the
-late answer goes to `onLateResult`.
+(`Timeout`), but the wallet may still be showing it. A timeout does **not**
+mean nothing was sent: the user can still approve, and the SDK keeps new
+requests blocked until the wallet really answers.
+
+That late answer arrives on the `lateResult` signal. Handle it to recover the
+handle of a send the user approved after the timeout:
+
+```qml
+LogosKit {
+    id: kit
+    onLateResult: function (intent, ok, data) {
+        // intent: e.g. "lez.transaction.send"; data: the result, or a LezError when !ok
+        if (intent === "lez.transaction.send" && ok && data.handle)
+            root.follow(data.handle)          // same path as an on-time approval
+        else if (!ok && !kit.sdk.isUserRejection(data))
+            root.showError(data)
+    }
+}
+```
+
+When a call rejects with `6108`, show "Waiting for the wallet" rather than an
+error, and let `onLateResult` finish the flow.

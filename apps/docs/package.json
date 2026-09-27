@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "prebuild": "pnpm -w run build",
     "build": "node scripts/gen-reference.mjs && next build",
     "dev": "next dev",
     "start": "next start",
@@ -10,9 +11,14 @@
     "gen": "node scripts/gen-reference.mjs"
   },
   "dependencies": {
+    "@logos-kit/client": "workspace:*",
+    "@logos-kit/codec": "workspace:*",
+    "@logos-kit/protocol": "workspace:*",
     "cn": "^0.3.0",
     "fumadocs-core": "^16.15.0",
     "fumadocs-mdx": "^15.4.0",
+    "fumadocs-twoslash": "^4.0.1",
+    "fumadocs-typescript": "^5.4.1",
     "fumadocs-ui": "npm:@fumadocs/base-ui@^16.15.0",
     "lucide-react": "^1.47.0",
     "motion": "^13.4.4",
@@ -20,7 +26,8 @@
     "next-themes": "^0.4.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "shiki": "^4.4.3"
+    "shiki": "^4.4.3",
+    "twoslash": "^0.3.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -30,7 +37,7 @@
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   },
   "description": "Logos Kit documentation (Fumadocs + Next.js). Not published."
 }

@@ -1020,6 +1020,15 @@ LWS-0: the network the wallet is on (&#123;chain&#125;).
 
 **Read.** A module call; no prompt.
 
+### Behaviour
+
+- Answers any caller, with or without a session: the network is public
+  metadata, like `eth_chainId`. It never reveals accounts or balances.
+- The value changes when the user switches networks in the wallet. The QML SDK
+  checks it on start, when your view is shown, and every 5 s while visible,
+  and rebuilds `kit.api` when it changes (set `followWallet: false` to pin a
+  network).
+
 ### Params
 
 _No parameters._
@@ -1382,6 +1391,19 @@ LWS-0: a public account's data for one program (chain state).
 LWS-0: open the zone's explorer at a transaction or account (the wallet builds the URL).
 
 **Read.** A module call; no prompt.
+
+### Behaviour
+
+- Opens the page in the user's browser (an OS side effect), because the
+  Basecamp QML sandbox can't open links itself. The result's `url` is the
+  page it opened.
+- The URL is built by the wallet from a fixed base. Only `lez:testnet` has an
+  explorer (`https://explorer.testnet.lez.logos.co`); other networks answer
+  `5700`. A `chain` other than the wallet's current one answers `4902`.
+- Pass **exactly one** of `txHash` (32 bytes of hex, optional `0x`) or
+  `account` (a valid account id); anything else is `InvalidParams`.
+- Rate-limited: at most one page per second across all apps (`6107` otherwise).
+- Only apps with a connected session can call it.
 
 ### Params
 
@@ -2214,6 +2236,21 @@ LWS-0 (needs the lez.wallet.request_funds intent).
 
 **User-facing.** Open it with the `lez.wallet.request_funds` intent; the wallet shows its own sheet.
 
+### Behaviour
+
+- Opens the wallet's faucet sheet (the testnet faucet, or the debug genesis
+  faucet on a local sequencer). The account must be one the
+  user shared with your app; otherwise `Unauthorized`.
+- The faucet only pays **public** accounts. For a private target the wallet
+  pays one of the user's public accounts (returned as `fundedAccount`) and
+  queues a shield into the private account for the user to approve
+  (`shieldHandle`). That public account is linked to the private one on
+  chain, and the sheet says so.
+- `status` is `funded`, `rate_limited` (with `retryAfterSeconds`),
+  `outcome_unknown` or `rejected` (with `reason`). On `outcome_unknown`,
+  don't request again: watch the balance of `fundedAccount` (or the target, when
+  it is public) for a bounded time, because a second request could pay twice.
+
 ### Params
 
 | Name | Type | Required | Notes |
@@ -2223,7 +2260,7 @@ LWS-0 (needs the lez.wallet.request_funds intent).
 
 ### Result
 
-`object`: `status`, `amount`, `retryAfterSeconds`, `txHash`, `shieldHandle`, `reason`
+`object`: `status`, `amount`, `retryAfterSeconds`, `txHash`, `shieldHandle`, `fundedAccount`, `reason`
 
 <details>
 <summary>JSON Schema</summary>
@@ -2299,6 +2336,11 @@ LWS-0 (needs the lez.wallet.request_funds intent).
       },
       "shieldHandle": {
         "type": "string"
+      },
+      "fundedAccount": {
+        "type": "string",
+        "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+        "description": "Base58-encoded 32-byte LEZ account id"
       },
       "reason": {
         "type": "string",

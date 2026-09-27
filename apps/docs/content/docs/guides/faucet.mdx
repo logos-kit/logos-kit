@@ -4,8 +4,9 @@ description: 'Test funds into the account the user picks, public or private, wit
 ---
 
 **Logos Kit Faucet** (`modules/logos_kit_faucet`) gets test LEZ into any
-account the user shares. It shows each outcome the faucet can give, and the
-private path, where funds arrive with a proof.
+account the user shares. It gives each faucet outcome its own state, including
+the ones where it can't tell yet, and the private path, where funds arrive with
+a proof.
 
 ## 1. Connect, both kinds
 
@@ -22,7 +23,7 @@ gets a per-app handle for each (`pvt_…`); it never learns the account itself.
 kit.api.requestFunds(account).then(function (r) {
     if (r.status === "funded")           r.shieldHandle ? follow(r.shieldHandle) : done(r.amount)
     else if (r.status === "rate_limited") countdown(r.retryAfterSeconds)
-    else if (r.status === "outcome_unknown") watchBalance()
+    else if (r.status === "outcome_unknown") watchBalance(r.fundedAccount || account)
     else                                  declined(r.reason)
 })
 ```
@@ -31,24 +32,51 @@ kit.api.requestFunds(account).then(function (r) {
 |---|---|
 | `funded` | the amount, the account, a link to the transaction |
 | `rate_limited` | a countdown on the button, which reopens at zero |
-| `outcome_unknown` | "checking…": it watches the balance instead of asking again (a second request could pay twice) |
+| `outcome_unknown` | "Checking…": it watches the balance instead of asking again (a second request could pay twice) |
 | `rejected` | the faucet's reason |
+
+### When the outcome is unknown
+
+The faucet answered ambiguously (a timeout, a dropped connection), so the funds
+may or may not have landed. The app never re-requests on its own. Instead it:
+
+1. Re-reads the paid account's balance on a timer, for a bounded time. Each
+   attempt counts, including failed reads, so an unreachable node can't keep
+   it checking forever.
+2. Shows **Funds arrived** as soon as the balance goes up.
+3. Otherwise ends in an **unresolved** state: "We couldn't confirm the
+   payment", with **Check again** (one more balance read) and a plain note not
+   to request again until the check settles.
+
+For a private target, the account to watch is **not** the private one. The
+faucet only pays public accounts, so it paid `r.fundedAccount`, one of the
+user's public accounts. The app watches that account and says so ("The
+faucet paid Public account 1"). If the funds turn up there, the user can move
+them into the private account from the wallet.
 
 ## 3. The private path
 
 The faucet only pays public accounts. For a private target the wallet funds
-one of the user's public accounts, then queues a transfer into the private
-account (a *shield*), which the user approves in the wallet. The app follows
-it with the returned `shieldHandle`:
+one of the user's public accounts (`fundedAccount`), then queues a transfer
+into the private account (a *shield*), which the user approves in the wallet.
+The app follows it with the returned `shieldHandle`:
 
 ```qml
 kit.api.watchTransaction(r.shieldHandle, function (s) {
     // awaiting_approval → proving (minutes, on the user's machine) → submitted → included
+    if (s.lifecycle !== "included") return
+    if (s.outcome === "success")      done()           // the private balance moved
+    else if (s.outcome === "failure") failed(s)       // funds are still on fundedAccount
+    else                              unconfirmed(s)   // included, outcome unconfirmed
 })
 ```
 
-The app shows four steps (paid, approve, proving with a timer, included), and
-says plainly where the funds are if the user declines the move.
+The app shows four steps (paid, approve, proving with a timer, included). Only
+`outcome === "success"` shows Done. An included shield with outcome `unknown`
+gets its own **Included, outcome unconfirmed** state, which says the funds are
+either in the private account or still on the public one, and offers a balance
+check. If the user declines the move, the app says plainly that the funds stay
+on the public account.
 
 ## Run it yourself
 
