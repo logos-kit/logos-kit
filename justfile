@@ -40,6 +40,12 @@ e2e:
     e2e/standalone.sh
     LK_E2E_SEQUENCER=http://127.0.0.1:3040 cargo test -p wallet-engine --test e2e_sync -- --nocapture; status=$?; e2e/standalone.sh stop; exit $status
 
+# S7: the approval authorization path through the module's service (connect,
+# app proposal, id dedupe, handle isolation, signature, shield, lock).
+e2e-service:
+    e2e/standalone.sh
+    RISC0_DEV_MODE=1 LK_E2E_SEQUENCER=http://127.0.0.1:3040 cargo test -p wallet-engine --test e2e_service -- --nocapture; status=$?; e2e/standalone.sh stop; exit $status
+
 # S3 exit proof: public send + shield through the CLI on the standalone sequencer.
 e2e-cli:
     e2e/standalone.sh

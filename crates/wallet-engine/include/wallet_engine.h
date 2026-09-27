@@ -14,8 +14,16 @@ extern "C" {
 /* {"ok":true,"result":{"engine":"<semver>","lezRev":"<40-hex>"}} */
 char *lk_engine_info(void);
 
-/* request: {"method":"<name>","params":{...}} -> {"ok":bool,"result"|"error"} */
+/* Start the long-lived service once: {"dataDir":"<path>"}. Idempotent. */
+char *lk_engine_init(const char *config_json);
+
+/* request: {"method":"<name>","params":{...},"caller":<host-attested caller>}
+ *   -> {"ok":bool,"result"|"error"}
+ * `caller` must come from the host (current_caller()), never from the app. */
 char *lk_engine_call(const char *request_json);
+
+/* Queued events since the last call: [{"event":"<name>",...}] (no private data). */
+char *lk_engine_events(void);
 
 void lk_engine_free(char *s);
 

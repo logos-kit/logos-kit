@@ -1,7 +1,7 @@
 //! JSON dispatch shared by the C ABI and (later) the CLI.
 //!
-//! S1 exposes `info` (and `derivePublicAccounts` in test builds only); keystore, sync, approvals and
-//! proving methods land in S2–S4 behind the same dispatcher.
+//! `info` answers here (and `derivePublicAccounts` in test builds only);
+//! every other method goes to the long-lived service (`service.rs`).
 
 use serde_json::{Value, json};
 
@@ -53,7 +53,11 @@ pub fn dispatch(request: &str) -> Value {
         // Takes a recovery phrase, so test builds only: keys never cross the C ABI.
         #[cfg(test)]
         Some("derivePublicAccounts") => derive_public_accounts(&params),
+        #[cfg(test)]
         Some(_) => err(-32601, "unknown method"),
+        // Everything else is the long-lived service (wallet, approvals, LWS-0).
+        #[cfg(not(test))]
+        Some(_) => crate::service::call(request),
         None => err(-32600, "method is required"),
     }
 }

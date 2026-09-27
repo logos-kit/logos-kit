@@ -927,6 +927,38 @@ impl Session {
         ))
     }
 
+    /// x-only public key of one of this wallet's public accounts.
+    pub(crate) fn public_key(&self, account_id: &str) -> Result<[u8; 32]> {
+        let id: lee::AccountId = crate::decode::account_id(account_id)?;
+        let key = self
+            .storage()?
+            .key_chain()
+            .pub_account_signing_key(id)
+            .context("not a public account of this wallet")?;
+        Ok(*lee::PublicKey::new_from_private_key(key).value())
+    }
+
+    /// BIP-340 signature by one of this wallet's public accounts over a
+    /// 32-byte prehash (message signing), and its x-only public key. The key
+    /// never leaves the key chain.
+    pub(crate) fn sign_prehash(
+        &self,
+        account_id: &str,
+        prehash: &[u8; 32],
+    ) -> Result<([u8; 64], [u8; 32])> {
+        let id: lee::AccountId = crate::decode::account_id(account_id)?;
+        let key = self
+            .storage()?
+            .key_chain()
+            .pub_account_signing_key(id)
+            .context("not a public account of this wallet")?;
+        let signature = lee::Signature::new(key, prehash);
+        Ok((
+            signature.value,
+            *lee::PublicKey::new_from_private_key(key).value(),
+        ))
+    }
+
     /// Name an account (`None` clears it). One label per account; names are
     /// unique within the wallet. Stored in LEZ's own label map, so the
     /// official CLI sees it too.
