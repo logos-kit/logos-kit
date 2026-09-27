@@ -66,6 +66,7 @@ Item {
 
     Onboarding {
         id: onboarding
+        objectName: "onboarding"
         anchors.fill: parent
         visible: store.loaded && root.showOnboarding
         store: store

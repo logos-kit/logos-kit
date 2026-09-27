@@ -1,0 +1,57 @@
+# `lez.*` Basecamp intents (v0.1)
+
+Wallet capabilities for Basecamp apps, as [app-to-app intents](https://github.com/logos-co/logos-basecamp/blob/master/docs/app-to-app-intents.md).
+Any wallet may provide them; Logos Kit's `logos_kit_wallet_ui` is the reference provider.
+Machine-readable: `protocol/schema/intents.json` (the `provides` block is generated from it).
+The payload types are LWS-0's (`protocol/schema/lws0.schema.json`).
+
+## Declaring use
+
+```json
+"uses": [
+  { "intent": "lez.wallet.connect" },
+  { "intent": "lez.transaction.send" }
+]
+```
+
+Entries must be **objects**: a bare string array parses, declares nothing, and every request fails `not_declared`.
+
+## Intents
+
+| Intent | Params (shell-enforced) | Answers `data` | Answered when |
+|---|---|---|---|
+| `lez.wallet.connect` | `chains: array` (req.), `accountKinds?: array`, `capabilities?: array`, `signIn?: object` | LWS-0 `Session` (+ `signIn` result if asked) | the user connects |
+| `lez.transaction.send` | `chain: string`, `account: string`, `instructions: array` (req.), `id?: string`, `atomicRequired?: bool` | `{ handle, txHash? }` | the user **approves** (proving and inclusion continue; read by handle) |
+| `lez.message.sign` | `account: string`, `message: string` (base64) | `{ signature, publicKey, tag: "LEZ/message/v1" }` | the user signs |
+| `lez.wallet.sign_in` | `domain, uri, nonce, issuedAt: string` (+ optional SIWE fields) | `{ account, signedMessage, signature }` | the user signs |
+| `lez.wallet.request_funds` | `chain: string`, `account: string` | `{ status, amount?, txHash?, retryAfterSeconds?, shieldHandle? }` | the faucet answered |
+| `lez.wallet.open` | none (`handoff: true`, `web: true`) | `{}` | at once |
+
+### Semantics
+- **Requester identity** is the shell-attested `requesterName` (the app's module name). Grants are keyed by it, so a grant made through `lez.wallet.connect` also covers that app's direct module calls.
+- **One request at a time.** A wallet with a request open answers a second with `failed`.
+- **Answer at acceptance.** A private transaction proves for minutes; the shell's backstop is 10 minutes. `lez.transaction.send` answers with a **handle** once approved; the app follows it with `lez_getTransactionStatus` (a read on the wallet's core module).
+- **Duplicate ids.** `id` is unique per (app, account). A repeat is refused (the wallet shows why; the intent answers `failed`; a direct module call gets `5720` with the first handle in `data`).
+- **Transactions are public calls.** Apps propose one instruction from a public account. Private transfers start in the wallet itself; `request_funds` into a private account funds a public one, then queues the shield for approval (`shieldHandle`).
+- **Signatures** are BIP-340 over a tagged hash (`SHA256(SHA256(tag)‖SHA256(tag)‖msg)`), tags `LEZ/message/v1` and `LEZ/signin/v1`, so they can never be transaction signatures.
+- Sign-in text is EIP-4361-shaped (`<domain> wants you to sign in with your LEZ account:` …, `Chain ID: lez:<zone>`); single-line fields only.
+
+### Errors
+The shell carries only its six codes. What a requester sees, and what it means here:
+
+| `res.error` | Meaning | `@logos-kit/client` code |
+|---|---|---|
+| `cancelled` | the user declined or closed the sheet | 4001 |
+| `bad_request` | params the wallet can't serve (wrong chain, not a wallet account, malformed proposal) | -32602 |
+| `failed` | the wallet couldn't complete it (the user saw why) | -32603 |
+| `timeout` | no answer in 10 minutes | 6108 |
+| `unavailable` | no wallet installed, or the app may not ask | 6109 |
+| `not_declared` | the app's `uses` doesn't list the intent | -32603 |
+
+## Reads (no intent)
+Status, balances, sessions and chain state are module calls on `logos_kit_wallet` (`logos.callModuleAsync`), answering `{"value": …}` or `{"error": {code, message, data?}}`:
+`lez_getSession`, `lez_getAccounts`, `lez_getBalance`, `lez_readAccount`, `lez_getTransactionStatus`, `lez_getCapabilities`, `lez_disconnect`.
+A module may also propose directly with `lez_signAndSendTransaction` (it needs a grant; the wallet shows the request next time it is open).
+
+## Upstream proposal (draft)
+Basecamp has no registry of well-known intents yet. We propose registering `lez.*` as the wallet namespace for the Logos Execution Zone, with the table above as its first version, so any wallet can provide it and any app can depend on it without knowing which wallet is installed.

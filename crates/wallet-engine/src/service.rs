@@ -87,6 +87,9 @@ struct Snapshot {
     error: Option<String>,
 }
 
+/// Unlocked, seconds to auto-lock, zone status (the wallet part of ui_state).
+type WalletFields = (bool, Option<u64>, Option<Value>);
+
 struct Throttle {
     fails: u32,
     until: Option<Instant>,
@@ -104,7 +107,7 @@ pub struct Service {
     jobs: Mutex<HashMap<String, Value>>,
     snapshot: Mutex<Snapshot>,
     /// The last ui_state wallet fields, served while a sync holds the wallet.
-    last_state: Mutex<Option<(bool, Option<u64>, Option<Value>)>>,
+    last_state: Mutex<Option<WalletFields>>,
     throttle: Mutex<Throttle>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
@@ -747,10 +750,7 @@ impl Service {
             }
             "touch" => {
                 if let Ok(engine) = self.engine() {
-                    self.block(async {
-                        engine.touch().await;
-                        Ok(())
-                    })?;
+                    engine.touch();
                 }
                 Ok(Value::Null)
             }
@@ -768,7 +768,11 @@ impl Service {
         let (unlocked, remaining, status, busy) = match &engine {
             Some(e) => match e.peek() {
                 Some((u, r, s)) => {
-                    let v = (u, r.map(|d| d.as_secs()), s.and_then(|s| serde_json::to_value(s).ok()));
+                    let v = (
+                        u,
+                        r.map(|d| d.as_secs()),
+                        s.and_then(|s| serde_json::to_value(s).ok()),
+                    );
                     *lock(&self.last_state) = Some(v.clone());
                     (v.0, v.1, v.2, false)
                 }
@@ -1653,7 +1657,6 @@ fn name_defaults(s: &mut Session) -> Result<()> {
     Ok(())
 }
 
-
 /// A private account's receive code: `lezpriv1:` + base64url(npk ‖ vpk). The
 /// viewing key is an ML-KEM-768 key (1,184 bytes), so the code is long; it
 /// still fits one QR code at error correction L. The fingerprint is what
@@ -1693,21 +1696,6 @@ pub fn parse_receive_code(code: &str) -> Result<RecipientKeys> {
         vpk: hex::encode(vpk),
         identifier: None,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn receive_code_round_trips() {
-        let npk = "11".repeat(32);
-        let vpk = "22".repeat(1184);
-        let v = super::receive_code(&npk, &vpk);
-        let code = v["code"].as_str().unwrap();
-        assert!(code.starts_with("lezpriv1:") && code.len() < 1700, "{}", code.len());
-        let keys = super::parse_receive_code(code).unwrap();
-        assert_eq!((keys.npk, keys.vpk), (npk, vpk));
-        assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
-    }
 }
 
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
@@ -1828,5 +1816,24 @@ fn default_copy(code: i64) -> &'static str {
         6107 => "A request is already open in your wallet",
         6108 => "Sent, not seen in a block yet",
         _ => "The transaction didn't go through",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn receive_code_round_trips() {
+        let npk = "11".repeat(32);
+        let vpk = "22".repeat(1184);
+        let v = super::receive_code(&npk, &vpk);
+        let code = v["code"].as_str().unwrap();
+        assert!(
+            code.starts_with("lezpriv1:") && code.len() < 1700,
+            "{}",
+            code.len()
+        );
+        let keys = super::parse_receive_code(code).unwrap();
+        assert_eq!((keys.npk, keys.vpk), (npk, vpk));
+        assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
     }
 }

@@ -4,14 +4,30 @@
   "version": "0.0.1",
   "type": "ui_qml",
   "category": "developer",
-  "description": "S0 throwaway: identity-hop and QML sandbox probes. Never published.",
+  "description": "Dev-only dApp: drives the wallet's intents (connect, send, sign, funds) through the QML SDK. Never published.",
   "view": "qml/Main.qml",
   "icon": "src/icons/icon.png",
   "dependencies": ["logos_kit_wallet"],
   "provides": [],
-  "uses": [{ "intent": "lez.wallet.connect" }],
+  "uses": [
+    {
+      "intent": "lez.wallet.connect"
+    },
+    {
+      "intent": "lez.transaction.send"
+    },
+    {
+      "intent": "lez.message.sign"
+    },
+    {
+      "intent": "lez.wallet.request_funds"
+    }
+  ],
   "nix": {
-    "packages": { "build": [], "runtime": [] },
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
     "external_libraries": [],
     "cmake": {
       "find_packages": [],

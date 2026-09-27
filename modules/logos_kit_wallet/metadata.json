@@ -30,5 +30,6 @@
       "extra_include_dirs": ["lib"],
       "extra_link_libraries": []
     }
-  }
+  },
+  "concurrency": "multi"
 }

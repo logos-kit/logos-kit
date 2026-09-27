@@ -784,9 +784,12 @@ impl Engine {
         f(wallet.session_quiet()?).await
     }
 
-    /// Count now as use (the user acted in the wallet UI).
-    pub async fn touch(&self) {
-        self.wallet.lock().await.touch();
+    /// Count now as use (the user acted in the wallet UI). Skipped while
+    /// something holds the wallet: that work counts as use itself.
+    pub fn touch(&self) {
+        if let Ok(mut wallet) = self.wallet.try_lock() {
+            wallet.touch();
+        }
     }
 
     /// Drop every grant of `requester` (optionally only on `account`) in the
@@ -1165,6 +1168,14 @@ impl Engine {
         });
         // A poll that gives up leaves the outcome unknown, not failed: the
         // transaction may still land (retrying could send it twice).
+        // Wait for the block without the wallet lock (it can take minutes);
+        // then record the result under it (the poll answers at once).
+        let pollers = self
+            .with_session_quiet(async |s| Ok(s.core().context("not connected")?.poller_vec()))
+            .await;
+        if let (Ok(pollers), Ok(hash)) = (pollers, tx_hash.parse()) {
+            let _ = wallet::poller::multi_poll(pollers, hash).await;
+        }
         let included = self
             .with_session(async |s| s.wait_included(&tx_hash).await)
             .await

@@ -83,9 +83,12 @@ fn flush_events() {
 // camelCase, which a Rust-first trait can't express).
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/provider_gen.rs"));
 
+/// `concurrency: "multi"`: every call runs on its own worker, so a status
+/// read never waits behind an approval. The engine is thread-safe; the only
+/// shim state is whether the service started.
 #[derive(Default)]
 struct Wallet {
-    started: bool,
+    started: std::sync::Mutex<bool>,
 }
 
 fn caller_json() -> String {
@@ -94,8 +97,12 @@ fn caller_json() -> String {
 
 impl Wallet {
     /// Start the engine service on the module's data directory (once).
-    fn start(&mut self) -> Option<serde_json::Value> {
-        if self.started {
+    fn start(&self) -> Option<serde_json::Value> {
+        let mut started = self
+            .started
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *started {
             return None;
         }
         let dir = match context() {
@@ -114,14 +121,14 @@ impl Wallet {
             .and_then(|v| v.get("ok").and_then(serde_json::Value::as_bool))
             == Some(true);
         if ok {
-            self.started = true;
+            *started = true;
             None
         } else {
             Some(answer(&out))
         }
     }
 
-    fn forward(&mut self, method: &str, params: &str) -> serde_json::Value {
+    fn forward(&self, method: &str, params: &str) -> serde_json::Value {
         // Read the identity first: it is valid only on this dispatch.
         let caller = caller_json();
         if let Some(err) = self.start() {
@@ -148,61 +155,61 @@ impl Wallet {
 }
 
 impl LogosKitWalletModule for Wallet {
-    fn ping(&mut self) -> String {
+    fn ping(&self) -> String {
         serde_json::json!({ "ok": true, "module": "logos_kit_wallet", "version": env!("CARGO_PKG_VERSION") })
             .to_string()
     }
 
-    fn whoami(&mut self) -> String {
+    fn whoami(&self) -> String {
         caller_json()
     }
 
-    fn engine_info(&mut self) -> String {
+    fn engine_info(&self) -> String {
         // SAFETY: plain C call with no arguments; the result is handed to engine_string.
         engine_string(unsafe { lk_engine_info() })
     }
 
-    fn lez_connect(&mut self, params: String) -> serde_json::Value {
+    fn lez_connect(&self, params: String) -> serde_json::Value {
         self.forward("lez_connect", &params)
     }
-    fn lez_disconnect(&mut self, params: String) -> serde_json::Value {
+    fn lez_disconnect(&self, params: String) -> serde_json::Value {
         self.forward("lez_disconnect", &params)
     }
-    fn lez_get_session(&mut self, params: String) -> serde_json::Value {
+    fn lez_get_session(&self, params: String) -> serde_json::Value {
         self.forward("lez_getSession", &params)
     }
-    fn lez_get_accounts(&mut self, params: String) -> serde_json::Value {
+    fn lez_get_accounts(&self, params: String) -> serde_json::Value {
         self.forward("lez_getAccounts", &params)
     }
-    fn lez_get_capabilities(&mut self, params: String) -> serde_json::Value {
+    fn lez_get_capabilities(&self, params: String) -> serde_json::Value {
         self.forward("lez_getCapabilities", &params)
     }
-    fn lez_get_balance(&mut self, params: String) -> serde_json::Value {
+    fn lez_get_balance(&self, params: String) -> serde_json::Value {
         self.forward("lez_getBalance", &params)
     }
-    fn lez_read_account(&mut self, params: String) -> serde_json::Value {
+    fn lez_read_account(&self, params: String) -> serde_json::Value {
         self.forward("lez_readAccount", &params)
     }
-    fn lez_sign_and_send_transaction(&mut self, params: String) -> serde_json::Value {
+    fn lez_sign_and_send_transaction(&self, params: String) -> serde_json::Value {
         self.forward("lez_signAndSendTransaction", &params)
     }
-    fn lez_get_transaction_status(&mut self, params: String) -> serde_json::Value {
+    fn lez_get_transaction_status(&self, params: String) -> serde_json::Value {
         self.forward("lez_getTransactionStatus", &params)
     }
-    fn lez_sign_message(&mut self, params: String) -> serde_json::Value {
+    fn lez_sign_message(&self, params: String) -> serde_json::Value {
         self.forward("lez_signMessage", &params)
     }
-    fn lez_sign_in(&mut self, params: String) -> serde_json::Value {
+    fn lez_sign_in(&self, params: String) -> serde_json::Value {
         self.forward("lez_signIn", &params)
     }
-    fn lez_request_funds(&mut self, params: String) -> serde_json::Value {
+    fn lez_request_funds(&self, params: String) -> serde_json::Value {
         self.forward("lez_requestFunds", &params)
     }
-    fn lez_switch_chain(&mut self, params: String) -> serde_json::Value {
+    fn lez_switch_chain(&self, params: String) -> serde_json::Value {
         self.forward("lez_switchChain", &params)
     }
 
-    fn ui(&mut self, method: String, params: String) -> serde_json::Value {
+    fn ui(&self, method: String, params: String) -> serde_json::Value {
         // Only `ui_*` names; the engine checks the caller.
         let valid = !method.is_empty()
             && method.len() <= 32
