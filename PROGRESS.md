@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S6 done and merged (2026-09-27). Next: S7, the Basecamp core-module shim + wallet UI. The shim must implement LWS-0 over `callModuleAsync` as `packages/client/src/transports.ts` `basecampModule` expects: `method(paramsJson)` answers the JSON text `{"value": <result>}` / `{"error": {code, message, data}}`. It must also answer the new `lez_readAccount` and dedupe proposals by `id` (5720 `DuplicateId`). Testnet watcher: deploy the testimonial when `just fingerprint` reports 0.3 (target 2026-09-30). Storybook run stays queued before S7.
+**Next action:** S7 in progress on `stage/07-basecamp` (pushed). Done: engine service, module shim, Tray wallet UI, intents, dev harness, Basecamp flow (`just bc-flow` green), reviews fixed. Left for S7: catalog fork `logos-kit-modules` + release workflow, Linux lgx builds + clean-VM installs, public/private/token flows on testnet 0.3 (testnet still 0.2; target 2026-09-30), then merge. Testimonial deploy still waits for `just fingerprint` = 0.3.
 
 ---
 
@@ -273,3 +273,28 @@ The single place to resume from after a context clear.
 - 2026-09-27: **Biome must not touch the ported QML shims.** Its auto-fix turned `hasOwnProperty.call` into `Object.hasOwn`, which inside the shim that defines `Object.hasOwn` is infinite recursion. It also reformatted tested code. The research files are restored verbatim and excluded, and `noPrototypeBuiltins` is off for the QML-safe packages (`Object.hasOwn` is ES2022).
 - 2026-09-27: **Intent timeout semantics.** The plan's 45 s timeout stays, but it can't mean "not sent" once the wallet sheet is open, so it rejects without freeing the guard. The module-shim contract for S7: `{"value": <json>}` with no double encoding, plus `id` dedupe.
 - 2026-09-27: The `module` transport has its own JS-side timeout (bridge timeout + 1 s): a restarted module may never call back.
+
+---
+
+## Stage S7 · Basecamp core-module shim + wallet UI + first catalog release, branch `stage/07-basecamp`
+
+**Status:** in progress (2026-09-27)
+
+- [x] Engine service (`crates/wallet-engine/src/service.rs`): the JSON dispatcher fronts a long-lived service (one tokio runtime, background sync + auto-lock, portfolio snapshot, faucet jobs, proposal-id dedupe `5720`, event queue drained by the shim). LWS-0 reads + `lez_signAndSendTransaction` for modules; `ui_*` for the wallet UI only. Approvals answer at acceptance (password checked off the wallet lock first); inclusion is awaited without the lock. BIP-340 tagged-hash message signing and SIWE-shaped sign-in (`message.rs`), keyed per-app private handles, `lezpriv1:` receive codes (base64url npk‖vpk, fits one QR at ECC-L). Proof: `just e2e-service` (connect with wrong-password retry, app proposal, 6104 bad proposal, 5720 dedupe with handle, 4100 for ungranted signer whether ours or not, handle isolation, ui_* guard, signature verifies, wrong approval password keeps the request, shield proves and lands, public send outcome = success via own-account invariant, lock → 4900)
+- [x] Module shim `logos_kit_wallet`: **contract-first LIDL** (`logos_kit_wallet.lidl`; a Rust-first trait can't express camelCase wire names), answers `{"value"}`/`{"error"}` as JSON values (a Rust `String` reaches `callModuleAsync` double-encoded; the client transport also unwraps one extra layer), `concurrency: "multi"` so reads never queue behind an approval. Proof: `logosctl call logos_kit_wallet lez_getCapabilities '{}'` → `{"value":{…}}`; host caller gets 4100 on `ui`
+- [x] Wallet UI `logos_kit_wallet_ui` (Tray light/dark, Onest bundled, Rectangle QR/identicons, Shapes glyphs/ring): onboarding (create/confirm/restore/unlock + 5-try cooldown), home (account pill, network badge, balance card, tokens, chips, recent, faucet row, offline/syncing/empty), keypad send → review (balance change first, visibility, proof ETA, fee, source/upgrade badges, unknown-effects ack, password, 500 ms arm) → proof ring/phases → outcome, receive (public + private code/QR/fingerprint), accounts, settings (zones, privacy/endpoints, auto-lock, reveal phrase, connected apps/revoke, lock), proof island. Intents: connect (account picker, private consent), transaction send, message sign, sign-in (site acknowledgement), request funds, open
+- [x] Dev harness (`modules/logos_kit_wallet_ui/dev/harness.py`): the real QML on the real engine without Basecamp; scripted QA `qa_onboarding.py`, `qa_wallet.py`, `qa_private.py` (shield, dApp intents, private→private by receive code, 360/680/1024, light). Screenshots in `docs/reviews/s7/`
+- [x] Integration flow in a real Basecamp: `just bc-flow` (`e2e/basecamp.sh` + `tests/intent-flow.mjs` over the QML Inspector): wallet first run → probe dApp connect via the shell chooser → send → approve → handle → status `included / success` → balance read. Green 3× (screenshots `docs/reviews/s7/basecamp/`)
+- [x] `lez.*` intent spec + upstream draft: `docs/protocol/intents.md`
+- [x] Code review + security review, all findings fixed (`eb2fe8f`)
+- [ ] Catalog fork `logos-kit-modules` (from `logos-modules-release-base`), release workflow, signing check
+- [ ] Linux lgx builds (agari-box) + clean Mac/Linux VM installs from the fork's `logos-repo.json`
+- [ ] Public/private native + token flows on testnet 0.3 (testnet still 0.2)
+
+### Decisions and deviations
+- 2026-09-27: **Events are emitted by the shim at the start of each call**, never from engine threads (the host emit callback isn't documented thread-safe); the UI also polls (2.5 s; 1 s while something runs).
+- 2026-09-27: **Intent errors are the shell's six codes only**; anything else becomes `failed` with no detail. The wallet shows the reason to the user; `@logos-kit/protocol` maps `failed`.
+- 2026-09-27: Apps propose **one public instruction** (`maxInstructions: 1`); private transfers start in the wallet. Relayed intent proposals don't need a grant (the user approves each); direct module proposals do.
+- 2026-09-27: A receive code pays a fresh identifier (LEZ); the recipient's sync finds it. Paying your **own** code routes to that account (the sender wallet never rescans it).
+- 2026-09-27: Canvas stays unused (Rectangle QR/identicons, Shapes for glyphs and the ring).
+- Gotchas: onReqChanged runs before sibling bindings update (read `req` directly); Repeater delegates have no QObject parent (walk `childItems()`); Biome must skip `modules/*/qml` (Qt V4 JS); debug-build engines make private sync slow enough to trip the 15 s call budget (harness uses the release dylib).
