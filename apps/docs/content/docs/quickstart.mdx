@@ -1,0 +1,92 @@
+---
+title: 'Quickstart'
+description: 'A Basecamp app on LEZ, from template to installed, in five minutes.'
+---
+
+You need [Nix](https://nixos.org/download) with flakes, and Basecamp with the
+Logos Kit wallet installed (add the Logos Kit catalog in Basecamp's Package
+Manager).
+
+<Steps>
+<Step>
+
+### Start from the template
+
+```sh
+mkdir my-app && cd my-app
+nix flake init -t github:logos-kit/logos-kit#dapp
+```
+
+You get a `ui_qml` module: `metadata.json`, `qml/Main.qml`, the SDK in
+`qml/LogosKit/`, the UI kit in `qml/LogosKitUi/`, and the wallet's contract in
+`logos_kit_wallet.lidl`.
+
+</Step>
+<Step>
+
+### Name it
+
+In `metadata.json`, set `name` (lowercase with `_`), `display_name` and
+`description`, and replace `src/icons/icon.png`. Keep every intent you use
+under `uses`; they must be objects:
+
+```json
+"uses": [
+  { "intent": "lez.wallet.connect" },
+  { "intent": "lez.transaction.send" },
+  { "intent": "lez.wallet.request_funds" }
+]
+```
+
+</Step>
+<Step>
+
+### Build and install
+
+```sh
+nix build .#lgx-portable
+```
+
+Install `result-portable/*.lgx` from Basecamp's Package Manager ("Install
+from file"), or with `lgpm install --file result-portable/*.lgx`. Your app
+appears in the sidebar.
+
+</Step>
+<Step>
+
+### Connect and send
+
+The template already does this. The core of it:
+
+```qml
+import "LogosKit"
+
+LogosKit { id: kit; visible: root.visible }
+
+// The wallet asks the user which account to share.
+kit.api.connect({ accountKinds: ["public"] }).then(function (session) {
+    root.account = session.accounts[0].address
+})
+
+// The user approves in the wallet; you get a handle, then follow it.
+kit.api.transfer(root.account, to, "42").then(function (r) {
+    kit.api.watchTransaction(r.handle, function (s) {
+        console.log(s.lifecycle, s.outcome)   // submitted … included success
+    })
+})
+```
+
+</Step>
+</Steps>
+
+## Develop against a local chain
+
+The SDK follows the wallet's network. Run a local sequencer, switch the wallet
+to **LEZ local** (Settings → Network), and your app follows. `kit.chain` tells
+you where you are.
+
+## Next
+
+- [The testimonial app](/docs/guides/testimonial): a complete app on the SDK.
+- [QML SDK](/docs/sdk/qml): every call.
+- [Errors](/docs/sdk/errors): what can go wrong and what to show.

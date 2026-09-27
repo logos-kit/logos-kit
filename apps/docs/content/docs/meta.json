@@ -1,0 +1,19 @@
+{
+  "title": "Logos Kit",
+  "pages": [
+    "index",
+    "quickstart",
+    "---Guides---",
+    "guides/testimonial",
+    "guides/faucet",
+    "---SDK---",
+    "sdk/qml",
+    "sdk/ui",
+    "sdk/errors",
+    "---Reference---",
+    "reference/methods",
+    "reference/intents",
+    "---Security---",
+    "security"
+  ]
+}

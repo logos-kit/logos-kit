@@ -1,0 +1,57 @@
+---
+title: 'Worked example: faucet'
+description: 'Test funds into the account the user picks, public or private, with rate limits handled.'
+---
+
+**Logos Kit Faucet** (`modules/logos_kit_faucet`) gets test LEZ into any
+account the user shares. It shows each outcome the faucet can give, and the
+private path, where funds arrive with a proof.
+
+## 1. Connect, both kinds
+
+```qml
+kit.api.connect({ accountKinds: ["public", "private"] })
+```
+
+Private accounts need their own consent in the wallet's connect sheet. The app
+gets a per-app handle for each (`pvt_…`); it never learns the account itself.
+
+## 2. Pick, then request
+
+```qml
+kit.api.requestFunds(account).then(function (r) {
+    if (r.status === "funded")           r.shieldHandle ? follow(r.shieldHandle) : done(r.amount)
+    else if (r.status === "rate_limited") countdown(r.retryAfterSeconds)
+    else if (r.status === "outcome_unknown") watchBalance()
+    else                                  declined(r.reason)
+})
+```
+
+| Outcome | What the app shows |
+|---|---|
+| `funded` | the amount, the account, a link to the transaction |
+| `rate_limited` | a countdown on the button, which reopens at zero |
+| `outcome_unknown` | "checking…": it watches the balance instead of asking again (a second request could pay twice) |
+| `rejected` | the faucet's reason |
+
+## 3. The private path
+
+The faucet only pays public accounts. For a private target the wallet funds
+one of the user's public accounts, then queues a transfer into the private
+account (a *shield*), which the user approves in the wallet. The app follows
+it with the returned `shieldHandle`:
+
+```qml
+kit.api.watchTransaction(r.shieldHandle, function (s) {
+    // awaiting_approval → proving (minutes, on the user's machine) → submitted → included
+})
+```
+
+The app shows four steps (paid, approve, proving with a timer, included), and
+says plainly where the funds are if the user declines the move.
+
+## Run it yourself
+
+```sh
+e2e/faucet-app.sh   # public claim, rate limit, private claim through a shield
+```

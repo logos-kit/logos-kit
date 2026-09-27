@@ -1,0 +1,13 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Logos Kit",
+  "description": "Wallet and wallet SDK for the Logos Execution Zone (LEZ): QML SDK for Basecamp apps, TypeScript client and codec, LWS-0 protocol.",
+  "folders": ["apps/docs/content/docs", "templates/basecamp-dapp", "sdk/qml"],
+  "excludeFolders": ["sdk/qml/LogosKit/logoskit.js"],
+  "rules": [
+    "Basecamp apps reach the wallet through kit.api from the vendored LogosKit/ folder; never hold keys in an app.",
+    "A proposal resolves when the user approves it with a handle; follow it with watchTransaction.",
+    "Check kit.sdk.isUserRejection(e) and show nothing for a user's refusal.",
+    "List every intent the app uses in metadata.json uses, as objects."
+  ]
+}
