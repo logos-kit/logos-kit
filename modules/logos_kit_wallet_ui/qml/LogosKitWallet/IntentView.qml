@@ -184,7 +184,8 @@ ColumnLayout {
 
     // == header (all kinds) ================================================================
     RowLayout {
-        visible: !!iv.req && iv.requester !== "" && !iv.handle
+        // Transactions show the requester inside the approval sheet itself.
+        visible: !!iv.req && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
         Layout.fillWidth: true
         spacing: 12
         Rectangle {
