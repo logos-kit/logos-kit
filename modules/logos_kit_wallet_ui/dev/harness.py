@@ -23,6 +23,8 @@ UI = {"kind": "module", "name": "logos_kit_wallet_ui"}
 
 class Engine:
     def __init__(self, lib, data):
+        # Apps' metadata.json + icons (Basecamp: <user dir>/plugins).
+        os.environ.setdefault("LOGOS_KIT_PLUGINS_DIR", str(ROOT / "modules"))
         self.lib = ctypes.CDLL(str(lib))
         for f in ("lk_engine_call", "lk_engine_init"):
             getattr(self.lib, f).restype = ctypes.c_void_p

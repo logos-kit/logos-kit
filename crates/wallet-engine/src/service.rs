@@ -420,6 +420,14 @@ impl Service {
                 self.emit("wallet_changed", json!({ "locked": true }));
                 Ok(Value::Null)
             }
+            "appInfo" => {
+                #[derive(Deserialize)]
+                struct P {
+                    requester: String,
+                }
+                let a: P = params(p)?;
+                Ok(app_info(self.data.root(), &a.requester))
+            }
             "snapshot" => {
                 let snap = lock(&self.snapshot).clone();
                 Ok(serde_json::to_value(snap)?)
@@ -1386,7 +1394,10 @@ impl Service {
         }
         // An app names a private account by its per-app handle.
         if a.account.starts_with("pvt_") {
-            let app = a.requester.clone().ok_or_else(|| invalid("a private handle needs its app"))?;
+            let app = a
+                .requester
+                .clone()
+                .ok_or_else(|| invalid("a private handle needs its app"))?;
             a.account = self.private_account(&app, &a.account)?;
         }
         let zone = self.current_zone();
@@ -1551,7 +1562,10 @@ impl Service {
         {
             let mut last = lock(&self.last_explorer);
             if last.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
-                return Err(Denied::err(Code::RequestPending, "an explorer page just opened"));
+                return Err(Denied::err(
+                    Code::RequestPending,
+                    "an explorer page just opened",
+                ));
             }
             *last = Some(Instant::now());
         }
@@ -2090,6 +2104,130 @@ fn default_copy(code: i64) -> &'static str {
         6108 => "Sent, not seen in a block yet",
         _ => "The transaction didn't go through",
     }
+}
+
+/// How the approval sheet shows a requesting app: the `display_name` and
+/// icon from its installed `plugins/<name>/metadata.json`. Both are the app's
+/// own claims, so the sheet keeps the attested module name beside them.
+/// Basecamp's QML sandbox loads no `data:` URLs and no files outside the
+/// wallet UI's own folder, so a PNG icon travels as an [`ICON_GRID`]² grid
+/// of `#AARRGGBB` cells the sheet draws with rectangles. Missing or odd
+/// files give `null`s (the sheet falls back to initials).
+fn app_info(root: &std::path::Path, requester: &str) -> Value {
+    let fallback = json!({ "name": requester, "displayName": null, "icon": null });
+    if requester.is_empty()
+        || requester.len() > 64
+        || !requester
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
+        return fallback;
+    }
+    // Basecamp keeps `<user dir>/{module_data/<module>/<instance>, plugins}`;
+    // LOGOS_KIT_PLUGINS_DIR points the dev harness elsewhere.
+    let dirs = std::env::var_os("LOGOS_KIT_PLUGINS_DIR")
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(root.ancestors().skip(1).take(4).map(|d| d.join("plugins")));
+    let Some(dir) = dirs
+        .map(|d| d.join(requester))
+        .find(|d| d.join("metadata.json").is_file())
+    else {
+        return fallback;
+    };
+    let Some(meta) = std::fs::read(dir.join("metadata.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+    else {
+        return fallback;
+    };
+    let display_name = meta
+        .get("display_name")
+        .and_then(Value::as_str)
+        .map(|n| {
+            n.chars()
+                .filter(|c| !c.is_control())
+                .take(48)
+                .collect::<String>()
+        })
+        .filter(|n| !n.trim().is_empty());
+    let icon = meta
+        .get("icon")
+        .and_then(Value::as_str)
+        .and_then(|rel| icon_grid(&dir, rel.strip_prefix(":/").unwrap_or(rel)));
+    json!({ "name": requester, "displayName": display_name, "icon": icon })
+}
+
+/// Cells per side of an app icon sent to the wallet UI.
+const ICON_GRID: usize = 40;
+
+/// A PNG inside `dir`, box-filtered down to `ICON_GRID`² `#AARRGGBB` cells.
+fn icon_grid(dir: &std::path::Path, rel: &str) -> Option<Vec<String>> {
+    const MAX_FILE: u64 = 512 * 1024;
+    const MAX_SIDE: u32 = 1024;
+    let base = dir.canonicalize().ok()?;
+    let file = base.join(rel).canonicalize().ok()?;
+    if !file.starts_with(&base) || std::fs::metadata(&file).ok()?.len() > MAX_FILE {
+        return None;
+    }
+    let bytes = std::fs::read(file).ok()?;
+    let mut decoder =
+        png::Decoder::new_with_limits(std::io::Cursor::new(bytes), png::Limits { bytes: 16 << 20 });
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = reader.info().size();
+    if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
+        return None;
+    }
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let frame = reader.next_frame(&mut buf).ok()?;
+    let channels = match frame.color_type {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        png::ColorType::Indexed => return None,
+    };
+    let (w, h) = (w as usize, h as usize);
+    let rgba = |x: usize, y: usize| -> [u32; 4] {
+        let px = &buf[y * frame.line_size + x * channels..][..channels];
+        let (r, g, b, a) = match channels {
+            1 => (px[0], px[0], px[0], 255),
+            2 => (px[0], px[0], px[0], px[1]),
+            3 => (px[0], px[1], px[2], 255),
+            _ => (px[0], px[1], px[2], px[3]),
+        };
+        [u32::from(r), u32::from(g), u32::from(b), u32::from(a)]
+    };
+    let mut cells = Vec::with_capacity(ICON_GRID * ICON_GRID);
+    for gy in 0..ICON_GRID {
+        let (y0, y1) = (
+            gy * h / ICON_GRID,
+            ((gy + 1) * h / ICON_GRID).max(gy * h / ICON_GRID + 1),
+        );
+        for gx in 0..ICON_GRID {
+            let (x0, x1) = (
+                gx * w / ICON_GRID,
+                ((gx + 1) * w / ICON_GRID).max(gx * w / ICON_GRID + 1),
+            );
+            // Premultiplied: transparent pixels add no colour to the edges.
+            let (mut sum, mut n) = ([0u64; 4], 0u64);
+            for y in y0..y1.min(h) {
+                for x in x0..x1.min(w) {
+                    let [r, g, b, a] = rgba(x, y);
+                    sum[0] += u64::from(r * a);
+                    sum[1] += u64::from(g * a);
+                    sum[2] += u64::from(b * a);
+                    sum[3] += u64::from(a);
+                    n += 1;
+                }
+            }
+            let a = sum[3] / n.max(1);
+            let c = |i: usize| sum[i].checked_div(sum[3]).unwrap_or(0);
+            cells.push(format!("#{a:02x}{:02x}{:02x}{:02x}", c(0), c(1), c(2)));
+        }
+    }
+    Some(cells)
 }
 
 #[cfg(test)]

@@ -643,6 +643,7 @@ impl Session {
     /// Sign and submit an approved public transaction. Returns the tx hash.
     pub async fn submit_public(&mut self, prepared: Prepared) -> Result<String> {
         let Prepared {
+            review,
             pins,
             body: Body::Public(tx),
             ..
@@ -651,9 +652,73 @@ impl Session {
             bail!("this transaction needs a proof first");
         };
         self.recheck(&pins).await?;
+        let tx = self.repage(review, tx).await?;
         let core = self.core().context("not connected")?;
         let hash = core.sign_and_submit_public(tx).await.map_err(lez)?;
         Ok(hash.to_string())
+    }
+
+    /// A testimonial post names its stats page when it is built (by us or by
+    /// the app), and a page holds 1000 authors. If the page filled while the
+    /// user was approving, the program would refuse the post and still charge
+    /// the fee, so post the same record to the open page instead. Only for
+    /// the trusted testimonial program; author, text, claimed time and signer
+    /// nonce stay the approved ones, and the fee cap may not rise.
+    async fn repage(&mut self, review: Review, tx: PreparedPublicTx) -> Result<PreparedPublicTx> {
+        let Some(check) = review
+            .program
+            .as_ref()
+            .filter(|c| crate::testimonial::trusted(c))
+        else {
+            return Ok(tx);
+        };
+        let message = tx.message();
+        let Ok(testimonial_core::Instruction::Post {
+            submission,
+            page,
+            username,
+            text,
+            timestamp_ms,
+        }) = borsh::from_slice(&message.instruction_data)
+        else {
+            return Ok(tx);
+        };
+        let program = message.program_account_id;
+        let Some(author) = message.shard_selectors.first().map(|s| s.account_id) else {
+            return Ok(tx);
+        };
+        let decoders = self.decoders();
+        let core = self.core().context("not connected")?;
+        let open = crate::testimonial::open_page(
+            &crate::testimonial::pages(core, program, &submission).await?,
+        );
+        if open == page || program.to_string() != check.account {
+            return Ok(tx);
+        }
+        let call = crate::testimonial::post_call(
+            program,
+            author,
+            &submission,
+            open,
+            username.as_deref(),
+            &text,
+            timestamp_ms,
+        )?;
+        let built = prepare_call(core, &decoders, &call).await?;
+        let cap = |f: &Fee| f.max_fee.as_deref().and_then(|f| f.parse::<u128>().ok());
+        if built.summary.unknown
+            || built.program.as_ref().map(|c| &c.image_id) != Some(&check.image_id)
+            || cap(&built.fee) > cap(&review.fee)
+        {
+            return Err(Stale(format!(
+                "testimonial page {page} filled while you approved; post again"
+            ))
+            .into());
+        }
+        match built.body {
+            Body::Public(tx) => Ok(tx),
+            Body::Private { .. } => bail!("a testimonial post is public"),
+        }
     }
 
     /// Check the proof matches the approval, then sign and submit.

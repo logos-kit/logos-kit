@@ -196,10 +196,7 @@ ColumnLayout {
         visible: !!iv.cur && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
         Layout.fillWidth: true
         spacing: 12
-        Rectangle {
-            implicitWidth: 52; implicitHeight: 52; radius: 16; color: "#232329"
-            Txt { anchors.centerIn: parent; color: "#ffffff"; font.pixelSize: 17; font.weight: Font.DemiBold; text: iv.requester.substring(0, 2).toUpperCase() }
-        }
+        AppAvatar { store: iv.store; requester: iv.requester; size: 52 }
         Row {
             spacing: 4
             Layout.alignment: Qt.AlignVCenter
@@ -214,8 +211,8 @@ ColumnLayout {
         wrapMode: Text.Wrap
         font.pixelSize: 20
         font.weight: Font.DemiBold
-        text: iv.kind === "lez.wallet.connect" ? iv.requester + " wants to connect"
-            : iv.kind === "lez.message.sign" ? iv.requester + " asks you to sign a message"
+        text: iv.kind === "lez.wallet.connect" ? iv.store.appName(iv.requester) + " wants to connect"
+            : iv.kind === "lez.message.sign" ? iv.store.appName(iv.requester) + " asks you to sign a message"
             : iv.kind === "lez.wallet.sign_in" ? "Sign in to " + (iv.p.domain || iv.requester)
             : iv.kind === "lez.wallet.request_funds" ? "Get test funds"
             : iv.kind === "lez.transaction.send" ? "Can't review this request"

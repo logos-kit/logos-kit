@@ -62,6 +62,22 @@ QtObject {
 
     // The intent being served: {requestId, intent, params, requester}.
     property var intent: null
+    // Requesting apps' display name + icon, by module name (appInfo).
+    property var apps: ({})
+    function loadApp(requester) {
+        if (!requester || apps[requester]) return
+        call("appInfo", { requester: requester }, function (info) {
+            if (!info) return
+            var next = Object.assign({}, apps)
+            next[requester] = info
+            apps = next
+        })
+    }
+    // The app's own name when it has one; the module name otherwise.
+    function appName(requester) {
+        var a = apps[requester]
+        return a && a.displayName ? a.displayName : requester
+    }
     // Set when a private send, shield or dApp request should show its proof.
     property string watching: ""
 
@@ -184,6 +200,7 @@ QtObject {
             return
         }
         intent = { requestId: requestId, intent: name, params: params || {}, requester: requester || "" }
+        loadApp(requester)
         intentArrived()
     }
 

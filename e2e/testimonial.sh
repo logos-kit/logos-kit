@@ -67,6 +67,17 @@ refused "post from a private account" "must be public" \
 refused "text with a direction override" "text must be" \
   "$LK" testimonial post --program "$PROGRAM" --from "$A2" --text $'evil‮txt' --yes --json
 
+# A post built for the wrong stats page (as if the page changed while the
+# user approved): the wallet re-reads the pages at signing and posts to the
+# open one instead of letting the program refuse it (and charge the fee).
+A3=$("$LK" account new --json | field "['accountId']")
+"$LK" faucet "$A3" --key-env LK_GENESIS_KEY --drop 1000000000 --yes --json >/dev/null
+STALE=()
+while IFS= read -r arg; do STALE+=("$arg"); done < <("$LK" testimonial call-args \
+  --program "$PROGRAM" --from "$A3" --page 1 --text "Logos Kit moved my post to the open page.")
+STALE_POST=$("$LK" call --from "$A3" --program "$PROGRAM" "${STALE[@]}" --yes --json)
+check "post to a stale page lands (re-paged)" "$(echo "$STALE_POST" | field "['outcome']")" success
+
 # A second wallet posts too.
 LOGOS_KIT_HOME="$B_HOME" "$LK" init --json 2>/dev/null >/dev/null
 B1=$(LOGOS_KIT_HOME="$B_HOME" "$LK" account new --json | field "['accountId']")
@@ -76,15 +87,16 @@ LOGOS_KIT_HOME="$B_HOME" "$LK" testimonial post --program "$PROGRAM" --from "$B1
 
 # Read back from chain data alone.
 LIST=$("$LK" testimonial list --program "$PROGRAM" --json)
-check "list count" "$(echo "$LIST" | field ".__len__()")" 3
+check "list count" "$(echo "$LIST" | field ".__len__()")" 4
 check "first author" "$(echo "$LIST" | field "[0]['author']")" "$A1"
 check "first username" "$(echo "$LIST" | field "[0]['username']")" alice
 check "second text" "$(echo "$LIST" | field "[1]['text']" | head -1)" "Logos Kit wallet:"
-check "third author" "$(echo "$LIST" | field "[2]['author']")" "$B1"
+check "third author (re-paged)" "$(echo "$LIST" | field "[2]['author']")" "$A3"
+check "fourth author" "$(echo "$LIST" | field "[3]['author']")" "$B1"
 
 SNAP="$LOGOS_KIT_HOME/snapshots"
 EV=$("$LK" testimonial evidence --program "$PROGRAM" --snapshot "$SNAP" --json)
-check "evidence distinct authors" "$(echo "$EV" | field "['distinctAuthors']")" 3
+check "evidence distinct authors" "$(echo "$EV" | field "['distinctAuthors']")" 4
 check "evidence tally consistent" "$(echo "$EV" | field "['programs'][0]['consistent']")" True
 check "evidence months" "$(echo "$EV" | field "['months'].__len__()")" 1
 check "evidence target met" "$(echo "$EV" | field "['target']['met']")" False
