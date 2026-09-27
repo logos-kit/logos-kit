@@ -51,8 +51,11 @@ export class Writer {
 }
 
 export class Reader {
+  private readonly b: Bytes
   private o = 0
-  constructor(private readonly b: Bytes) {}
+  constructor(b: Bytes) {
+    this.b = b
+  }
   private take(n: number): Bytes {
     if (this.o + n > this.b.length) throw new Error('borsh: unexpected end of data')
     const out = this.b.subarray(this.o, this.o + n)

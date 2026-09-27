@@ -49,6 +49,7 @@ export {
   messageHash,
   type PublicMessage,
   type PublicTransaction,
+  readTransaction,
   sameMessage,
   sendTransactionParam,
   transactionHash,

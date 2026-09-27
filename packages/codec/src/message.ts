@@ -109,12 +109,18 @@ export function encodeTransaction(tx: PublicTransaction): Bytes {
   return w.toBytes()
 }
 
-export function decodeTransaction(b: Bytes): PublicTransaction {
-  const r = new Reader(b)
+/** Read one public transaction from `r` (e.g. inside a block body). */
+export function readTransaction(r: Reader): PublicTransaction {
   const message = readMessage(r)
   const witnesses = r.vec((r) => ({ signature: r.fixed(64), publicKey: r.fixed(32) }))
-  r.end()
   return { message, witnesses }
+}
+
+export function decodeTransaction(b: Bytes): PublicTransaction {
+  const r = new Reader(b)
+  const tx = readTransaction(r)
+  r.end()
+  return tx
 }
 
 /** The transaction hash nodes report: `sha256(borsh(tx))`, hex. */

@@ -348,6 +348,31 @@ importers:
         specifier: ^2.3.3
         version: 2.3.3(vite@8.3.1(@types/node@26.6.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/client:
+    dependencies:
+      '@logos-kit/codec':
+        specifier: workspace:*
+        version: link:../codec
+      '@logos-kit/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+    devDependencies:
+      '@arethetypeswrong/cli':
+        specifier: 'catalog:'
+        version: 0.18.5
+      publint:
+        specifier: 'catalog:'
+        version: 0.3.24
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(@arethetypeswrong/core@0.18.5)(oxc-resolver@11.24.2)(publint@0.3.24)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.2(@types/node@26.6.2)(vite@8.3.1(@types/node@26.6.2)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/codec:
     dependencies:
       '@noble/curves':
