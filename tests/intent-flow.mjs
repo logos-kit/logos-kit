@@ -96,6 +96,12 @@ async function shot(label) {
   if (r.image) fs.writeFileSync(path.join(SHOTS, `${label}.png`), Buffer.from(r.image, 'base64'))
   say('  shot', label)
 }
+// The shell asks which app should handle an intent: pick the wallet by the
+// chooser's own objectName (a text click could hit the wallet's tab instead).
+async function chooseWallet() {
+  const row = await visibleId('intentProvider_logos_kit_wallet_ui')
+  if (row) await send('click', { objectId: row })
+}
 async function openApp(title) {
   await send('findAndClick', { text: title })
   await sleep(1500)
@@ -156,10 +162,7 @@ await step('dApp: connect through the shell', async () => {
     'wallet connect sheet',
     async () => {
       if (await visibleId('connectApprove')) return true
-      for (const t of ['Logos Kit Wallet', 'logos_kit_wallet_ui'])
-        await ins.send('findAndClick', { text: t })
-      for (const t of ['Open', 'Continue', 'Use'])
-        await ins.send('findAndClick', { text: t, exact: true })
+      await chooseWallet()
       return false
     },
     30000,
@@ -181,8 +184,7 @@ await step('dApp: send, approve in the wallet, follow the handle', async () => {
     'approval sheet',
     async () => {
       if (await visibleId('approve')) return true
-      for (const t of ['Logos Kit Wallet', 'logos_kit_wallet_ui'])
-        await ins.send('findAndClick', { text: t })
+      await chooseWallet()
       return false
     },
     30000,

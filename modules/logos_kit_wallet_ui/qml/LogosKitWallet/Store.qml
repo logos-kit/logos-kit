@@ -95,6 +95,16 @@ QtObject {
         }, timeoutMs || 20000)
     }
 
+    // Assign only on change: replacing an array rebuilds every delegate that
+    // shows it (activity rows, account chips) on each poll.
+    property string _stateKey: ""
+    property string _accountsKey: ""
+    property string _activityKey: ""
+    function setActivity(v) {
+        var k = JSON.stringify(v)
+        if (k !== _activityKey) { _activityKey = k; activity = v }
+    }
+
     function refreshState(cb) {
         call("state", {}, function (v, e) {
             if (e) {
@@ -103,12 +113,13 @@ QtObject {
                 return
             }
             store.unreachable = ""
-            store.state = v || {}
+            var k = JSON.stringify(v || {})
+            if (k !== store._stateKey) { store._stateKey = k; store.state = v || {} }
             store.loaded = true
             if (v && v.theme) Theme.dark = v.theme !== "light"
-            if (!store.unlocked) {
-                store.accounts = []
-                store.activity = []
+            if (!store.unlocked && store.accounts.length) {
+                store.accounts = []; store._accountsKey = ""
+                store.activity = []; store._activityKey = ""
             }
             if (cb) cb(true)
         })
@@ -118,7 +129,10 @@ QtObject {
         if (!unlocked) return
         call("snapshot", {}, function (v, e) {
             if (e || !v) return
-            if (v.accounts && v.accounts.length) store.accounts = v.accounts
+            if (v.accounts && v.accounts.length) {
+                var k = JSON.stringify(v.accounts)
+                if (k !== store._accountsKey) { store._accountsKey = k; store.accounts = v.accounts }
+            }
             store.snapshotMs = v.updatedMs || 0
             store.tip = v.tip
             store.syncError = v.error || ""
@@ -129,7 +143,7 @@ QtObject {
                 if (store.selected === "") store.selected = store.accounts[0].accountId
             }
         })
-        call("activity", {}, function (v, e) { if (!e && v) store.activity = v })
+        call("activity", {}, function (v, e) { if (!e && v) store.setActivity(v) })
     }
 
     function refreshAll() {
@@ -192,7 +206,7 @@ QtObject {
         interval: 1000
         running: store.bridge && store.unlocked && (store.active !== null || store.watching !== "")
         repeat: true
-        onTriggered: store.call("activity", {}, function (v, e) { if (!e && v) store.activity = v })
+        onTriggered: store.call("activity", {}, function (v, e) { if (!e && v) store.setActivity(v) })
     }
 
     property Connections events: Connections {
