@@ -53,6 +53,14 @@ bc-flow:
     just lgx probe_dapp
     e2e/basecamp.sh
 
+# S7 exit: install from the published catalog with a stock logosctl (`--docker`: fresh Ubuntu).
+catalog-install *args:
+    e2e/catalog-install.sh {{args}}
+
+# S7 exit: the user's install path in a real Basecamp with an empty profile.
+catalog-install-gui:
+    e2e/catalog-install-gui.sh
+
 # S3 exit proof: public send + shield through the CLI on the standalone sequencer.
 e2e-cli:
     e2e/standalone.sh

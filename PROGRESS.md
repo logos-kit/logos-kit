@@ -287,11 +287,15 @@ The single place to resume from after a context clear.
 - [x] Integration flow in a real Basecamp: `just bc-flow` (`e2e/basecamp.sh` + `tests/intent-flow.mjs` over the QML Inspector): wallet first run → probe dApp connect via the shell chooser → send → approve → handle → status `included / success` → balance read. Green 3× (screenshots `docs/reviews/s7/basecamp/`)
 - [x] `lez.*` intent spec + upstream draft: `docs/protocol/intents.md`
 - [x] Code review + security review, all findings fixed (`eb2fe8f`)
-- [ ] Catalog fork `logos-kit-modules` (from `logos-modules-release-base`), release workflow, signing check
+- [ ] Catalog `logos-kit/logos-kit-modules` (public, from the `logos-modules-release-base` template): `submodules/logos-kit` + `modules.json` (monorepo module dirs; `release-all` reads it, `scripts/add-module-dir.sh` adds one), per-module workflows, **inline signing** (`lgx keygen` key → `LOGOS_SIGNING_KEY` secret, DID in `trustedSigners`), variants darwin-arm64/linux-amd64/linux-arm64, `release-on-merge.yml` gate (pointer on logos-kit `main`, equal versions, core → UI, self-healing), one concurrency group. Rehearsed: both modules `nix build .#lgx-portable` from the submodule layout; `validate-repo` OK; actionlint clean. Runbook `docs/dev/releasing.md`. First release run in progress
 - [ ] Linux lgx builds (agari-box) + clean Mac/Linux VM installs from the fork's `logos-repo.json`
 - [ ] Public/private native + token flows on testnet 0.3 (testnet still 0.2)
 
 ### Decisions and deviations
+- 2026-09-27: **S7 code merged to `main` (`4a00950`) before the stage's distribution items**, so the catalog releases only commits on `main`. Catalog, Linux installs and testnet-0.3 flows continue on `main`.
+- 2026-09-27: The catalog is a **template copy, not a fork** (forks start with Actions and scheduled workflows off; the index rebuild is scheduled). Windows is dropped from the variants (our root flake has no mingw target).
+- 2026-09-27: Signing is supported (`signing_mode: inline`), so releases are signed. Clients default to WARN for unknown signers; the install check asserts the release DID rather than a refusal.
+- 2026-09-27: Clean-machine installs are scripted with a stock `logosctl` (`e2e/catalog-install.sh [--docker]`: catalog add → install UI (pulls core) → signer check → load → call). Only 28 GB of disk is free here, so there's no macOS VM; macOS is tested with a fresh session plus a no-`/nix/store` link check on the portable bundle.
 - 2026-09-27: **Events are emitted by the shim at the start of each call**, never from engine threads (the host emit callback isn't documented thread-safe); the UI also polls (2.5 s; 1 s while something runs).
 - 2026-09-27: **Intent errors are the shell's six codes only**; anything else becomes `failed` with no detail. The wallet shows the reason to the user; `@logos-kit/protocol` maps `failed`.
 - 2026-09-27: Apps propose **one public instruction** (`maxInstructions: 1`); private transfers start in the wallet. Relayed intent proposals don't need a grant (the user approves each); direct module proposals do.
