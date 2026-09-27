@@ -103,6 +103,8 @@ pub struct Service {
     /// Faucet job id → its state.
     jobs: Mutex<HashMap<String, Value>>,
     snapshot: Mutex<Snapshot>,
+    /// The last ui_state wallet fields, served while a sync holds the wallet.
+    last_state: Mutex<Option<(bool, Option<u64>, Option<Value>)>>,
     throttle: Mutex<Throttle>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
@@ -257,6 +259,7 @@ impl Service {
             ids: Mutex::new(HashMap::new()),
             jobs: Mutex::new(HashMap::new()),
             snapshot: Mutex::new(Snapshot::default()),
+            last_state: Mutex::new(None),
             throttle: Mutex::new(Throttle {
                 fails: 0,
                 until: None,
@@ -761,19 +764,22 @@ impl Service {
         let zone = self.current_zone();
         let prefs = lock(&self.prefs).clone();
         let engine = lock(&self.engine).clone();
-        let (unlocked, remaining, status, pending) = match &engine {
-            Some(e) => self.block(async {
-                let unlocked = e.is_unlocked().await;
-                let remaining = e.remaining().await.map(|d| d.as_secs());
-                let status = if unlocked {
-                    e.with_session_quiet(async |s| s.status()).await.ok()
-                } else {
-                    None
-                };
-                Ok((unlocked, remaining, status, e.pending(caller)))
-            })?,
-            None => (false, None, None, None),
+        // Never queue behind a sync: reuse the last answer while it runs.
+        let (unlocked, remaining, status, busy) = match &engine {
+            Some(e) => match e.peek() {
+                Some((u, r, s)) => {
+                    let v = (u, r.map(|d| d.as_secs()), s.and_then(|s| serde_json::to_value(s).ok()));
+                    *lock(&self.last_state) = Some(v.clone());
+                    (v.0, v.1, v.2, false)
+                }
+                None => match lock(&self.last_state).clone() {
+                    Some((u, r, s)) => (u, r, s, true),
+                    None => (true, None, None, true),
+                },
+            },
+            None => (false, None, None, false),
         };
+        let pending = engine.as_ref().and_then(|e| e.pending(caller));
         let throttle = lock(&self.throttle)
             .until
             .and_then(|t| t.checked_duration_since(Instant::now()))
@@ -793,6 +799,7 @@ impl Service {
             "theme": prefs.theme.clone().unwrap_or_else(|| "dark".into()),
             "faucet": faucet_label(&zone, &prefs),
             "status": status,
+            "busy": busy,
             "pending": pending,
             "active": proving,
             "unlockWaitSecs": throttle,
@@ -1646,18 +1653,16 @@ fn name_defaults(s: &mut Session) -> Result<()> {
     Ok(())
 }
 
-const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-/// A private account's receive code: `LEZPRIV1:<NPK>:<VPK>` in uppercase hex,
-/// so a QR code can use its dense alphanumeric mode. The fingerprint is what
+/// A private account's receive code: `lezpriv1:` + base64url(npk ‖ vpk). The
+/// viewing key is an ML-KEM-768 key (1,184 bytes), so the code is long; it
+/// still fits one QR code at error correction L. The fingerprint is what
 /// people compare out loud.
 fn receive_code(npk: &str, vpk: &str) -> Value {
-    let code = format!(
-        "LEZPRIV1:{}:{}",
-        npk.to_ascii_uppercase(),
-        vpk.to_ascii_uppercase()
-    );
-    let h = Sha256::digest(code.as_bytes());
+    let mut bytes = hex::decode(npk).unwrap_or_default();
+    bytes.extend(hex::decode(vpk).unwrap_or_default());
+    let code = format!("{RECEIVE_PREFIX}{}", URL_SAFE_NO_PAD.encode(&bytes));
+    let h = Sha256::digest(&bytes);
     let fp: String = h[..4]
         .iter()
         .map(|b| CROCKFORD[usize::from(b & 31)] as char)
@@ -1666,31 +1671,43 @@ fn receive_code(npk: &str, vpk: &str) -> Value {
         "kind": "private",
         "code": code,
         "fingerprint": format!("{}-{}", &fp[..2], &fp[2..]),
-        "npk": npk,
-        "vpk": vpk,
     })
 }
 
+const RECEIVE_PREFIX: &str = "lezpriv1:";
+const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
 /// Parse a receive code back into the recipient keys.
 pub fn parse_receive_code(code: &str) -> Result<RecipientKeys> {
-    let rest = code
+    let body = code
         .trim()
-        .strip_prefix("LEZPRIV1:")
-        .context("not a Logos Kit private receive code")?;
-    let (npk, vpk) = rest.split_once(':').context("receive code is incomplete")?;
-    ensure!(
-        npk.len() == 64 && hex::decode(npk).is_ok(),
-        "receive code: bad nullifier key"
-    );
-    ensure!(
-        vpk.len() > 64 && hex::decode(vpk).is_ok(),
-        "receive code: bad viewing key"
-    );
+        .strip_prefix(RECEIVE_PREFIX)
+        .context("not a Logos Kit private receive code (lezpriv1:…)")?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(body)
+        .map_err(|_| anyhow::anyhow!("the receive code is damaged"))?;
+    ensure!(bytes.len() > 64, "the receive code is incomplete");
+    let (npk, vpk) = bytes.split_at(32);
     Ok(RecipientKeys {
-        npk: npk.to_ascii_lowercase(),
-        vpk: vpk.to_ascii_lowercase(),
+        npk: hex::encode(npk),
+        vpk: hex::encode(vpk),
         identifier: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn receive_code_round_trips() {
+        let npk = "11".repeat(32);
+        let vpk = "22".repeat(1184);
+        let v = super::receive_code(&npk, &vpk);
+        let code = v["code"].as_str().unwrap();
+        assert!(code.starts_with("lezpriv1:") && code.len() < 1700, "{}", code.len());
+        let keys = super::parse_receive_code(code).unwrap();
+        assert_eq!((keys.npk, keys.vpk), (npk, vpk));
+        assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
+    }
 }
 
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {

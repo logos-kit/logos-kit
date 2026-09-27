@@ -749,6 +749,21 @@ impl Engine {
         out
     }
 
+    /// Unlocked, time to auto-lock and zone status, without waiting: None
+    /// while something holds the wallet (a long sync), so a status poll never
+    /// queues behind it.
+    pub fn peek(&self) -> Option<(bool, Option<Duration>, Option<crate::session::ZoneStatus>)> {
+        let mut wallet = self.wallet.try_lock().ok()?;
+        let remaining = wallet.remaining();
+        let unlocked = wallet.is_unlocked();
+        let status = if unlocked {
+            wallet.session_quiet().ok().and_then(|s| s.status().ok())
+        } else {
+            None
+        };
+        Some((unlocked, remaining, status))
+    }
+
     /// Whether a session is open (not locked).
     pub async fn is_unlocked(&self) -> bool {
         self.wallet.lock().await.is_unlocked()
@@ -1067,6 +1082,8 @@ impl Engine {
     ) -> Result<TxStatus> {
         // Own-account invariant: which of our private accounts must move, by how much.
         let watch = own_invariant(&prepared.review);
+        // Public: our sender's native outflow and the fee cap.
+        let public_watch = public_invariant(&prepared.review);
         // A testimonial post proves itself by the record it writes.
         let post =
             crate::testimonial::watch(prepared.review.program.as_ref(), prepared.public_message());
@@ -1126,11 +1143,16 @@ impl Engine {
             match self
                 .with_session(async |s| {
                     self.same_wallet(epoch, zone, s)?;
-                    s.submit_public(prepared).await
+                    // Public native outflow: the sender's balance is the evidence.
+                    let before = match &public_watch {
+                        Some((from, _, _)) => s.balance_of(from, None).await.ok(),
+                        None => None,
+                    };
+                    Ok((s.submit_public(prepared).await?, before))
                 })
                 .await
             {
-                Ok(h) => (h, None),
+                Ok((h, before)) => (h, before),
                 Err(e) => return Err(self.fail(handle, Lifecycle::Dropped, e, progress)),
             }
         };
@@ -1182,6 +1204,22 @@ impl Engine {
                     _ => (Outcome::Unknown, OutcomeSource::None),
                 }
             }
+            // Public native outflow: the sender dropped by the amount plus a
+            // fee within the approved cap. Anything else (an incoming payment
+            // in between, only the fee charged) proves nothing either way.
+            (None, Some(before)) if public_watch.is_some() && post.is_none() => {
+                let (from, out, max_fee) = public_watch.clone().unwrap_or_default();
+                let after = self
+                    .with_session(async |s| s.balance_of(&from, None).await)
+                    .await
+                    .ok();
+                match after.and_then(|a| before.checked_sub(a)) {
+                    Some(d) if d >= out && d <= out.saturating_add(max_fee) => {
+                        (Outcome::Success, OutcomeSource::OwnAccountInvariant)
+                    }
+                    _ => (Outcome::Unknown, OutcomeSource::None),
+                }
+            }
             _ => match post {
                 Some(post) => match self
                     .with_session(async |s| {
@@ -1206,6 +1244,23 @@ impl Engine {
             s.error = warning;
         }))
     }
+}
+
+/// For public transactions: the sending account of ours, its native outflow,
+/// and the fee cap it approved.
+fn public_invariant(review: &Review) -> Option<(String, u128, u128)> {
+    if review.route.is_some_and(tx::Route::is_private) {
+        return None;
+    }
+    let from = review.intent.from_account().to_owned();
+    let out: u128 = review
+        .summary
+        .outflows
+        .iter()
+        .filter(|f| f.asset == crate::decode::Asset::Native && f.account == from)
+        .fold(0u128, |a, f| a.saturating_add(f.amount));
+    let max_fee: u128 = review.fee.max_fee.as_deref()?.parse().ok()?;
+    (out > 0).then_some((from, out, max_fee))
 }
 
 /// For private routes: the private account of ours whose balance must change,

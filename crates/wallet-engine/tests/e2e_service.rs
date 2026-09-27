@@ -227,6 +227,9 @@ fn approval_path_through_the_service() {
     assert_eq!(ok["accepted"], true);
     let done = wait_included(&handle, &dapp, 120);
     assert!(done["txHash"].as_str().unwrap().starts_with("0x"));
+    // Public native outflow: confirmed by the sender's own balance.
+    assert_eq!(done["outcome"], "success", "{done}");
+    assert_eq!(done["outcomeSource"], "own-account-invariant");
 
     // A message signature verifies against the returned key and tag.
     let msg = b"hello from the e2e";

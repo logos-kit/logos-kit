@@ -8,14 +8,22 @@
   "description": "Logos Kit wallet engine for the Logos Execution Zone: keys, accounts, approvals, proving",
   "main": "logos_kit_wallet_plugin",
   "dependencies": [],
-
   "codegen": {
-    "rust": { "crate": "rust-lib", "trait": "LogosKitWalletModule" }
+    "lidl": "logos_kit_wallet.lidl",
+    "rust": {
+      "crate": "rust-lib"
+    }
   },
-
   "nix": {
-    "packages": { "build": [], "runtime": [] },
-    "external_libraries": [{ "name": "wallet_engine" }],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [
+      {
+        "name": "wallet_engine"
+      }
+    ],
     "cmake": {
       "find_packages": [],
       "extra_sources": [],
