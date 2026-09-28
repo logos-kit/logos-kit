@@ -1,0 +1,22 @@
+# Vercel deploys only the docs site (apps/docs). It needs the pnpm workspace
+# (protocol, packages/*, apps/*), protocol/schema and the wallet's .lidl.
+/vendor
+/target
+/crates
+/programs
+/refs
+/docs/reviews
+/dist-linux
+/result*
+/e2e
+/tests
+/templates
+/sdk
+/deploy
+/modules/*
+!/modules/logos_kit_wallet
+/modules/logos_kit_wallet/*
+!/modules/logos_kit_wallet/logos_kit_wallet.lidl
+**/node_modules
+**/.next
+**/dist
