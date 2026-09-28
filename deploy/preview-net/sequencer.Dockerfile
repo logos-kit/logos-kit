@@ -4,8 +4,8 @@
 # vendor/lez at the pin), checked against the hashes below.
 FROM debian:trixie-slim
 ARG RELEASE=https://github.com/logos-kit/logos-kit/releases/download/preview-net-v0.1.0
-ARG SEQ_SHA256=__SEQ_SHA256__
-ARG R0VM_SHA256=__R0VM_SHA256__
+ARG SEQ_SHA256=ee668b895ba64e5e1d92049ae0413a8354d7b55bf6fcd1fb2cc83b5bdabfacb9
+ARG R0VM_SHA256=36c016a5bb2ded5bd1f8f92cc487e6ffaeb1e95ec05850c983081a0f716b515b
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL "$RELEASE/sequencer_service-linux-x86_64" -o /usr/local/bin/sequencer_service \

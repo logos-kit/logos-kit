@@ -1,7 +1,7 @@
 # Logos Kit drip faucet for the preview network (crates/logos-kit-drip).
 FROM debian:trixie-slim
 ARG RELEASE=https://github.com/logos-kit/logos-kit/releases/download/preview-net-v0.1.0
-ARG DRIP_SHA256=__DRIP_SHA256__
+ARG DRIP_SHA256=0831a8858ae5880e757f88b4fb7d93c0fb99973d31375dfaf29e3cb12ca2eb5f
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL "$RELEASE/logos-kit-drip-linux-x86_64" -o /usr/local/bin/logos-kit-drip \
