@@ -1032,8 +1032,8 @@ impl Engine {
     }
 
     /// Whether another unfinished transaction spends from the same account.
-    fn others_in_flight(&self, handle: &str, watch: Option<&(String, u128, u128)>) -> bool {
-        let Some((from, _, _)) = watch else {
+    fn others_in_flight(&self, handle: &str, watch: Option<&PublicWatch>) -> bool {
+        let Some(PublicWatch { from, .. }) = watch else {
             return false;
         };
         self.state().statuses.values().any(|s| {
@@ -1173,9 +1173,9 @@ impl Engine {
             match self
                 .with_session(async |s| {
                     self.same_wallet(epoch, zone, s)?;
-                    // Public native outflow: the sender's balance is the evidence.
+                    // Public outflow: the sender's balance is the evidence.
                     let before = match &public_watch {
-                        Some((from, _, _)) => s.balance_of(from, None).await.ok(),
+                        Some(w) => s.balance_of(&w.from, w.token.as_deref()).await.ok(),
                         None => None,
                     };
                     Ok((s.submit_public(prepared).await?, before))
@@ -1260,13 +1260,16 @@ impl Engine {
                 (Outcome::Unknown, OutcomeSource::None)
             }
             (None, Some(before)) if public_watch.is_some() && post.is_none() => {
-                let (from, out, max_fee) = public_watch.clone().unwrap_or_default();
+                let w = public_watch.clone().unwrap_or_default();
                 let after = self
-                    .with_session(async |s| s.balance_of(&from, None).await)
+                    .with_session(async |s| s.balance_of(&w.from, w.token.as_deref()).await)
                     .await
                     .ok();
+                // Native pays the fee too (within the cap); a token moves by
+                // exactly the amount (fees are native).
+                let fee = if w.token.is_some() { 0 } else { w.max_fee };
                 match after.and_then(|a| before.checked_sub(a)) {
-                    Some(d) if d >= out && d <= out.saturating_add(max_fee) => {
+                    Some(d) if d >= w.out && d <= w.out.saturating_add(fee) => {
                         (Outcome::Success, OutcomeSource::OwnAccountInvariant)
                     }
                     _ => (Outcome::Unknown, OutcomeSource::None),
@@ -1298,21 +1301,51 @@ impl Engine {
     }
 }
 
-/// For public transactions: the sending account of ours, its native outflow,
-/// and the fee cap it approved.
-fn public_invariant(review: &Review) -> Option<(String, u128, u128)> {
+/// A public transaction's evidence: our sending account, the asset it sends
+/// (`token: None` = native), how much, and the fee cap it approved.
+#[derive(Clone, Debug, Default)]
+struct PublicWatch {
+    from: String,
+    token: Option<String>,
+    out: u128,
+    max_fee: u128,
+}
+
+/// For public transactions: the native outflow of our sender, else its one
+/// fungible-token outflow (held in its own token slot).
+fn public_invariant(review: &Review) -> Option<PublicWatch> {
+    use crate::decode::Asset;
     if review.route.is_some_and(tx::Route::is_private) {
         return None;
     }
     let from = review.intent.from_account().to_owned();
-    let out: u128 = review
-        .summary
-        .outflows
-        .iter()
-        .filter(|f| f.asset == crate::decode::Asset::Native && f.account == from)
-        .fold(0u128, |a, f| a.saturating_add(f.amount));
     let max_fee: u128 = review.fee.max_fee.as_deref()?.parse().ok()?;
-    (out > 0).then_some((from, out, max_fee))
+    let ours = || review.summary.outflows.iter().filter(|f| f.account == from);
+    let native = ours()
+        .filter(|f| f.asset == Asset::Native)
+        .fold(0u128, |a, f| a.saturating_add(f.amount));
+    if native > 0 {
+        return Some(PublicWatch {
+            from,
+            token: None,
+            out: native,
+            max_fee,
+        });
+    }
+    let mut tokens = ours().filter_map(|f| match &f.asset {
+        Asset::Token {
+            definition,
+            nft: None,
+        } => Some((definition.clone(), f.amount)),
+        _ => None,
+    });
+    let (definition, out) = tokens.next()?;
+    (tokens.next().is_none() && out > 0).then_some(PublicWatch {
+        from,
+        token: Some(definition),
+        out,
+        max_fee,
+    })
 }
 
 /// For private routes: the private account of ours whose balance must change,

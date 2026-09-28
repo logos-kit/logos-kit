@@ -2,8 +2,10 @@
 # The LP-0021 user flows against the public preview network (lez-preview,
 # LEZ 0.3-rc1), as a fresh wallet, with REAL proofs (the network verifies
 # them). Takes ~15-20 min on an M-series Mac (three private proofs).
-#   e2e/preview-flows.sh [--zone lez-preview]
+#   e2e/preview-flows.sh [--tokens-only]   (LK_ZONE=lez-preview by default)
+# --tokens-only skips the native public/private steps (two of the proofs).
 set -euo pipefail
+NATIVE=1; [[ "${1:-}" == --tokens-only ]] && NATIVE=0
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 (cd "$ROOT" && cargo build -q --release -p logos-kit-cli)
 LK="$ROOT/target/release/logos-kit"
@@ -29,6 +31,7 @@ step "faucet (drip) -> A"
 F=$("$LK" faucet "$A" --yes --json | last); echo "$F"
 [[ $(echo "$F" | get "['status']") == funded ]] || { echo "FAIL faucet" >&2; exit 1; }
 
+if (( NATIVE )); then
 step "public send A -> B"
 ok "public send" "$("$LK" send --from "$A" --to "$B" --amount 1000 --yes --json | last)"
 
@@ -37,6 +40,7 @@ ok "shield" "$("$LK" send --from "$A" --to "$P" --amount 5000 --yes --json | las
 
 step "private P -> public B (real proof)"
 ok "private send" "$("$LK" send --from "$P" --to "$B" --amount 100 --yes --json | last)"
+fi
 
 step "token create (holder A)"
 T=$("$LK" token create --name KIT --supply 1000000 --holder "$A" --yes --json | last); echo "$T"
