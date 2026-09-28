@@ -80,6 +80,11 @@ e2e-testimonial:
     e2e/standalone.sh
     e2e/testimonial.sh; status=$?; e2e/standalone.sh stop; exit $status
 
+# S8: the testimonial app's flow (app + wallet windows, real engine, local chain).
+e2e-testimonial-app:
+    e2e/standalone.sh
+    e2e/testimonial-app.sh; status=$?; e2e/standalone.sh stop; exit $status
+
 # Rebuild the testimonial program at HEAD in the pinned docker builder (artifacts/).
 build-testimonial:
     cargo run -q -p logos-kit-cli -- testimonial build
@@ -93,6 +98,12 @@ qml-sdk:
     pnpm --filter @logos-kit/protocol --filter @logos-kit/codec --filter @logos-kit/client --filter @logos-kit/theme build
     pnpm --filter @logos-kit/qml-bundle build
 
+# Copy the QML SDK (LogosKit/ + LogosKitUi/) into every app that vendors it.
+qml-vendor:
+    for d in modules/probe_dapp modules/logos_kit_testimonial modules/logos_kit_faucet templates/basecamp-dapp; do rm -rf $d/qml/LogosKit $d/qml/LogosKitUi; cp -R sdk/qml/LogosKit sdk/qml/LogosKitUi $d/qml/; done
+    # The template vendors the wallet contract (dependency_overrides).
+    cp modules/logos_kit_wallet/logos_kit_wallet.lidl templates/basecamp-dapp/logos_kit_wallet.lidl
+
 # QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
 qml-gate: qml-sdk
     pnpm --filter @logos-kit/qml-bundle gate
@@ -101,3 +112,23 @@ qml-gate: qml-sdk
 e2e-client:
     e2e/standalone.sh
     node e2e/ts/client.ts; status=$?; e2e/standalone.sh stop; exit $status
+
+# S8 conformance: a dApp's QML against the fake wallet, every scenario, headless
+# (`just conformance templates/basecamp-dapp`; add `--scenario happy`, `--show`).
+# No sequencer, no keys. Needs `just qt-setup`. docs/dev/conformance.md.
+conformance dapp *args:
+    cargo build -q --release --manifest-path modules/logos_kit_wallet_fake/engine/Cargo.toml
+    .qt/q692/bin/python modules/logos_kit_wallet_fake/runner/conformance.py {{dapp}} {{args}}
+
+# S8 conformance in a real Basecamp: the dApp + the fake wallet in an isolated
+# profile; connect through the shell's chooser (needs the inspector build).
+conformance-basecamp dapp scenario="happy" connect="connect":
+    e2e/conformance-basecamp.sh {{dapp}} {{scenario}} {{connect}}
+
+# LWS-0 capability matrix (docs/protocol/capability-matrix.{md,json}) from the schema and both wallets.
+capability-matrix:
+    python3 scripts/capability-matrix.py
+
+# Fails if the committed capability matrix is stale.
+capability-matrix-check:
+    python3 scripts/capability-matrix.py --check

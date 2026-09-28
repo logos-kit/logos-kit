@@ -710,6 +710,30 @@
         }
       }
     },
+    "OpenExplorerParams": {
+      "type": "object",
+      "required": ["chain"],
+      "properties": {
+        "chain": {
+          "$ref": "#/$defs/ChainId"
+        },
+        "txHash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "account": {
+          "$ref": "#/$defs/AccountId"
+        }
+      }
+    },
+    "OpenExplorerResult": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      }
+    },
     "ReadAccountParams": {
       "type": "object",
       "required": ["chain", "account", "program"],
@@ -785,6 +809,9 @@
         },
         "shieldHandle": {
           "type": "string"
+        },
+        "fundedAccount": {
+          "$ref": "#/$defs/AccountId"
         },
         "reason": {
           "type": "string",

@@ -1,0 +1,36 @@
+---
+title: 'Errors'
+description: 'What can go wrong, and what to show.'
+---
+
+Errors are `{ code, message, data? }`. Codes follow EIP-1193 and EIP-5792
+where those exist, so habits carry over.
+
+**A user saying no is not an error.** Check `kit.sdk.isUserRejection(e)` and
+show nothing (or "Cancelled").
+
+| Code | Name | What to show |
+|---|---|---|
+| 4001 | UserRejected | nothing |
+| 4100 | Unauthorized | "Connect again": the account isn't shared with this app (any more) |
+| 4200 | UnsupportedMethod | this wallet doesn't do that |
+| 4900 | Disconnected | the wallet is locked or not set up |
+| 4901 | ChainDisconnected | can't reach the network; retry later |
+| 4902 | UnknownChain | the wallet is on another network |
+| -32602 | InvalidParams | a bug in your call |
+| -32603 | Internal | the wallet couldn't complete it (the user saw why) |
+| 5720 | DuplicateId | this proposal id was used; `data` has the first handle |
+| 5730 | UnknownHandle | not your handle, or expired |
+| 6100 | AccountKindUnsupported | e.g. a private account where only public works |
+| 6102 | ProofFailed | proving failed; nothing was sent |
+| 6103 | SubmissionFailed | the network refused it |
+| 6104 | InvalidProposal | the wallet can't build or decode your proposal |
+| 6106 | StaleApproval | chain state moved since approval; propose again |
+| 6107 | RequestPending | a wallet sheet is already open for your app |
+| 6108 | Timeout | no answer yet: the wallet may still send it |
+| 6109 | Unavailable | no wallet, or no faucet on this network |
+
+Through Basecamp intents the shell carries only six codes (`cancelled`,
+`bad_request`, `failed`, `timeout`, `unavailable`, `not_declared`); the SDK
+maps them to the table above. `not_declared` means your `metadata.json` `uses`
+doesn't list the intent.

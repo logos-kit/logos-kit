@@ -1,0 +1,97 @@
+---
+title: 'Worked example: testimonials'
+description: 'The testimonial app, step by step: connect, account selection, approval, transaction.'
+---
+
+**Logos Kit Testimonials** (`modules/logos_kit_testimonial`) posts a short
+testimonial to a LEZ program that stores it on chain, and shows what others
+wrote. It's the SDK's reference integration: every step of connect → account
+selection → approval → transaction, with the states around it.
+
+## The program
+
+A standard LEZ program (`programs/testimonial`) keeps one record per
+`(submission, author)` and paged stats with monthly counts. A post carries the
+text (≤ 280 bytes), an optional username (≤ 32 bytes) and the submission id
+`LP-0021/logos-kit`, and the chain checks its timestamp against the block
+time. Each account posts once. The author signs and pays the fee, so a post is
+always public.
+
+## 1. Connect: the user picks the account
+
+```qml
+kit.api.connect({ accountKinds: ["public"] }).then(useSession, function (e) {
+    root.note = kit.sdk.isUserRejection(e) ? "" : errText(e)
+})
+```
+
+The shell routes `lez.wallet.connect` to the wallet, which asks which account
+to share. The app only ever sees accounts the user picked. On start, the app
+calls `getSession()` to restore an earlier connection without a prompt.
+
+## 2. Read before asking
+
+Before showing the composer, the app reads three things through the wallet:
+
+```qml
+kit.api.getWalletBalance(account)             // enough for the fee?
+kit.api.readAccount(account, programId)       // nonce: has it been used?
+kit.api.getTestimonial(programId, account)    // already posted?
+```
+
+That decides the state: **already posted** (show it), **no funds** (offer test
+funds in place: `kit.api.requestFunds(account)`), a **fresh account** (a gentle
+nudge: posts from accounts with real use count for more), or the composer.
+
+## 3. Compose, and validate like the chain does
+
+The app checks what the program would refuse, before the user approves
+anything: byte length (not characters), blank text, control and
+direction-override characters. It also requires the text to name the wallet,
+since testimonials count for the wallet they name.
+
+## 4. Propose: the user approves in the wallet
+
+```qml
+kit.api.postTestimonial({ program: programId, author: account, text: text, username: name })
+    .then(function (r) {
+        root.watcher = kit.api.watchTransaction(r.handle, onStatus)
+    })
+```
+
+`postTestimonial` finds the open stats page and builds the call. The wallet
+shows the approval: the program (with its source-verification and upgrade
+status), the fee, and the decoded post. The promise resolves once the user
+approves, with a **handle**; inclusion comes after.
+
+## 5. Follow the transaction
+
+```qml
+function onStatus(s) {
+    if (s.lifecycle === "included" || s.lifecycle === "finalized")
+        s.outcome === "failure" ? recheck(s) : done()
+    else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired")
+        recheck(s)
+}
+```
+
+A rejected post can still mean it landed (another device posted for this
+account), so the app reads the record again before calling it a failure.
+When it's done, the app shows the transaction and block, and
+`kit.api.openExplorer({ txHash })` opens it in the user's browser (the QML
+sandbox can't open links; the wallet builds the URL).
+
+## The feed
+
+```qml
+kit.api.getTestimonials(programId, { limit: 25 })   // { count, monthly, latest }
+```
+
+Everything comes from chain data: the count, this month's tally and the newest
+posts, decoded from the program's accounts.
+
+## Run it yourself
+
+```sh
+just e2e-testimonial-app   # local sequencer, program deploy, the whole flow in the dev harness
+```

@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-twoslash/twoslash.css";
+
+/* Tray (docs/design/brand.md): the wallet's palette, light and dark. */
+:root {
+  --lk-action: #1f7bff;
+  --lk-ok: #12a150;
+  --color-fd-background: #ebebef;
+  --color-fd-card: #ffffff;
+  --color-fd-secondary: #f3f3f6;
+  --color-fd-foreground: #0e0e12;
+  --color-fd-muted-foreground: #6c6c78;
+  --color-fd-border: rgb(14 14 18 / 0.08);
+  --color-fd-primary: #1f7bff;
+}
+.dark {
+  --lk-action: #3898ff;
+  --lk-ok: #4bd166;
+  --color-fd-background: #000000;
+  --color-fd-card: #161618;
+  --color-fd-secondary: #202023;
+  --color-fd-popover: #161618;
+  --color-fd-foreground: #f4f4f6;
+  --color-fd-muted-foreground: #9a9aa5;
+  --color-fd-border: rgb(255 255 255 / 0.08);
+  --color-fd-primary: #3898ff;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

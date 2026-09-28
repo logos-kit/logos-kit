@@ -25,9 +25,17 @@ ColumnLayout {
     width: parent ? parent.width : 400
     spacing: 10
 
-    readonly property string kind: req ? req.intent : ""
-    readonly property var p: req ? req.params || ({}) : ({})
-    readonly property string requester: req ? req.requester : ""
+    // The request on screen: an answered one (req → null) stays until the
+    // sheet closes, so its result (faucet outcome, proof) keeps its Done.
+    property var shown: null
+    readonly property var cur: req || shown
+    // An answered request still on screen (its result, its Done) holds the
+    // sheet: the Store refuses new ones until it closes.
+    Binding { target: iv.store; property: "sheetBusy"; value: iv.visible && iv.req === null && iv.shown !== null }
+    onFinished: shown = null
+    readonly property string kind: cur ? cur.intent : ""
+    readonly property var p: cur ? cur.params || ({}) : ({})
+    readonly property string requester: cur ? cur.requester : ""
     readonly property var publicAccounts: store.accounts.filter(function (a) { return a.kind === "public" })
     readonly property var privateAccounts: store.accounts.filter(function (a) { return a.kind === "private" })
     readonly property bool wantsPrivate: (p.accountKinds || []).indexOf("private") >= 0
@@ -55,6 +63,7 @@ ColumnLayout {
     function start() {
         // An answered request (req → null) keeps its proof on screen.
         if (!req) return
+        shown = req
         ticket = null; handle = ""; busy = false; problem = ""; blocked = false
         picked = []; privConsent = false; job = ""; fundResult = null
         // Read the request itself: sibling bindings (kind, p, requester) may
@@ -180,21 +189,27 @@ ColumnLayout {
             if (r.retryAfterSeconds !== undefined) out.retryAfterSeconds = r.retryAfterSeconds
             if (r.reason) out.reason = r.reason
             if (r.shield) out.shieldHandle = r.shield.handle
+            // A private target was funded through this public account.
+            if (r.fundedAccount && r.fundedAccount !== iv.p.account) out.fundedAccount = r.fundedAccount
             iv.store.answer(true, out, "")
             iv.store.refreshAll()
         })
     }
 
+    Notice {
+        objectName: "intentQueued"
+        visible: !!iv.store.queued && iv.req === null
+        Layout.fillWidth: true
+        text: (iv.store.queued ? iv.store.appName(iv.store.queued.requester) : "") + " is waiting with another request. Close this to see it."
+    }
+
     // == header (all kinds) ================================================================
     RowLayout {
         // Transactions show the requester inside the approval sheet itself.
-        visible: !!iv.req && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
+        visible: !!iv.cur && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
         Layout.fillWidth: true
         spacing: 12
-        Rectangle {
-            implicitWidth: 52; implicitHeight: 52; radius: 16; color: "#232329"
-            Txt { anchors.centerIn: parent; color: "#ffffff"; font.pixelSize: 17; font.weight: Font.DemiBold; text: iv.requester.substring(0, 2).toUpperCase() }
-        }
+        AppAvatar { store: iv.store; requester: iv.requester; size: 52 }
         Row {
             spacing: 4
             Layout.alignment: Qt.AlignVCenter
@@ -204,13 +219,13 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
     }
     Txt {
-        visible: !!iv.req && (iv.kind !== "lez.transaction.send" || iv.blocked)
+        visible: !!iv.cur && (iv.kind !== "lez.transaction.send" || iv.blocked)
         Layout.fillWidth: true
         wrapMode: Text.Wrap
         font.pixelSize: 20
         font.weight: Font.DemiBold
-        text: iv.kind === "lez.wallet.connect" ? iv.requester + " wants to connect"
-            : iv.kind === "lez.message.sign" ? iv.requester + " asks you to sign a message"
+        text: iv.kind === "lez.wallet.connect" ? iv.store.appName(iv.requester) + " wants to connect"
+            : iv.kind === "lez.message.sign" ? iv.store.appName(iv.requester) + " asks you to sign a message"
             : iv.kind === "lez.wallet.sign_in" ? "Sign in to " + (iv.p.domain || iv.requester)
             : iv.kind === "lez.wallet.request_funds" ? "Get test funds"
             : iv.kind === "lez.transaction.send" ? "Can't review this request"
@@ -495,6 +510,6 @@ ColumnLayout {
                 }
             }
         }
-        Btn { visible: iv.fundResult !== null; Layout.fillWidth: true; large: true; text: "Done"; onClicked: iv.finished() }
+        Btn { objectName: "fundsDone"; visible: iv.fundResult !== null; Layout.fillWidth: true; large: true; text: "Done"; onClicked: iv.finished() }
     }
 }

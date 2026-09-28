@@ -2,8 +2,12 @@
 // bridge (`logos`) and QML timers. Everything else lives in logoskit.js.
 //
 //   import "LogosKit"   // this folder, copied into your ui_qml module
-//   LogosKit { id: kit; chain: "lez:testnet"; visible: root.visible }
+//   LogosKit { id: kit; visible: root.visible }
 //   kit.api.connect().then(function (session) { ... })
+//
+// `chain` follows the network the wallet is on (like wagmi following the
+// wallet); set `followWallet: false` to pin it. `api` is rebuilt when the
+// chain changes, so read `kit.api` each time rather than keeping it.
 //
 // Your metadata.json must list the intents it uses:
 //   "uses": [{"intent": "lez.wallet.connect", "cardinality": "single"},
@@ -14,7 +18,9 @@ import "logoskit.js" as SDK
 QtObject {
     id: kit
 
-    property string chain: "lez:testnet"
+    property string chain: "lez:preview"
+    /** Switch `chain` to the wallet's network (checked on start, when shown, and every 5 s while visible). */
+    property bool followWallet: true
     /** Status polling pauses while false (bind it to your view's visibility). */
     property bool visible: true
     /** Wallet core module name. */
@@ -22,6 +28,13 @@ QtObject {
     /** The SDK (see createLogosKit in packages/qml-bundle/src/facade.ts). */
     readonly property var api: _api
     readonly property var sdk: SDK.LogosKit
+
+    /**
+     * The wallet's real answer to a step that already timed out (45 s): e.g.
+     * `{handle}` for a send the user approved late. `data` is the result, or a
+     * LezError when `ok` is false. Handle it as `onLateResult: function (intent, ok, data) {…}`.
+     */
+    signal lateResult(string intent, bool ok, var data)
 
     property var _api: null
     property int _nextTimer: 1
@@ -50,12 +63,37 @@ QtObject {
         }
     }
 
+    property bool _ready: false
+
+    function _follow() {
+        if (!followWallet || !_api) return
+        _api.getChainId().then(function (c) { if (c && c !== kit.chain) kit.chain = c }, function () {})
+    }
+
+    onChainChanged: if (_ready) _create()
+    onVisibleChanged: if (visible) _follow()
+
+    // The user can switch the wallet's network while the app is open.
+    property Timer _followTimer: Timer {
+        interval: 5000
+        repeat: true
+        running: kit.followWallet && kit.visible && kit._ready
+        onTriggered: kit._follow()
+    }
+
     Component.onCompleted: {
         SDK.LogosKit.installQmlHost({ setTimeout: _setTimeout, clearTimeout: _clearTimeout })
+        _ready = true
+        _create()
+        _follow()
+    }
+
+    function _create() {
         _api = SDK.LogosKit.createLogosKit({
             chain: chain,
             module: module,
             isVisible: function () { return kit.visible },
+            onLateResult: function (intent, ok, data) { kit.lateResult(intent, ok, data) },
             callModuleAsync: function (m, method, args, cb, timeoutMs) {
                 logos.callModuleAsync(m, method, args, cb, timeoutMs)
             },

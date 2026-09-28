@@ -47,3 +47,4 @@ packages/qml-bundle/gate/out/
 # Dev-harness QA screenshots are reviewed, then only the chosen ones are kept.
 docs/reviews/s7/failure-*.png
 modules/logos_kit_wallet_ui/dev/__pycache__/
+templates/basecamp-dapp/flake.lock

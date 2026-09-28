@@ -1,0 +1,163 @@
+---
+title: 'Worked example: other Logos modules'
+description: 'Pay through the wallet, then save the receipt to Logos Storage with storage_module.'
+---
+
+A Basecamp app isn't limited to the wallet. The same `logos` bridge that
+carries LWS-0 calls to `logos_kit_wallet` reaches any other **core** module.
+This example pays with the wallet, then saves a JSON receipt of the payment to
+**Logos Storage** through `storage_module`, and shows the receipt's CID.
+
+<Callout type="info">
+This is a pattern, not one of the shipped apps. The storage calls follow
+`storage_module` **3.0.0-rc1** (`logos-co/logos-storage-module`,
+`src/storage_module_plugin.h`). Check the header of the version your users
+run: a core module's method names and arguments are its own contract.
+</Callout>
+
+## 1. Declare both modules
+
+List every core module the app calls in `metadata.json`, next to the wallet
+intents it uses:
+
+```json title="metadata.json"
+{
+  "name": "receipts_app",
+  "type": "ui_qml",
+  "view": "qml/Main.qml",
+  "dependencies": ["logos_kit_wallet", "storage_module"],
+  "uses": [
+    { "intent": "lez.wallet.connect" },
+    { "intent": "lez.transaction.send" }
+  ]
+}
+```
+
+## 2. How a core module answers in QML
+
+Wallet calls go through `kit.api`, which parses the answers for you. For any
+other core module you call the bridge directly, and the answer is a JSON
+**string**. `storage_module` returns a `StdLogosResult`, which arrives as
+`{"success": bool, "value": …, "error": "…"}`. Plain `bool` returns arrive as
+the bare literal (`true`). If the bridge itself fails (the module isn't
+installed, or the call timed out), the payload is `{"error": "…"}` with no
+`success` field.
+
+A small wrapper turns that into a promise-shaped callback:
+
+```qml
+// Call storage_module; cb(error, value).
+function storage(method, args, cb) {
+    logos.callModuleAsync("storage_module", method, args, function (payload) {
+        var r
+        try { r = JSON.parse(payload) } catch (e) { return cb("bad answer from storage_module") }
+        if (r === true || r === false) return cb(null, r)          // bool methods
+        if (r && r.success === true) return cb(null, r.value)
+        cb((r && r.error) || "storage_module failed")
+    }, 20000)
+}
+```
+
+## 3. Check the storage node
+
+The Storage node runs inside `storage_module`, and the user starts it (for
+example from the Logos Storage app). Check before offering the button:
+
+```qml
+storage("isRunning", [], function (err, running) {
+    root.storageReady = !err && running === true
+})
+```
+
+When it isn't running, say so ("Start Logos Storage to save receipts") rather
+than failing later. You can also call `start()` yourself: it returns at once,
+and the node reports readiness on the `storageStart` event.
+
+## 4. Pay through the wallet
+
+This is the normal SDK flow. The wallet shows its own approval sheet:
+
+```qml
+kit.api.transfer(from, to, amount).then(function (r) {
+    root.handle = r.handle
+    kit.api.watchTransaction(r.handle, function (s) {
+        if (s.lifecycle !== "included") return
+        if (s.outcome === "success") saveReceipt(s)
+        else root.problem = "The payment didn't go through, so there's no receipt to save."
+    })
+}, function (e) {
+    if (!kit.sdk.isUserRejection(e)) root.problem = e.message
+})
+```
+
+Save a receipt only for `outcome === "success"`. An `unknown` outcome means
+the wallet couldn't confirm the effect, so the receipt would be a guess.
+
+## 5. Upload the receipt
+
+For data that isn't on disk, `storage_module` has a manual upload session:
+`uploadInit(filename, chunkSize, advertise)` returns a session id,
+`uploadChunk(sessionId, chunk)` sends bytes, and
+`uploadFinalize(sessionId)` returns the CID. `uploadChunk` is asynchronous: it
+reports on the `storageUploadProgress` event, so subscribe first and finalize
+once the chunk has been acknowledged.
+
+```qml
+Component.onCompleted: logos.onModuleEvent("storage_module", "storageUploadProgress")
+
+property string uploadSession: ""
+
+function saveReceipt(s) {
+    var receipt = JSON.stringify({
+        chain: s.chain, txHash: s.txHash, block: s.block ? s.block.id : null,
+        from: from, to: to, amount: amount,
+    })
+    // advertise = false: don't announce it to the network or serve it to peers.
+    storage("uploadInit", ["receipt-" + s.txHash + ".json", 65536, false], function (err, session) {
+        if (err) return root.problem = "Couldn't start the upload: " + err
+        root.uploadSession = session
+        storage("uploadChunk", [session, receipt], function (err2) {
+            if (err2) { storage("uploadCancel", [session], function () {}); root.problem = err2 }
+        })
+    })
+}
+
+Connections {
+    target: logos
+    function onModuleEventReceived(moduleName, eventName, data) {
+        if (moduleName !== "storage_module" || eventName !== "storageUploadProgress") return
+        var e = JSON.parse(data[0])
+        if (e.sessionId !== root.uploadSession) return
+        if (!e.success) return root.problem = e.error
+        storage("uploadFinalize", [root.uploadSession], function (err, cid) {
+            root.uploadSession = ""
+            if (err) root.problem = err
+            else root.receiptCid = cid          // show it, let the user copy it
+        })
+    }
+}
+```
+
+Each storage event carries one JSON string in `data[0]`. The chunk here is a
+small text receipt; for larger data, send several chunks (up to `chunkSize`
+bytes each) and finalize after the last one is acknowledged.
+
+## 6. States to show
+
+| State | When |
+|---|---|
+| Storage off | `isRunning` is `false`: the Pay button still works, and the receipt option explains how to turn Storage on |
+| Paying | between `transfer()` and the wallet's answer (the wallet shows the sheet) |
+| Waiting for the block | watching the handle |
+| Saving receipt | between `uploadInit` and `uploadFinalize` |
+| Saved | the CID, with a copy button |
+| Payment failed or unconfirmed | no upload; say why |
+| Upload failed | the payment still went through: say so, and offer **Save again** |
+
+## What stays private
+
+A public transfer is already public on chain, so its receipt reveals nothing
+new. Don't upload anything about **private** accounts: the app only ever sees a
+per-app `pvt_…` handle for them, and a receipt linking that handle to an amount
+would leak what the wallet keeps private. For personal data, encrypt it on the
+user's device before `uploadChunk`: Logos Storage stores what you give it.

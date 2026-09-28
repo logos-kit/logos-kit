@@ -87,7 +87,7 @@ Item {
                         spacing: 6
                         Rectangle { implicitWidth: 22; implicitHeight: 22; radius: 11; color: "#000000"; LogosMark { anchors.centerIn: parent; size: 11 } }
                         Rectangle { implicitWidth: 6; implicitHeight: 6; radius: 3; color: home.store.offline ? Theme.warn : Theme.ok }
-                        Txt { visible: !home.narrow; text: home.store.zone.chain === "lez:local" ? "LEZ local" : "LEZ testnet"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                        Txt { visible: !home.narrow; text: home.store.zone.chain === "lez:local" ? "LEZ local" : home.store.zone.chain === "lez:preview" ? "LEZ preview" : "LEZ testnet"; font.pixelSize: 13; font.weight: Font.DemiBold }
                     }
                 }
                 IconBtn { objectName: "openSettings"; icon: "sliders"; label: "Settings"; onClicked: home.settings() }

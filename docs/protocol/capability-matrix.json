@@ -1,0 +1,549 @@
+{
+  "protocol": "0.1.0",
+  "methods": [
+    {
+      "method": "lez_connect",
+      "userFacing": true,
+      "intent": "lez.wallet.connect",
+      "required": [
+        "chains"
+      ],
+      "result": [
+        "accounts",
+        "capabilities",
+        "chains",
+        "expiry",
+        "origin",
+        "sessionId",
+        "signIn"
+      ],
+      "real": "silent restore; else intent",
+      "fake": "silent restore; else intent"
+    },
+    {
+      "method": "lez_disconnect",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "sessionId"
+      ],
+      "result": [],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_getSession",
+      "userFacing": false,
+      "intent": null,
+      "required": [],
+      "result": [],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_getAccounts",
+      "userFacing": false,
+      "intent": null,
+      "required": [],
+      "result": [],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_chainId",
+      "userFacing": false,
+      "intent": null,
+      "required": [],
+      "result": [
+        "chain"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_getCapabilities",
+      "userFacing": false,
+      "intent": null,
+      "required": [],
+      "result": [
+        "accountKinds",
+        "batch",
+        "outcomeVerification",
+        "proving",
+        "requestFunds",
+        "signIn",
+        "signMessage",
+        "signTransaction"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_getBalance",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "chain",
+        "account"
+      ],
+      "result": [
+        "amount",
+        "asOfBlock",
+        "asset",
+        "synced"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_readAccount",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "chain",
+        "account",
+        "program"
+      ],
+      "result": [
+        "data",
+        "nonce"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_openExplorer",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "chain"
+      ],
+      "result": [
+        "url"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_signAndSendTransaction",
+      "userFacing": true,
+      "intent": "lez.transaction.send",
+      "required": [
+        "chain",
+        "account",
+        "instructions"
+      ],
+      "result": [
+        "handle",
+        "txHash"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_getTransactionStatus",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "handle"
+      ],
+      "result": [
+        "block",
+        "chain",
+        "error",
+        "expectedEffects",
+        "fee",
+        "handle",
+        "lifecycle",
+        "observedEffects",
+        "outcome",
+        "outcomeSource",
+        "proving",
+        "txHash"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
+      "method": "lez_signMessage",
+      "userFacing": true,
+      "intent": "lez.message.sign",
+      "required": [
+        "account",
+        "message"
+      ],
+      "result": [
+        "publicKey",
+        "signature",
+        "tag"
+      ],
+      "real": "intent only",
+      "fake": "intent only"
+    },
+    {
+      "method": "lez_signIn",
+      "userFacing": true,
+      "intent": "lez.wallet.sign_in",
+      "required": [],
+      "result": [
+        "account",
+        "signature",
+        "signedMessage"
+      ],
+      "real": "intent only",
+      "fake": "intent only"
+    },
+    {
+      "method": "lez_requestFunds",
+      "userFacing": true,
+      "intent": "lez.wallet.request_funds",
+      "required": [
+        "chain",
+        "account"
+      ],
+      "result": [
+        "amount",
+        "fundedAccount",
+        "reason",
+        "retryAfterSeconds",
+        "shieldHandle",
+        "status",
+        "txHash"
+      ],
+      "real": "intent only",
+      "fake": "intent only"
+    },
+    {
+      "method": "lez_switchChain",
+      "userFacing": true,
+      "intent": null,
+      "required": [
+        "chain"
+      ],
+      "result": [],
+      "real": "intent only",
+      "fake": "intent only"
+    }
+  ],
+  "intents": [
+    {
+      "intent": "lez.wallet.connect",
+      "method": "lez_connect",
+      "real": true,
+      "fake": true
+    },
+    {
+      "intent": "lez.transaction.send",
+      "method": "lez_signAndSendTransaction",
+      "real": true,
+      "fake": true
+    },
+    {
+      "intent": "lez.message.sign",
+      "method": "lez_signMessage",
+      "real": true,
+      "fake": true
+    },
+    {
+      "intent": "lez.wallet.sign_in",
+      "method": "lez_signIn",
+      "real": true,
+      "fake": true
+    },
+    {
+      "intent": "lez.wallet.request_funds",
+      "method": "lez_requestFunds",
+      "real": true,
+      "fake": true
+    },
+    {
+      "intent": "lez.wallet.open",
+      "method": null,
+      "real": true,
+      "fake": false
+    }
+  ],
+  "capabilities": [
+    {
+      "capability": "accountKinds",
+      "real": "[\"public\", \"private\"]",
+      "fake": "[\"public\", \"private\"]"
+    },
+    {
+      "capability": "signTransaction",
+      "real": "false",
+      "fake": "false"
+    },
+    {
+      "capability": "batch",
+      "real": "{ \"maxInstructions\": 1, \"atomic\": \"unsupported\" }",
+      "fake": "{ \"maxInstructions\": 1, \"atomic\": \"unsupported\" }"
+    },
+    {
+      "capability": "proving",
+      "real": "{ \"location\": \"local\", \"typicalSeconds\": ETA_SHIELD_S }",
+      "fake": "{ \"location\": \"local\", \"typicalSeconds\": 270 }"
+    },
+    {
+      "capability": "outcomeVerification",
+      "real": "[\"own-account-invariant\"]",
+      "fake": "[\"own-account-invariant\"]"
+    },
+    {
+      "capability": "signMessage",
+      "real": "true",
+      "fake": "true"
+    },
+    {
+      "capability": "signIn",
+      "real": "true",
+      "fake": "true"
+    },
+    {
+      "capability": "requestFunds",
+      "real": "true",
+      "fake": "true"
+    }
+  ],
+  "errors": [
+    {
+      "code": 4001,
+      "name": "UserRejected",
+      "message": "Request declined",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 4100,
+      "name": "Unauthorized",
+      "message": "This app isn't connected to that account",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 4200,
+      "name": "UnsupportedMethod",
+      "message": "The wallet doesn't support this request",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 4900,
+      "name": "Disconnected",
+      "message": "Wallet disconnected",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 4901,
+      "name": "ChainDisconnected",
+      "message": "Network disconnected",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 4902,
+      "name": "UnknownChain",
+      "message": "Unknown network",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": -32602,
+      "name": "InvalidParams",
+      "message": "",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": -32603,
+      "name": "Internal",
+      "message": "",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 5700,
+      "name": "UnsupportedCapability",
+      "message": "Unsupported capability",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 5720,
+      "name": "DuplicateId",
+      "message": "Duplicate request id",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 5730,
+      "name": "UnknownHandle",
+      "message": "Unknown transaction handle",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 5740,
+      "name": "BatchTooLarge",
+      "message": "Too many instructions",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 5760,
+      "name": "AtomicityUnsupported",
+      "message": "Atomic execution isn't supported",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 6100,
+      "name": "AccountKindUnsupported",
+      "message": "This account type can't do that",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 6101,
+      "name": "SimulationFailed",
+      "message": "Couldn't simulate this transaction",
+      "real": false,
+      "fake": false
+    },
+    {
+      "code": 6102,
+      "name": "ProofFailed",
+      "message": "Proof failed: nothing was sent",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 6103,
+      "name": "SubmissionFailed",
+      "message": "The sequencer rejected the transaction",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 6104,
+      "name": "InvalidProposal",
+      "message": "Invalid transaction proposal",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 6105,
+      "name": "OriginAttestationRequired",
+      "message": "Origin could not be verified",
+      "real": false,
+      "fake": false
+    },
+    {
+      "code": 6106,
+      "name": "StaleApproval",
+      "message": "Something changed since you approved. Please review again",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 6107,
+      "name": "RequestPending",
+      "message": "A request is already open in your wallet",
+      "real": true,
+      "fake": false
+    },
+    {
+      "code": 6108,
+      "name": "Timeout",
+      "message": "The wallet didn't respond",
+      "real": true,
+      "fake": true
+    },
+    {
+      "code": 6109,
+      "name": "Unavailable",
+      "message": "The wallet isn't available",
+      "real": true,
+      "fake": true
+    }
+  ],
+  "notifications": [
+    {
+      "notification": "lez_accountsChanged",
+      "real": false,
+      "fake": false
+    },
+    {
+      "notification": "lez_chainChanged",
+      "real": false,
+      "fake": false
+    },
+    {
+      "notification": "lez_sessionChanged",
+      "real": false,
+      "fake": false
+    },
+    {
+      "notification": "lez_disconnected",
+      "real": false,
+      "fake": false
+    },
+    {
+      "notification": "lez_transactionUpdated",
+      "real": false,
+      "fake": false
+    },
+    {
+      "notification": "lez_capabilitiesChanged",
+      "real": false,
+      "fake": false
+    }
+  ],
+  "fakeScenarios": [
+    {
+      "name": "happy",
+      "description": "Connect shares one public account (and a private handle if asked). Balance 1000000000. A send answers a handle; status reads go submitted \u2192 included/success. The faucet funds 1000000000."
+    },
+    {
+      "name": "reject",
+      "description": "The user declines every wallet prompt: each intent answers `cancelled` (LWS-0 4001)."
+    },
+    {
+      "name": "timeout",
+      "description": "Like happy, but the send intent answers only after 50 s: the SDK times out at 45 s (6108) and the handle arrives late (`onLateResult`)."
+    },
+    {
+      "name": "stale",
+      "description": "The send is approved, then the chain moved: status goes signing \u2192 dropped with error 6106 (StaleApproval). Nothing was sent."
+    },
+    {
+      "name": "unknown_outcome",
+      "description": "The send is included but the wallet can't tell whether it worked: included, outcome `unknown`, outcomeSource `none`."
+    },
+    {
+      "name": "failed_onchain",
+      "description": "The send is included and failed on chain: included, outcome `failure` (own-account-invariant)."
+    },
+    {
+      "name": "rate_limited",
+      "description": "Balance 0. The faucet refuses: `rate_limited`, retryAfterSeconds 60. Everything else is happy."
+    },
+    {
+      "name": "faucet_unknown",
+      "description": "Balance 0. The faucet answer is lost: `outcome_unknown`. The funds do arrive (balance +1000000000), so a dApp that re-reads the balance finds them."
+    },
+    {
+      "name": "no_funds",
+      "description": "Balance 0. A send is refused by the wallet (intent answers `failed`, as in every scenario while the account is empty); the faucet funds 1000000000, after which sends work."
+    },
+    {
+      "name": "network_switch",
+      "description": "After the first connect, the user switches the wallet to lez:local: the next lez_chainId answers lez:local, the old session is gone and calls naming the old chain get 4902."
+    },
+    {
+      "name": "unavailable",
+      "description": "The wallet is not running: every method answers 6109, every intent `unavailable`."
+    }
+  ]
+}

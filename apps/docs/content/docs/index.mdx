@@ -1,0 +1,42 @@
+---
+title: 'Introduction'
+description: 'A wallet and a wallet SDK for the Logos Execution Zone.'
+---
+
+Logos Kit is a wallet for the **Logos Execution Zone (LEZ)** and the SDK apps use
+to talk to it. Keys, accounts and approvals live in the wallet. Apps ask; the
+user decides.
+
+<Cards>
+  <Card title="Build a Basecamp app" href="/docs/quickstart" description="A working app from a template in five minutes." />
+  <Card title="Worked example: testimonials" href="/docs/guides/testimonial" description="Connect → pick an account → approve → on chain." />
+  <Card title="Worked example: faucet" href="/docs/guides/faucet" description="Test funds into any account, rate limits and all." />
+  <Card title="Wallet methods" href="/docs/reference/methods" description="Every call the wallet answers, generated from the protocol." />
+</Cards>
+
+## What's in the box
+
+| Piece | What it is |
+|---|---|
+| **Logos Kit Wallet** | A Basecamp app (`logos_kit_wallet_ui`) over a core module (`logos_kit_wallet`): public and private accounts, sends, tokens, proofs on your machine, approvals. |
+| **QML SDK** (`LogosKit/`) | What a Basecamp app copies in to connect, read balances and chain data, propose transactions and follow them. |
+| **UI kit** (`LogosKitUi/`) | The wallet's look (Tray) as QML components, for apps that want it. |
+| **TypeScript SDK** (`@logos-kit/client`, `@logos-kit/codec`) | The same calls for scripts and web apps; byte-exact LEZ encoding. |
+| **CLI** (`logos-kit`) | The wallet from a terminal, and the testimonial program's deploy and evidence tools. |
+| **LWS-0** | The small protocol between apps and wallets: [methods](/docs/reference/methods) and [intents](/docs/reference/intents). |
+
+## How an app talks to the wallet
+
+```
+your app ──intent──▶ Basecamp shell ──▶ wallet sheet (the user approves)
+    │                                          │
+    └──module call (reads, status)──▶ logos_kit_wallet (keys never leave)
+```
+
+User-facing steps (connect, send, sign, get funds) are Basecamp **intents**:
+the shell routes them to the wallet, which shows its own sheet. Reads and
+status are plain module calls. An app never sees a key and never signs.
+
+<Callout type="warn">
+Logos Kit targets testnets and is unaudited. Don't use it with anything of value.
+</Callout>

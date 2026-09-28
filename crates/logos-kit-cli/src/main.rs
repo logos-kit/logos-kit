@@ -31,14 +31,14 @@ use wallet_engine::{
 #[command(name = "logos-kit", version, about = "Logos Kit wallet for LEZ")]
 struct Cli {
     /// Wallet data directory.
-    #[arg(long, global = true, env = "LOGOS_KIT_HOME")]
+    #[arg(id = "home", long = "home", global = true, env = "LOGOS_KIT_HOME")]
     data: Option<PathBuf>,
-    /// Zone id: `lez-testnet`, `lez-local`, or one added with --sequencer.
+    /// Zone id: `lez-preview` (Logos Kit's 0.3 network), `lez-testnet`, `lez-local`, or one added with --sequencer.
     #[arg(
         long,
         global = true,
         env = "LOGOS_KIT_ZONE",
-        default_value = "lez-testnet"
+        default_value = "lez-preview"
     )]
     zone: String,
     /// Sequencer URL, to add a zone that isn't built in.
@@ -268,6 +268,21 @@ enum TestimonialCmd {
         #[arg(long, default_value = "programs/testimonial/artifacts/testimonial.bin")]
         bin: PathBuf,
     },
+    /// Print the `call` arguments of a post to a chosen stats page, one per
+    /// line (`--account …`, `--data …`). Tests the wallet's page retry.
+    #[command(hide = true)]
+    CallArgs {
+        #[arg(long)]
+        program: String,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        page: u32,
+        #[arg(long)]
+        text: String,
+        #[arg(long, default_value = testimonial::SUBMISSION)]
+        submission: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -303,7 +318,7 @@ fn data_dir(cli: &Cli) -> Result<DataDir> {
     if let Some(dir) = &cli.data {
         return Ok(DataDir::new(dir));
     }
-    let home = std::env::var_os("HOME").context("HOME is not set; pass --data")?;
+    let home = std::env::var_os("HOME").context("HOME is not set; pass --home")?;
     Ok(DataDir::new(PathBuf::from(home).join(".logos-kit")))
 }
 
@@ -315,7 +330,7 @@ fn zone(cli: &Cli, data: &DataDir) -> Result<Zone> {
             sequencer: url.clone(),
         });
     }
-    for z in [Zone::testnet(), Zone::local()] {
+    for z in Zone::builtin() {
         if z.id == cli.zone {
             return Ok(z);
         }
@@ -748,6 +763,11 @@ async fn faucet(
 ) -> Result<()> {
     let (session, pw) = open(cli).await?;
     let sequencer = session.zone().sequencer.clone();
+    // The preview network ships with its drip faucet (unless a key is given).
+    let url = url.or_else(|| {
+        (key_env.is_none() && *session.zone() == Zone::preview())
+            .then_some(wallet_engine::session::PREVIEW_FAUCET)
+    });
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
     let mut key = [0u8; 16];
@@ -892,6 +912,32 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                 text: text.clone(),
             };
             transact(cli, intent, None).await
+        }
+        TestimonialCmd::CallArgs {
+            program,
+            from,
+            page,
+            text,
+            submission,
+        } => {
+            let call = testimonial::post_call(
+                program.parse()?,
+                from.parse()?,
+                submission,
+                *page,
+                None,
+                text,
+                testimonial::now_ms(),
+            )?;
+            let Intent::Call { accounts, data, .. } = call else {
+                unreachable!("post_call builds a call");
+            };
+            for a in accounts {
+                let signer = if a.signer { ":signer" } else { "" };
+                println!("--account={}{signer}", a.account);
+            }
+            println!("--data={data}");
+            Ok(())
         }
         TestimonialCmd::List {
             program,

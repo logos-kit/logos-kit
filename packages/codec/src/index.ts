@@ -57,11 +57,18 @@ export {
 } from './message.ts'
 export {
   type AccountRow,
+  decodeTestimonial,
+  decodeTestimonialStats,
   nativeTransfer,
   type ProgramCall,
+  TESTIMONIAL_MAX_TEXT,
+  TESTIMONIAL_MAX_USERNAME,
   TESTIMONIAL_PAGE_SIZE,
+  TESTIMONIAL_PROGRAMS,
   TESTIMONIAL_SUBMISSION,
+  type Testimonial,
   type TestimonialPost,
+  type TestimonialStats,
   type TokenKind,
   testimonialPost,
   testimonialRecord,

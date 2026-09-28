@@ -32,6 +32,12 @@ export const RequestFundsResult = Type.Object({
   txHash: Type.Optional(Hash32),
   /** Present when the target was private and a follow-up shield was queued. */
   shieldHandle: Type.Optional(Type.String()),
+  /**
+   * The public account the faucet paid, when it isn't the target (a private
+   * target is funded through one): where the funds are if the shield is
+   * refused, or while the outcome is unknown.
+   */
+  fundedAccount: Type.Optional(AccountId),
   reason: Type.Optional(Type.String({ maxLength: 256 })),
 })
 
@@ -58,6 +64,18 @@ export const ReadAccountParams = Type.Object({
   /** The program whose data to read (the native token program for balances). */
   program: AccountId,
 })
+
+/**
+ * `lez_openExplorer`: open the zone's explorer at one transaction or account.
+ * The wallet builds the URL, so apps can't open arbitrary links through it.
+ */
+export const OpenExplorerParams = Type.Object({
+  chain: ChainId,
+  txHash: Type.Optional(Hash32),
+  account: Type.Optional(AccountId),
+})
+
+export const OpenExplorerResult = Type.Object({ url: Type.String() })
 
 export const ReadAccountResult = Type.Object({
   nonce: U128,

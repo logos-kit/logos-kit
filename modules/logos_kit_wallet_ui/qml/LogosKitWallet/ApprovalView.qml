@@ -51,16 +51,13 @@ ColumnLayout {
         visible: av.requester !== ""
         Layout.fillWidth: true
         spacing: 12
-        Rectangle {
-            implicitWidth: 44; implicitHeight: 44; radius: 14; color: "#232329"
-            border.width: 1; border.color: "#1affffff"
-            Txt { anchors.centerIn: parent; color: "#ffffff"; font.pixelSize: 15; font.weight: Font.DemiBold; text: av.requester.substring(0, 2).toUpperCase() }
-        }
+        AppAvatar { store: av.store; requester: av.requester; size: 44 }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 1
             Txt { text: "Requested by"; tone: "text2"; font.pixelSize: 12 }
-            Txt { objectName: "requesterName"; Layout.fillWidth: true; text: av.requester; mono: true; font.pixelSize: 14; font.weight: Font.DemiBold }
+            Txt { Layout.fillWidth: true; visible: av.store.appName(av.requester) !== av.requester; text: av.store.appName(av.requester); font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight }
+            Txt { objectName: "requesterName"; Layout.fillWidth: true; text: av.requester; mono: true; tone: av.store.appName(av.requester) !== av.requester ? "text3" : "text"; font.pixelSize: av.store.appName(av.requester) !== av.requester ? 12 : 14; font.weight: av.store.appName(av.requester) !== av.requester ? Font.Normal : Font.DemiBold }
         }
     }
     Notice { visible: av.requester !== ""; tone: "warn"; text: "Unsigned app: Basecamp can't confirm who published it. It can never move funds without your approval." }

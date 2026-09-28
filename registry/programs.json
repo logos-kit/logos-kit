@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "name": "testimonial",
+    "chain": "lez:preview",
+    "account": "4vjENywUCfC3h85mjNGFPV7R9DqvUjV2xhMkCZbJR8XK",
+    "imageId": "8308e67d1f7d520f776736955514e3ddbae0aa6d8ce646e69a33da812f74337e",
+    "source": {
+      "bin": "testimonial.bin",
+      "commit": "bb7764af54455eba33ee0a81c05cce94ab64778f",
+      "dockerTag": "r0.1.91.1",
+      "guestPath": "programs/testimonial/methods/guest",
+      "repo": "https://github.com/logos-kit/logos-kit"
+    }
+  }
+]

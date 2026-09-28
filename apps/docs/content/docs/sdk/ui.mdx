@@ -1,0 +1,33 @@
+---
+title: 'UI kit'
+description: 'The wallet''s look (Tray) as QML components for Basecamp apps.'
+---
+
+`sdk/qml/LogosKitUi/` sits next to `LogosKit/` and gives your app the same
+look as the wallet. It's optional.
+
+```qml
+import "LogosKitUi"
+
+Card {
+    ColumnLayout {
+        Txt { text: "Balance"; tone: "text2" }
+        Txt { text: amount + " LEZ"; font.pixelSize: 24; num: true }
+        Btn { text: "Send"; tone: "ink"; large: true; busy: sending; onClicked: send() }
+    }
+}
+```
+
+| Component | Notes |
+|---|---|
+| `Theme` | Singleton: colours, radii, the bundled Onest font, motion. `Theme.dark` switches palettes. |
+| `Txt` | Text, **plain by default** (other people's text never renders as rich text). `tone`, `num`, `mono`. |
+| `Btn` | Pill button: `ink`, `action`, `private`, `neutral`, `ghost`, `danger`; `busy`, `large`, `armDelay`. |
+| `Card`, `InfoRow` | Surfaces and label/value rows. |
+| `Notice`, `Tag` | Inline notes (`info`, `warn`, `danger`, `private`) and status tags. |
+| `Field`, `TextBox` | Inputs. `TextBox.maxBytes` counts UTF-8 bytes, like on-chain limits do. |
+| `Spinner`, `Skeleton` | Pending and loading states. |
+| `Identicon`, `LogosMark`, `Glyph` | Account avatars, the official Logos mark, a few line glyphs. |
+
+Loading, pending, empty and error states are part of the design: every
+screen in the testimonial and faucet apps has one, built from these.

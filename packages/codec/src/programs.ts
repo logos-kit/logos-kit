@@ -9,8 +9,8 @@ import {
   type ShardSelector,
   TOKEN_PROGRAM,
 } from './account.ts'
-import { Writer } from './borsh.ts'
-import { type Bytes, concat, utf8 } from './bytes.ts'
+import { Reader, Writer } from './borsh.ts'
+import { type Bytes, concat, toBase58, utf8 } from './bytes.ts'
 import { sha256 } from './sha256.ts'
 
 export interface AccountRow extends ShardSelector {
@@ -68,6 +68,17 @@ export function tokenTransfer(
 
 export const TESTIMONIAL_SUBMISSION = 'LP-0021/logos-kit'
 export const TESTIMONIAL_PAGE_SIZE = 1000
+/** Byte limits the program enforces (`testimonial_core`). */
+export const TESTIMONIAL_MAX_TEXT = 280
+export const TESTIMONIAL_MAX_USERNAME = 32
+/**
+ * The deployed testimonial program per chain (immutable deploys listed in
+ * `registry/programs.json`). Missing until the chain has one.
+ */
+export const TESTIMONIAL_PROGRAMS: Readonly<Record<string, AccountId>> = {
+  // Logos Kit preview network (LEZ 0.3-rc1), immutable, image 8308e67d…
+  'lez:preview': '4vjENywUCfC3h85mjNGFPV7R9DqvUjV2xhMkCZbJR8XK' as AccountId,
+}
 const SEED_DOMAIN = utf8('logos-kit/testimonial/v1/')
 
 function testimonialSeed(tag: string, submission: string, extra: Bytes): Bytes {
@@ -126,4 +137,59 @@ export function testimonialPost(p: TestimonialPost): ProgramCall {
     .u64(String(p.timestampMs))
     .toBytes()
   return { program: p.program, accounts, data }
+}
+
+/** A stored testimonial (`testimonial_core::Testimonial`). */
+export interface Testimonial {
+  submission: string
+  author: AccountId
+  username: string | null
+  text: string
+  timestampMs: number
+}
+
+/** A testimonial stats page (`testimonial_core::Stats`). */
+export interface TestimonialStats {
+  page: number
+  firstMs: number
+  lastMs: number
+  /** Posts per UTC month, ascending: `yyyymm` like 202611. */
+  monthly: { yyyymm: number; count: number }[]
+  /** Authors in posting order. */
+  authors: AccountId[]
+}
+
+const ms = (r: Reader): number => Number(r.u64())
+
+/** Decode a record shard; `null` when the author hasn't posted. */
+export function decodeTestimonial(b: Bytes | undefined): Testimonial | null {
+  if (!b || b.length === 0) return null
+  const r = new Reader(b)
+  if (r.u8() !== 1) throw new Error('testimonial: unknown record version')
+  const t: Testimonial = {
+    submission: r.string(),
+    author: toBase58(r.fixed(32)),
+    username: r.option((r) => r.string()),
+    text: r.string(),
+    timestampMs: ms(r),
+  }
+  r.end()
+  return t
+}
+
+/** Decode a stats page shard; `null` when the page hasn't opened. */
+export function decodeTestimonialStats(b: Bytes | undefined): TestimonialStats | null {
+  if (!b || b.length === 0) return null
+  const r = new Reader(b)
+  if (r.u8() !== 1) throw new Error('testimonial: unknown stats version')
+  r.string() // submission
+  const s: TestimonialStats = {
+    page: r.u32(),
+    firstMs: ms(r),
+    lastMs: ms(r),
+    monthly: r.vec((r) => ({ yyyymm: r.u32(), count: r.u32() })),
+    authors: r.vec((r) => toBase58(r.fixed(32))),
+  }
+  r.end()
+  return s
 }

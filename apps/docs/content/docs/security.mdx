@@ -1,0 +1,91 @@
+---
+title: 'Security model'
+description: 'What the wallet protects, from whom, and what apps can and can''t do.'
+---
+
+<Callout type="warn">
+Logos Kit targets testnets and hasn't been audited. Report problems privately
+(see `SECURITY.md` in the repository).
+</Callout>
+
+## Where the keys are
+
+Keys live only in the wallet engine, inside the `logos_kit_wallet` core
+module. They're encrypted at rest: your password goes through Argon2id once to
+open a vault holding the recovery phrase and per-network keys, and each
+network's data is encrypted separately. Apps, the wallet's own UI and the
+Basecamp shell never receive a key.
+
+## What an app can do
+
+An app can **ask**. It can't:
+
+- see an account the user didn't share (grants are per app, per account,
+  per capability, and the user can revoke them in Settings → Connected apps);
+- learn which account a private handle stands for (each app gets its own
+  `pvt_…` handles for the private accounts it was shown);
+- send anything without the user approving it in the wallet;
+- open a sheet while another of its requests is open;
+- make the wallet open an arbitrary link. `openExplorer` builds the URL
+  itself from a fixed testnet explorer base, takes exactly one validated
+  target (a 32-byte transaction hash or an account id), is rate-limited, and
+  answers only apps with a connected session.
+
+The app's identity is the name the Basecamp shell attests (`requesterName`),
+not something the app claims. The wallet warns when an app is unsigned.
+
+## What an approval shows
+
+Before anything is signed, the wallet decodes the proposal and shows:
+
+- the balance change first, then each effect it understands;
+- the program, with its **source verification** (rebuilt from source and
+  matched by image id) and whether its owner can still **upgrade** it;
+- the fee, and for private transfers, the proof time;
+- a warning and an explicit acknowledgement for effects it can't decode.
+
+Approve buttons arm after 500 ms, so a click meant for something else can't
+land on them. An approval is bound to the exact request; if chain state moves
+underneath it (a signer's nonce, an upgradeable program's code), it's refused
+as stale (`6106`) rather than signed differently.
+
+There is one narrow exception, for testimonial posts. A post names the stats
+page it appends to, and a page holds 1,000 authors. If the page fills while
+the user is approving, the program would refuse the post and still charge the
+fee. So right before signing, the wallet re-reads the pages and, only for the
+trusted testimonial program, rebuilds the **same** post for the open page. The
+author, text, username, claimed time and signer nonce stay the approved ones,
+and the rebuilt fee cap may not be higher than the approved one; otherwise
+the request is refused as stale.
+
+## Privacy
+
+Private transactions are proved on the user's machine. The wallet emits no
+events carrying private data, balances of private accounts are only shared
+with an app after a separate consent, and a private account is funded from
+the faucet through one of the user's own public accounts (which is then linked to
+it on chain; the wallet's faucet sheet says so).
+
+## Programs apps call
+
+<Callout type="info">
+The canonical testimonial deployment on the LEZ testnet is **pending**: it
+waits for testnet 0.3, and the SDK's program list stays empty until then.
+</Callout>
+
+The wallet treats testimonial posts in two ways, depending on who builds them:
+
+- **The wallet's own testimonial intent and the `logos-kit testimonial post`
+  CLI** post only to a trusted deployment: the reproducibly built image,
+  either immutable or named in the wallet's registry. An upgradeable copy of
+  the same image is refused, because its owner could swap the code between
+  approval and inclusion.
+- **An app's generic program call** (`sendCall`, which the QML SDK's
+  `postTestimonial` uses) can target any program. The wallet doesn't block it,
+  but the approval sheet decodes the post only for a trusted deployment and
+  shows the program's **source verification** and **upgrade** status, so the
+  user sees when a program isn't the verified one. An undecodable call needs
+  an explicit acknowledgement.
+
+Posts must be top-level calls: a signer's authorization reaches every program
+in a chained call, so another program could otherwise post in the user's name.

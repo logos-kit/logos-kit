@@ -2,6 +2,8 @@ import Type from 'typebox'
 import {
   BalanceParams,
   BalanceResult,
+  OpenExplorerParams,
+  OpenExplorerResult,
   ReadAccountParams,
   ReadAccountResult,
   RequestFundsParams,
@@ -41,6 +43,8 @@ export const Methods = {
     userFacing: false,
   },
   lez_getAccounts: { params: Empty, result: Type.Array(WalletAccount), userFacing: false },
+  /** The network the wallet is on (like `eth_chainId`); apps follow it. */
+  lez_chainId: { params: Empty, result: Type.Object({ chain: ChainId }), userFacing: false },
   lez_getCapabilities: {
     params: Type.Object({ chain: Type.Optional(ChainId) }),
     result: Capabilities,
@@ -49,6 +53,12 @@ export const Methods = {
   lez_getBalance: { params: BalanceParams, result: BalanceResult, userFacing: false },
   /** Read one program's public data on an account (chain state: no grant needed). */
   lez_readAccount: { params: ReadAccountParams, result: ReadAccountResult, userFacing: false },
+  /**
+   * Open the zone's explorer at a transaction or account (the wallet builds the
+   * URL; testnet only). Connected apps only (4100 otherwise); at most one page
+   * a second overall and 20 per app per 10 minutes (6107).
+   */
+  lez_openExplorer: { params: OpenExplorerParams, result: OpenExplorerResult, userFacing: false },
   lez_signAndSendTransaction: {
     params: TransactionProposal,
     result: SubmitResult,

@@ -1,0 +1,115 @@
+---
+title: 'QML SDK'
+description: 'LogosKit for Basecamp apps: connect, read, propose, follow.'
+---
+
+Copy `sdk/qml/LogosKit/` into your module's `qml/` folder (the
+[template](/docs/quickstart) already has it) and add one object:
+
+```qml
+import "LogosKit"
+
+LogosKit {
+    id: kit
+    visible: root.visible        // status polling pauses while hidden
+    onApiChanged: if (api) restore()
+}
+```
+
+`kit.api` is `null` until the SDK is ready, and it's rebuilt when the wallet
+switches networks: react in `onApiChanged`, and read `kit.api` each time rather
+than keeping a copy. `kit.sdk` holds helpers (`isUserRejection`,
+`isAccountId`, `parseUnits`, `formatUnits`, program builders).
+
+## Properties
+
+| Property | Default | Meaning |
+|---|---|---|
+| `chain` | `"lez:preview"` | The network. Follows the wallet unless `followWallet` is off. |
+| `followWallet` | `true` | Check the wallet's network on start, when shown, and every 5 s while visible. |
+| `visible` | `true` | Bind to your view; hidden apps don't poll. |
+| `module` | `"logos_kit_wallet"` | The wallet core module. |
+
+## Calls
+
+Every call returns a promise. User-facing ones open the wallet; the rest are
+reads.
+
+| Call | Kind | Resolves to |
+|---|---|---|
+| `connect({ accountKinds, capabilities, signIn })` | wallet sheet | `Session`: `{ sessionId, accounts[], chains, capabilities }` |
+| `getSession()` | read | `Session` or `null` |
+| `getAccounts()` | read | the accounts shared with you |
+| `getChainId()` | read | the wallet's network, e.g. `"lez:preview"` |
+| `getWalletBalance(account, asset?)` | read | `{ amount, asset, synced, asOfBlock }` |
+| `readAccount(account, program)` | read | `{ nonce, data }` (a public account's data for one program) |
+| `transfer(from, to, amount, token?)` | wallet sheet | `{ handle }` once approved |
+| `sendCall(account, call)` | wallet sheet | `{ handle }`: any program call built with `kit.sdk` |
+| `sendTransaction(proposal)` | wallet sheet | `{ handle }`: a raw LWS-0 proposal |
+| `postTestimonial({ program, author, text, username? })` | wallet sheet | `{ handle }` |
+| `getTestimonials(program, { limit })` | read | `{ count, monthly, latest[] }` |
+| `getTestimonial(program, author)` | read | the author's post, or `null` |
+| `getTransactionStatus(handle)` | read | `TransactionStatus` |
+| `watchTransaction(handle, onUpdate, onError?)` | read (polls) | a handle with `stop()`; `onUpdate` on each change, stops at the first final lifecycle (`included` counts) |
+| `waitForTransactionStatus(handle)` | read (polls) | the first final `TransactionStatus` (`included`, `rejected`, `dropped`, `expired`) |
+| `signMessage(account, base64)` | wallet sheet | `{ signature, publicKey, tag }` |
+| `signIn(request)` | wallet sheet | `{ account, signedMessage, signature }` |
+| `requestFunds(account)` | wallet sheet | `{ status, amount?, retryAfterSeconds?, shieldHandle? }` |
+| `openExplorer({ txHash } \| { account })` | read | opens the explorer in the browser |
+| `isBusy()` | – | a wallet sheet is open for this app |
+
+## Transaction lifecycle
+
+A proposal resolves when the user **approves**, not when it lands. Follow the
+handle:
+
+```
+awaiting_approval → building → proving → signing → submitted → included
+                                                          ↘ rejected | dropped | expired
+```
+
+`watchTransaction` and `waitForTransactionStatus` stop at the first **final**
+lifecycle: `included`, `rejected`, `dropped` or `expired`. The protocol also
+reserves `finalized`, but the Logos Kit wallet doesn't report it yet: a
+transaction's status ends at `included`, with `block.id` set to the block it
+landed in. If your app needs depth, compare `status.block.id` with the chain's
+current block later (a node read) instead of waiting on the watcher.
+
+Inclusion alone isn't success: LEZ 0.3 includes failed transactions too.
+Read `outcome` on the final status:
+
+| `outcome` | Meaning | Show |
+|---|---|---|
+| `success` | The wallet proved the effect (e.g. your record exists, the balance moved by the amount). | Done |
+| `failure` | Included, but the program refused it. The fee was charged. | The error, and a retry |
+| `unknown` | Included, but the wallet couldn't prove the effect either way. | "Included, outcome unconfirmed", then re-read the state you expected to change |
+
+Only `success` should show a Done screen. `proving.phase` is set while a
+private transaction proves (minutes on a laptop). Public calls skip proving.
+
+## One sheet at a time
+
+While a wallet sheet is open for your app, another user-facing call rejects
+with `6107` (`RequestPending`). A call that waits 45 s rejects with `6108`
+(`Timeout`), but the wallet may still be showing it. A timeout does **not**
+mean nothing was sent: the user can still approve, and the SDK keeps new
+requests blocked until the wallet really answers.
+
+That late answer arrives on the `lateResult` signal. Handle it to recover the
+handle of a send the user approved after the timeout:
+
+```qml
+LogosKit {
+    id: kit
+    onLateResult: function (intent, ok, data) {
+        // intent: e.g. "lez.transaction.send"; data: the result, or a LezError when !ok
+        if (intent === "lez.transaction.send" && ok && data.handle)
+            root.follow(data.handle)          // same path as an on-time approval
+        else if (!ok && !kit.sdk.isUserRejection(data))
+            root.showError(data)
+    }
+}
+```
+
+When a call rejects with `6108`, show "Waiting for the wallet" rather than an
+error, and let `onLateResult` finish the flow.

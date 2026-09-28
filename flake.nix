@@ -208,6 +208,17 @@
         }
       );
 
+      # `nix flake init -t github:logos-kit/logos-kit#dapp`
+      templates.dapp = {
+        path = ./templates/basecamp-dapp;
+        description = "A Basecamp app (ui_qml) on the Logos Execution Zone, with the Logos Kit SDK";
+        welcomeText = ''
+          Your Basecamp app is ready. Rename it in metadata.json, then:
+            nix build .#lgx-portable
+          and install result-portable/*.lgx in Basecamp. README.md has the rest.
+        '';
+      };
+
       devShells = forAll (system: {
         default = (mkPkgs system).mkShell { inputsFrom = [ self.packages.${system}.wallet-engine ]; };
       });

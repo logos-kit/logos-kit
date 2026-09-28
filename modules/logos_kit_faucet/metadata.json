@@ -1,0 +1,33 @@
+{
+  "name": "logos_kit_faucet",
+  "display_name": "Logos Kit Faucet",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "category": "developer",
+  "description": "Get testnet LEZ into any of your accounts, public or private, through the Logos Kit wallet. Built on the Logos Kit SDK.",
+  "view": "qml/Main.qml",
+  "icon": "src/icons/icon.png",
+  "dependencies": ["logos_kit_wallet"],
+  "provides": [],
+  "uses": [
+    {
+      "intent": "lez.wallet.connect"
+    },
+    {
+      "intent": "lez.wallet.request_funds"
+    }
+  ],
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

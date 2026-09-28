@@ -1,0 +1,137 @@
+{
+  "name": "logos_kit_wallet_fake",
+  "display_name": "Logos Kit Wallet (FAKE, conformance)",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "category": "developer",
+  "description": "Deterministic stand-in for the Logos Kit wallet, for testing dApps: answers every wallet prompt from a fixed scenario. Holds no keys and moves no funds. Never install it next to a real wallet.",
+  "view": "qml/Main.qml",
+  "icon": "src/icons/icon.png",
+  "dependencies": ["logos_kit_wallet"],
+  "provides": [
+    {
+      "intent": "lez.wallet.connect",
+      "params": [
+        {
+          "name": "chains",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "accountKinds",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "capabilities",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "signIn",
+          "type": "object",
+          "required": false
+        }
+      ]
+    },
+    {
+      "intent": "lez.transaction.send",
+      "params": [
+        {
+          "name": "chain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "instructions",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "atomicRequired",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "intent": "lez.message.sign",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "intent": "lez.wallet.sign_in",
+      "params": [
+        {
+          "name": "domain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "nonce",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "issuedAt",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "intent": "lez.wallet.request_funds",
+      "params": [
+        {
+          "name": "chain",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "account",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "uses": [],
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

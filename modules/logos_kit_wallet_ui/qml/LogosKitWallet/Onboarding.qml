@@ -76,7 +76,7 @@ Item {
             Tag {
                 Layout.alignment: Qt.AlignHCenter
                 visible: ob.step === "welcome" || ob.step === "unlock"
-                text: ob.store.zone.chain === "lez:local" ? "Local network" : "Testnet"
+                text: ob.store.zone.chain === "lez:local" ? "Local network" : ob.store.zone.chain === "lez:preview" ? "Preview network (LEZ 0.3)" : "Testnet"
                 tone: "action"
             }
 

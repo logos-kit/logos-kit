@@ -111,6 +111,10 @@ pub struct Service {
     /// Checks approval passwords without the wallet lock (set while unlocked).
     checker: Mutex<Option<crate::vault::PasswordCheck>>,
     throttle: Mutex<Throttle>,
+    /// The local genesis-key faucet (see `local_faucet`).
+    local_faucet: Mutex<Option<(String, Arc<KeyFaucet>)>>,
+    /// When an app last opened an explorer page (one per second at most).
+    explorer: Mutex<ExplorerBudget>,
     /// Bumped on every unlock; an older background loop stops.
     generation: Mutex<u64>,
     refresh: tokio::sync::Notify,
@@ -270,6 +274,8 @@ impl Service {
                 fails: 0,
                 until: None,
             }),
+            local_faucet: Mutex::new(None),
+            explorer: Mutex::new(ExplorerBudget::default()),
             generation: Mutex::new(0),
             refresh: tokio::sync::Notify::new(),
         })
@@ -297,7 +303,7 @@ impl Service {
     }
 
     fn zones(&self) -> Vec<Zone> {
-        let mut out = vec![Zone::testnet(), Zone::local()];
+        let mut out = Zone::builtin().to_vec();
         for z in &lock(&self.prefs).zones {
             if !out.iter().any(|o| o.id == z.id) {
                 out.push(z.clone());
@@ -310,7 +316,7 @@ impl Service {
         let want = lock(&self.prefs).zone.clone();
         let zones = self.zones();
         want.and_then(|id| zones.iter().find(|z| z.id == id).cloned())
-            .unwrap_or_else(Zone::testnet)
+            .unwrap_or_else(Zone::preview)
     }
 
     fn engine(&self) -> Result<Arc<Engine>> {
@@ -346,7 +352,10 @@ impl Service {
         }
         match method {
             "lez_getCapabilities" => Ok(capabilities()),
+            // Which network the wallet is on (like eth_chainId): apps follow it.
+            "lez_chainId" => Ok(json!({ "chain": self.current_zone().chain })),
             "lez_readAccount" => self.read_account(p),
+            "lez_openExplorer" => self.open_explorer(p, caller),
             "lez_getSession" => self.get_session(caller),
             "lez_getAccounts" => {
                 let app = app_of(caller)?;
@@ -410,6 +419,14 @@ impl Service {
                 }
                 self.emit("wallet_changed", json!({ "locked": true }));
                 Ok(Value::Null)
+            }
+            "appInfo" => {
+                #[derive(Deserialize)]
+                struct P {
+                    requester: String,
+                }
+                let a: P = params(p)?;
+                Ok(app_info(self.data.root(), &a.requester))
             }
             "snapshot" => {
                 let snap = lock(&self.snapshot).clone();
@@ -1371,16 +1388,30 @@ impl Service {
             #[serde(default)]
             via: Option<String>,
         }
-        let a: P = params(p)?;
+        let mut a: P = params(p)?;
         if let Some(r) = &a.requester {
             check_requester(r)?;
         }
+        // An app names a private account by its per-app handle.
+        if a.account.starts_with("pvt_") {
+            let app = a
+                .requester
+                .clone()
+                .ok_or_else(|| invalid("a private handle needs its app"))?;
+            a.account = self.private_account(&app, &a.account)?;
+        }
         let zone = self.current_zone();
-        let url = lock(&self.prefs).faucets.get(&zone.id).cloned();
+        let url = lock(&self.prefs)
+            .faucets
+            .get(&zone.id)
+            .cloned()
+            .or_else(|| {
+                (zone == Zone::preview()).then(|| crate::session::PREVIEW_FAUCET.to_owned())
+            });
         let faucet = match (zone.id.as_str(), url) {
             (_, Some(url)) => Faucet::Http(HttpFaucet::new("Drip service", &url)?),
             ("lez-local", None) if is_loopback(&zone.sequencer) => {
-                Faucet::Key(Box::new(self.local_faucet(&zone)?))
+                Faucet::Key(self.local_faucet(&zone)?)
             }
             _ => {
                 return Err(coded(
@@ -1450,17 +1481,108 @@ impl Service {
         }
     }
 
-    fn local_faucet(&self, zone: &Zone) -> Result<KeyFaucet> {
-        KeyFaucet::new(
+    /// The wallet account behind `app`'s private handle.
+    fn private_account(&self, app: &str, handle: &str) -> Result<String> {
+        let engine = self.engine()?;
+        self.block(async {
+            engine
+                .with_session_quiet(async |s| {
+                    let zone_id = s.zone().id.clone();
+                    let key = s.handle_key()?;
+                    s.accounts()?
+                        .into_iter()
+                        .find(|m| {
+                            m.kind == AccountKind::Private
+                                && private_handle(&key, &zone_id, app, &m.account_id) == handle
+                        })
+                        .map(|m| m.account_id)
+                        .ok_or_else(|| invalid("unknown private account"))
+                })
+                .await
+        })
+    }
+
+    /// One faucet per sequencer, kept: its ledger holds the per-account
+    /// rate limit and the idempotent request keys.
+    fn local_faucet(&self, zone: &Zone) -> Result<Arc<KeyFaucet>> {
+        let mut cached = lock(&self.local_faucet);
+        if let Some((url, f)) = &*cached
+            && *url == zone.sequencer
+        {
+            return Ok(f.clone());
+        }
+        let f = Arc::new(KeyFaucet::new(
             "Local genesis key",
             &zone.sequencer,
             LOCAL_GENESIS_KEY,
             1_000_000_000,
-            Duration::from_secs(20),
-        )
+            Duration::from_secs(60),
+        )?);
+        *cached = Some((zone.sequencer.clone(), f.clone()));
+        Ok(f)
     }
 
     // -- LWS-0 reads --------------------------------------------------------------
+
+    /// Open the zone's explorer at a transaction or account. The wallet
+    /// builds the URL, so an app can only ever open its own explorer page.
+    /// Opens a browser tab, so only for connected apps (and our UI), within
+    /// [`ExplorerBudget`].
+    fn open_explorer(&self, p: &Value, caller: &Caller) -> Result<Value> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct P {
+            chain: String,
+            tx_hash: Option<String>,
+            account: Option<String>,
+        }
+        let a: P = params(p)?;
+        let zone = self.current_zone();
+        if a.chain != zone.chain {
+            return Err(coded(
+                4902,
+                format!("the wallet is on {}", zone.chain),
+                Value::Null,
+            ));
+        }
+        let Some(base) = explorer_base(&zone.chain) else {
+            return Err(coded(
+                5700,
+                format!("{} has no explorer", zone.chain),
+                Value::Null,
+            ));
+        };
+        let url = match (a.tx_hash, a.account) {
+            (Some(h), None) => {
+                let hex = h.strip_prefix("0x").unwrap_or(&h);
+                ensure!(
+                    hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()),
+                    invalid("txHash must be 32 bytes of hex")
+                );
+                format!("{base}/transaction/{}", hex.to_ascii_lowercase())
+            }
+            (None, Some(acc)) => {
+                let id = crate::decode::account_id(&acc).map_err(|_| invalid("bad account id"))?;
+                format!("{base}/account/{id}")
+            }
+            _ => return Err(invalid("pass exactly one of txHash or account")),
+        };
+        let app = if caller.is_owner() {
+            String::new()
+        } else {
+            let app = app_of(caller)?;
+            if self.session_for(&app)?.is_null() {
+                return Err(Denied::err(
+                    Code::Unauthorized,
+                    "connect to the wallet before opening explorer pages",
+                ));
+            }
+            app
+        };
+        lock(&self.explorer).take(&app, Instant::now())?;
+        open_url(&url)?;
+        Ok(json!({ "url": url }))
+    }
 
     fn read_account(&self, p: &Value) -> Result<Value> {
         #[derive(Deserialize)]
@@ -1714,7 +1836,7 @@ impl Service {
 
 enum Faucet {
     Http(HttpFaucet),
-    Key(Box<KeyFaucet>),
+    Key(Arc<KeyFaucet>),
 }
 
 struct ZoneStatusTip(u64);
@@ -1753,6 +1875,48 @@ async fn background(svc: &'static Service, engine: Arc<Engine>, generation: u64)
 fn getrandom_fill(buf: &mut [u8]) {
     use chacha20poly1305::aead::{OsRng, rand_core::RngCore as _};
     OsRng.fill_bytes(buf);
+}
+
+/// Explorer pages open a browser tab on the user's desktop: at most one a
+/// second overall, and [`ExplorerBudget::PER_APP`] per app per window.
+#[derive(Default)]
+struct ExplorerBudget {
+    last: Option<Instant>,
+    per_app: HashMap<String, VecDeque<Instant>>,
+}
+
+impl ExplorerBudget {
+    const GAP: Duration = Duration::from_secs(1);
+    const PER_APP: usize = 20;
+    const WINDOW: Duration = Duration::from_secs(600);
+
+    /// Spend one opening for `app` (empty: the wallet's own UI, no quota).
+    fn take(&mut self, app: &str, now: Instant) -> Result<()> {
+        if self.last.is_some_and(|t| now.duration_since(t) < Self::GAP) {
+            return Err(Denied::err(
+                Code::RequestPending,
+                "an explorer page just opened",
+            ));
+        }
+        if !app.is_empty() {
+            let times = self.per_app.entry(app.to_owned()).or_default();
+            while times
+                .front()
+                .is_some_and(|t| now.duration_since(*t) >= Self::WINDOW)
+            {
+                times.pop_front();
+            }
+            if times.len() >= Self::PER_APP {
+                return Err(Denied::err(
+                    Code::RequestPending,
+                    "too many explorer pages; try again in a few minutes",
+                ));
+            }
+            times.push_back(now);
+        }
+        self.last = Some(now);
+        Ok(())
+    }
 }
 
 fn app_of(caller: &Caller) -> Result<String> {
@@ -1867,12 +2031,20 @@ fn is_loopback(url: &str) -> bool {
 }
 
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
-    if prefs.faucets.contains_key(&zone.id) {
+    if prefs.faucets.contains_key(&zone.id) || *zone == Zone::preview() {
         Some("Drip service")
     } else if zone.id == "lez-local" && is_loopback(&zone.sequencer) {
         Some("Local genesis key")
     } else {
         None
+    }
+}
+
+/// The public explorer of a zone, if it has one.
+fn explorer_base(chain: &str) -> Option<&'static str> {
+    match chain {
+        "lez:testnet" => Some("https://explorer.testnet.lez.logos.co"),
+        _ => None,
     }
 }
 
@@ -1987,8 +2159,147 @@ fn default_copy(code: i64) -> &'static str {
     }
 }
 
+/// How the approval sheet shows a requesting app: the `display_name` and
+/// icon from its installed `plugins/<name>/metadata.json`. Both are the app's
+/// own claims, so the sheet keeps the attested module name beside them.
+/// Basecamp's QML sandbox loads no `data:` URLs and no files outside the
+/// wallet UI's own folder, so a PNG icon travels as an [`ICON_GRID`]² grid
+/// of `#AARRGGBB` cells the sheet draws with rectangles. Missing or odd
+/// files give `null`s (the sheet falls back to initials).
+fn app_info(root: &std::path::Path, requester: &str) -> Value {
+    let fallback = json!({ "name": requester, "displayName": null, "icon": null });
+    if requester.is_empty()
+        || requester.len() > 64
+        || !requester
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
+        return fallback;
+    }
+    // Basecamp keeps `<user dir>/{module_data/<module>/<instance>, plugins}`;
+    // LOGOS_KIT_PLUGINS_DIR points the dev harness elsewhere.
+    let dirs = std::env::var_os("LOGOS_KIT_PLUGINS_DIR")
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(root.ancestors().skip(1).take(4).map(|d| d.join("plugins")));
+    let Some(dir) = dirs
+        .map(|d| d.join(requester))
+        .find(|d| d.join("metadata.json").is_file())
+    else {
+        return fallback;
+    };
+    let Some(meta) = std::fs::read(dir.join("metadata.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+    else {
+        return fallback;
+    };
+    let display_name = meta
+        .get("display_name")
+        .and_then(Value::as_str)
+        .map(|n| {
+            n.chars()
+                .filter(|c| !c.is_control())
+                .take(48)
+                .collect::<String>()
+        })
+        .filter(|n| !n.trim().is_empty());
+    let icon = meta
+        .get("icon")
+        .and_then(Value::as_str)
+        .and_then(|rel| icon_grid(&dir, rel.strip_prefix(":/").unwrap_or(rel)));
+    json!({ "name": requester, "displayName": display_name, "icon": icon })
+}
+
+/// Cells per side of an app icon sent to the wallet UI.
+const ICON_GRID: usize = 40;
+
+/// A PNG inside `dir`, box-filtered down to `ICON_GRID`² `#AARRGGBB` cells.
+fn icon_grid(dir: &std::path::Path, rel: &str) -> Option<Vec<String>> {
+    const MAX_FILE: u64 = 512 * 1024;
+    const MAX_SIDE: u32 = 1024;
+    let base = dir.canonicalize().ok()?;
+    let file = base.join(rel).canonicalize().ok()?;
+    if !file.starts_with(&base) || std::fs::metadata(&file).ok()?.len() > MAX_FILE {
+        return None;
+    }
+    let bytes = std::fs::read(file).ok()?;
+    let mut decoder =
+        png::Decoder::new_with_limits(std::io::Cursor::new(bytes), png::Limits { bytes: 16 << 20 });
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = reader.info().size();
+    if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
+        return None;
+    }
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let frame = reader.next_frame(&mut buf).ok()?;
+    let channels = match frame.color_type {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        png::ColorType::Indexed => return None,
+    };
+    let (w, h) = (w as usize, h as usize);
+    let rgba = |x: usize, y: usize| -> [u32; 4] {
+        let px = &buf[y * frame.line_size + x * channels..][..channels];
+        let (r, g, b, a) = match channels {
+            1 => (px[0], px[0], px[0], 255),
+            2 => (px[0], px[0], px[0], px[1]),
+            3 => (px[0], px[1], px[2], 255),
+            _ => (px[0], px[1], px[2], px[3]),
+        };
+        [u32::from(r), u32::from(g), u32::from(b), u32::from(a)]
+    };
+    let mut cells = Vec::with_capacity(ICON_GRID * ICON_GRID);
+    for gy in 0..ICON_GRID {
+        let (y0, y1) = (
+            gy * h / ICON_GRID,
+            ((gy + 1) * h / ICON_GRID).max(gy * h / ICON_GRID + 1),
+        );
+        for gx in 0..ICON_GRID {
+            let (x0, x1) = (
+                gx * w / ICON_GRID,
+                ((gx + 1) * w / ICON_GRID).max(gx * w / ICON_GRID + 1),
+            );
+            // Premultiplied: transparent pixels add no colour to the edges.
+            let (mut sum, mut n) = ([0u64; 4], 0u64);
+            for y in y0..y1.min(h) {
+                for x in x0..x1.min(w) {
+                    let [r, g, b, a] = rgba(x, y);
+                    sum[0] += u64::from(r * a);
+                    sum[1] += u64::from(g * a);
+                    sum[2] += u64::from(b * a);
+                    sum[3] += u64::from(a);
+                    n += 1;
+                }
+            }
+            let a = sum[3] / n.max(1);
+            let c = |i: usize| sum[i].checked_div(sum[3]).unwrap_or(0);
+            cells.push(format!("#{a:02x}{:02x}{:02x}{:02x}", c(0), c(1), c(2)));
+        }
+    }
+    Some(cells)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explorer_budget_gaps_and_caps_per_app() {
+        use std::time::{Duration, Instant};
+        let mut b = super::ExplorerBudget::default();
+        let t0 = Instant::now();
+        assert!(b.take("app", t0).is_ok());
+        assert!(b.take("other", t0 + Duration::from_millis(500)).is_err());
+        for i in 1..20 {
+            assert!(b.take("app", t0 + Duration::from_secs(i * 2)).is_ok());
+        }
+        assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
+        assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
+        assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
+    }
+
     #[test]
     fn receive_code_round_trips() {
         let npk = "11".repeat(32);
