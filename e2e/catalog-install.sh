@@ -6,6 +6,7 @@
 #   e2e/catalog-install.sh --docker    # inside a fresh ubuntu:24.04 container
 #
 # Checks: the catalog resolves; installing the wallet UI pulls in the core;
+# the testimonial and faucet apps install;
 # both packages carry the release DID's signature; the core loads from its
 # portable bundle (plugin + libwallet_engine) and answers.
 set -euo pipefail
@@ -40,7 +41,7 @@ trap 'cd /; "$ctl" daemon stop >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 cd "$work"
 
 step "logosctl $LOGOSCTL_VERSION ($asset)"
-curl -fsSL -o ctl.tgz "https://github.com/logos-co/logos-logoscore-cli/releases/download/$LOGOSCTL_VERSION/$asset.tar.gz"
+curl -fsSL --retry 3 --connect-timeout 20 --max-time 300 -o ctl.tgz "https://github.com/logos-co/logos-logoscore-cli/releases/download/$LOGOSCTL_VERSION/$asset.tar.gz"
 tar xzf ctl.tgz
 # macOS ships bin/logosctl; Linux ships an AppImage. Containers have no FUSE,
 # so the AppImage runs by extracting itself.
@@ -63,8 +64,11 @@ step "trust the Logos Kit release key, then install the UI (pulls the core)"
 # check is that what landed is signed by the release DID, not a refusal.
 "$ctl" key add logos-kit --did "$RELEASE_DID" --display-name "Logos Kit release key"
 "$ctl" install logos_kit_wallet_ui -y
+# The mini-apps install on their own and depend on the wallet core.
+"$ctl" install logos_kit_testimonial -y
+"$ctl" install logos_kit_faucet -y
 "$ctl" package ls
-for m in logos_kit_wallet logos_kit_wallet_ui; do
+for m in logos_kit_wallet logos_kit_wallet_ui logos_kit_testimonial logos_kit_faucet; do
   "$ctl" --json package show "$m" > "show-$m.json"
   grep -q "$RELEASE_DID" "show-$m.json" || { cat "show-$m.json"; echo "FAIL: $m is not signed by the release DID" >&2; exit 1; }
   echo "$m: signed by the Logos Kit release key"
