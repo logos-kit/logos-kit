@@ -1,0 +1,19 @@
+[package]
+name = "logos-kit-drip"
+description = "Logos Kit drip: a self-hostable testnet faucet for a LEZ zone (POST /fund)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wallet-engine = { path = "../wallet-engine" }
+# All three already in the lockfile via LEZ (same majors).
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "tokio"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }

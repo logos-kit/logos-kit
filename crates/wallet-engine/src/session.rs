@@ -67,6 +67,10 @@ const BACKOFF_BASE: Duration = Duration::from_secs(1);
 const BACKOFF_CAP: Duration = Duration::from_secs(60);
 const LABEL_MAX_CHARS: usize = 32;
 
+/// The preview network's sequencer and its drip faucet (`logos-kit-drip`).
+pub const PREVIEW_SEQUENCER: &str = "https://lez.84.46.247.92.sslip.io";
+pub const PREVIEW_FAUCET: &str = "https://lez-drip.84.46.247.92.sslip.io";
+
 /// A LEZ zone the wallet talks to.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Zone {
@@ -84,6 +88,23 @@ impl Zone {
             chain: "lez:testnet".into(),
             sequencer: "https://testnet.lez.logos.co".into(),
         }
+    }
+
+    /// Logos Kit's public LEZ 0.3 network, run until the official testnet
+    /// moves to 0.3 (it runs 0.2, whose blocks this wallet can't read). The
+    /// URL is permanent: a saved zone must keep its URL, so a real domain
+    /// later is an extra name, never a replacement.
+    pub fn preview() -> Self {
+        Self {
+            id: "lez-preview".into(),
+            chain: "lez:preview".into(),
+            sequencer: PREVIEW_SEQUENCER.into(),
+        }
+    }
+
+    /// Zones every wallet knows, default first.
+    pub fn builtin() -> [Self; 3] {
+        [Self::preview(), Self::testnet(), Self::local()]
     }
 
     pub fn local() -> Self {

@@ -1,0 +1,68 @@
+# Logos Kit preview network (LEZ v0.3.0-rc1) on Coolify: the sequencer and
+# the drip faucet. Routers are defined here (not in Coolify's domain fields)
+# so CORS and rate limits sit in front of both. Secrets come from Coolify
+# env: LK_SEQ_SIGNING_KEY, LK_DRIP_KEY.
+services:
+  sequencer:
+    build:
+      context: .
+      dockerfile: sequencer.Dockerfile
+    environment:
+      LK_SEQ_SIGNING_KEY: ${LK_SEQ_SIGNING_KEY}
+      RUST_LOG: info,kameo=warn
+    volumes:
+      - lez-preview-data:/var/lib/sequencer_service
+    mem_limit: 1500m
+    cpus: 1.5
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.lk-lez-http.entrypoints=http
+      - traefik.http.routers.lk-lez-http.rule=Host(`lez.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-lez-http.middlewares=redirect-to-https
+      - traefik.http.routers.lk-lez.entrypoints=https
+      - traefik.http.routers.lk-lez.rule=Host(`lez.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-lez.tls=true
+      - traefik.http.routers.lk-lez.tls.certresolver=letsencrypt
+      - traefik.http.routers.lk-lez.service=lk-lez
+      - traefik.http.routers.lk-lez.middlewares=lk-cors,lk-lez-limit
+      - traefik.http.services.lk-lez.loadbalancer.server.port=3040
+      # Browsers (web dApps, the docs' live examples) may call the RPC.
+      - traefik.http.middlewares.lk-cors.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.lk-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS
+      - traefik.http.middlewares.lk-cors.headers.accesscontrolallowheaders=content-type
+      - traefik.http.middlewares.lk-cors.headers.accesscontrolmaxage=600
+      # The RPC has no caller auth: bound each client IP.
+      - traefik.http.middlewares.lk-lez-limit.ratelimit.average=20
+      - traefik.http.middlewares.lk-lez-limit.ratelimit.burst=60
+      - traefik.http.middlewares.lk-lez-limit.ratelimit.period=1s
+
+  drip:
+    build:
+      context: .
+      dockerfile: drip.Dockerfile
+    environment:
+      LK_DRIP_KEY: ${LK_DRIP_KEY}
+      LK_DRIP_SEQUENCER: http://sequencer:3040
+      LK_DRIP_AMOUNT: "1000000000"
+      LK_DRIP_EVERY_SECS: "3600"
+      LK_DRIP_IP_PER_HOUR: "5"
+    depends_on:
+      - sequencer
+    mem_limit: 256m
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.lk-drip-http.entrypoints=http
+      - traefik.http.routers.lk-drip-http.rule=Host(`lez-drip.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-drip-http.middlewares=redirect-to-https
+      - traefik.http.routers.lk-drip.entrypoints=https
+      - traefik.http.routers.lk-drip.rule=Host(`lez-drip.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-drip.tls=true
+      - traefik.http.routers.lk-drip.tls.certresolver=letsencrypt
+      - traefik.http.routers.lk-drip.service=lk-drip
+      - traefik.http.routers.lk-drip.middlewares=lk-cors
+      - traefik.http.services.lk-drip.loadbalancer.server.port=8080
+
+volumes:
+  lez-preview-data:

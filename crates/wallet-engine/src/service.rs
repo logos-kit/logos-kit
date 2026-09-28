@@ -303,7 +303,7 @@ impl Service {
     }
 
     fn zones(&self) -> Vec<Zone> {
-        let mut out = vec![Zone::testnet(), Zone::local()];
+        let mut out = Zone::builtin().to_vec();
         for z in &lock(&self.prefs).zones {
             if !out.iter().any(|o| o.id == z.id) {
                 out.push(z.clone());
@@ -316,7 +316,7 @@ impl Service {
         let want = lock(&self.prefs).zone.clone();
         let zones = self.zones();
         want.and_then(|id| zones.iter().find(|z| z.id == id).cloned())
-            .unwrap_or_else(Zone::testnet)
+            .unwrap_or_else(Zone::preview)
     }
 
     fn engine(&self) -> Result<Arc<Engine>> {
@@ -1401,7 +1401,13 @@ impl Service {
             a.account = self.private_account(&app, &a.account)?;
         }
         let zone = self.current_zone();
-        let url = lock(&self.prefs).faucets.get(&zone.id).cloned();
+        let url = lock(&self.prefs)
+            .faucets
+            .get(&zone.id)
+            .cloned()
+            .or_else(|| {
+                (zone == Zone::preview()).then(|| crate::session::PREVIEW_FAUCET.to_owned())
+            });
         let faucet = match (zone.id.as_str(), url) {
             (_, Some(url)) => Faucet::Http(HttpFaucet::new("Drip service", &url)?),
             ("lez-local", None) if is_loopback(&zone.sequencer) => {
@@ -2025,7 +2031,7 @@ fn is_loopback(url: &str) -> bool {
 }
 
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
-    if prefs.faucets.contains_key(&zone.id) {
+    if prefs.faucets.contains_key(&zone.id) || *zone == Zone::preview() {
         Some("Drip service")
     } else if zone.id == "lez-local" && is_loopback(&zone.sequencer) {
         Some("Local genesis key")
