@@ -58,7 +58,7 @@ export type OpenIntent = (
 export interface LogosKitHost {
   callModuleAsync: CallModuleAsync
   openIntent: OpenIntent
-  /** Default `lez:testnet`. */
+  /** Default `lez:preview` (the wallet's default network). */
   chain?: ChainId
   /** Wallet core module (default `logos_kit_wallet`). */
   module?: string
@@ -147,7 +147,7 @@ let ids = 0
 const newId = (): string => `lk-${Date.now().toString(36)}-${(++ids).toString(36)}`
 
 export function createLogosKit(host: LogosKitHost): LogosKit {
-  const chain = host.chain || CHAINS.lezTestnet
+  const chain = host.chain || CHAINS.lezPreview
   const timeout = host.intentTimeoutMs || 45000
   const wallet = createClient({
     transport: basecampModule({ callModuleAsync: host.callModuleAsync, module: host.module }),

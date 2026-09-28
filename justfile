@@ -101,6 +101,8 @@ qml-sdk:
 # Copy the QML SDK (LogosKit/ + LogosKitUi/) into every app that vendors it.
 qml-vendor:
     for d in modules/probe_dapp modules/logos_kit_testimonial modules/logos_kit_faucet templates/basecamp-dapp; do rm -rf $d/qml/LogosKit $d/qml/LogosKitUi; cp -R sdk/qml/LogosKit sdk/qml/LogosKitUi $d/qml/; done
+    # The template vendors the wallet contract (dependency_overrides).
+    cp modules/logos_kit_wallet/logos_kit_wallet.lidl templates/basecamp-dapp/logos_kit_wallet.lidl
 
 # QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
 qml-gate: qml-sdk

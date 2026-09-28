@@ -23,8 +23,8 @@ Hover over the code below to see the types.
 import { createClient, http, nodeActions } from '@logos-kit/client'
 
 const node = createClient({
-  transport: http('https://testnet.lez.logos.co', { retryCount: 2 }),
-  chain: 'lez:testnet',
+  transport: http('https://lez.84.46.247.92.sslip.io', { retryCount: 2 }),
+  chain: 'lez:preview',
 }).extend(nodeActions)
 
 async function main() {
@@ -64,11 +64,11 @@ declare const logos: {
 
 const wallet = createClient({
   transport: basecampModule({ callModuleAsync: logos.callModuleAsync }),
-  chain: 'lez:testnet',
+  chain: 'lez:preview',
 }).extend(walletActions)
 
 async function pay(to: string) {
-  const session = await wallet.connect({ chains: ['lez:testnet'] })
+  const session = await wallet.connect({ chains: ['lez:preview'] })
   const from = session.accounts[0].address
   //    ^?
 

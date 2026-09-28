@@ -25,7 +25,7 @@ than keeping a copy. `kit.sdk` holds helpers (`isUserRejection`,
 
 | Property | Default | Meaning |
 |---|---|---|
-| `chain` | `"lez:testnet"` | The network. Follows the wallet unless `followWallet` is off. |
+| `chain` | `"lez:preview"` | The network. Follows the wallet unless `followWallet` is off. |
 | `followWallet` | `true` | Check the wallet's network on start, when shown, and every 5 s while visible. |
 | `visible` | `true` | Bind to your view; hidden apps don't poll. |
 | `module` | `"logos_kit_wallet"` | The wallet core module. |
@@ -40,7 +40,7 @@ reads.
 | `connect({ accountKinds, capabilities, signIn })` | wallet sheet | `Session`: `{ sessionId, accounts[], chains, capabilities }` |
 | `getSession()` | read | `Session` or `null` |
 | `getAccounts()` | read | the accounts shared with you |
-| `getChainId()` | read | the wallet's network, e.g. `"lez:testnet"` |
+| `getChainId()` | read | the wallet's network, e.g. `"lez:preview"` |
 | `getWalletBalance(account, asset?)` | read | `{ amount, asset, synced, asOfBlock }` |
 | `readAccount(account, program)` | read | `{ nonce, data }` (a public account's data for one program) |
 | `transfer(from, to, amount, token?)` | wallet sheet | `{ handle }` once approved |

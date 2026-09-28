@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "quickstart",
+    "networks",
     "---Guides---",
     "guides/testimonial",
     "guides/faucet",

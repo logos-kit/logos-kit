@@ -1,5 +1,5 @@
 module logos_kit_wallet {
-  version "0.1.1"
+  version "0.1.2"
   description "Logos Kit wallet engine for the Logos Execution Zone: keys, accounts, approvals, proving"
 
   method ping() -> tstr description "Health check."
@@ -13,6 +13,7 @@ module logos_kit_wallet {
   method lez_getCapabilities(params: tstr) -> any description "LWS-0: what this wallet supports."
   method lez_getBalance(params: tstr) -> any description "LWS-0: balance of a shared account."
   method lez_readAccount(params: tstr) -> any description "LWS-0: a public account's data for one program (chain state)."
+  method lez_chainId(params: tstr) -> any description "LWS-0: the network the wallet is on ({chain})."
   method lez_openExplorer(params: tstr) -> any description "LWS-0: open the zone's explorer at a transaction or account (the wallet builds the URL)."
   method lez_signAndSendTransaction(params: tstr) -> any description "LWS-0: propose a transaction for the user's approval; answers a handle."
   method lez_getTransactionStatus(params: tstr) -> any description "LWS-0: status of this app's request."

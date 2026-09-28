@@ -56,5 +56,7 @@ export const WALLET_CORE_MODULE = 'logos_kit_wallet'
 /** Well-known zones. Zones are data: wallets may add more at runtime. */
 export const CHAINS = {
   lezTestnet: 'lez:testnet',
+  /** Logos Kit's public LEZ 0.3 network, until the official testnet runs 0.3. */
+  lezPreview: 'lez:preview',
   lezLocal: 'lez:local',
 } as const
