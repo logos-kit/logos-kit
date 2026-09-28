@@ -75,7 +75,10 @@ export const TESTIMONIAL_MAX_USERNAME = 32
  * The deployed testimonial program per chain (immutable deploys listed in
  * `registry/programs.json`). Missing until the chain has one.
  */
-export const TESTIMONIAL_PROGRAMS: Readonly<Record<string, AccountId>> = {}
+export const TESTIMONIAL_PROGRAMS: Readonly<Record<string, AccountId>> = {
+  // Logos Kit preview network (LEZ 0.3-rc1), immutable, image 8308e67d…
+  'lez:preview': '4vjENywUCfC3h85mjNGFPV7R9DqvUjV2xhMkCZbJR8XK' as AccountId,
+}
 const SEED_DOMAIN = utf8('logos-kit/testimonial/v1/')
 
 function testimonialSeed(tag: string, submission: string, extra: Bytes): Bytes {

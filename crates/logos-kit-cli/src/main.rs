@@ -763,9 +763,10 @@ async fn faucet(
 ) -> Result<()> {
     let (session, pw) = open(cli).await?;
     let sequencer = session.zone().sequencer.clone();
-    // The preview network ships with its drip faucet.
+    // The preview network ships with its drip faucet (unless a key is given).
     let url = url.or_else(|| {
-        (*session.zone() == Zone::preview()).then_some(wallet_engine::session::PREVIEW_FAUCET)
+        (key_env.is_none() && *session.zone() == Zone::preview())
+            .then_some(wallet_engine::session::PREVIEW_FAUCET)
     });
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
