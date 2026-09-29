@@ -15,6 +15,14 @@ services:
     mem_limit: 1500m
     cpus: 1.5
     restart: unless-stopped
+    # A restart replays every block before the RPC answers (minutes on a long
+    # chain); Traefik drops a container that isn't healthy, so give it time.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3040 -H 'content-type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getLastBlockId\",\"params\":[]}' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15m
     labels:
       - traefik.enable=true
       - traefik.http.routers.lk-lez-http.entrypoints=http
@@ -69,7 +77,14 @@ services:
       - traefik.http.routers.lk-drip.tls=true
       - traefik.http.routers.lk-drip.tls.certresolver=letsencrypt
       - traefik.http.routers.lk-drip.service=lk-drip
-      - traefik.http.routers.lk-drip.middlewares=lk-cors
+      # Its own CORS middleware: it must not depend on the sequencer's labels
+      # (Traefik ignores a container that is still starting).
+      - traefik.http.routers.lk-drip.middlewares=lk-drip-cors
+      - traefik.http.middlewares.lk-drip-cors.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.lk-drip-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS
+      - traefik.http.middlewares.lk-drip-cors.headers.accesscontrolallowheaders=content-type
+      - traefik.http.middlewares.lk-drip-cors.headers.accesscontrolexposeheaders=retry-after
+      - traefik.http.middlewares.lk-drip-cors.headers.accesscontrolmaxage=600
       - traefik.http.services.lk-drip.loadbalancer.server.port=8080
 
 volumes:
