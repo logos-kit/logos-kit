@@ -1,0 +1,41 @@
+---
+title: 'Tokens'
+description: 'Fungible tokens on LEZ: balances, transfers, and creating a test token.'
+---
+
+LEZ tokens live in the built-in token program. A token is identified by its
+**definition account**.
+
+## Balance and transfer
+
+```qml
+kit.api.getWalletBalance(account, definition).then(function (b) { root.tokens = b.amount })
+
+kit.api.transfer(from, to, "250", definition).then(function (r) { root.follow(r.handle) })
+```
+
+Public and private accounts both hold tokens; private token transfers prove
+like native ones. The approval sheet shows the token, the amount and the
+destination.
+
+A public token send is confirmed from the sender's token balance (it drops by
+exactly the amount; fees are paid in LEZ).
+
+## Build the call yourself
+
+```qml
+var call = kit.sdk.tokenTransfer(from, to, definition, "250")   // kind defaults to "fungible"
+kit.api.sendCall(from, call)
+```
+
+## Create a test token
+
+From the CLI (the whole supply goes to `--holder`):
+
+```sh
+logos-kit token create --name KIT --supply 1000000 --holder <public account>
+logos-kit token list
+```
+
+Amounts are base units. `kit.sdk.formatUnits(amount, decimals)` formats them
+when your token has decimals.

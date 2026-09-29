@@ -1,0 +1,41 @@
+---
+title: 'Private transfers'
+description: 'Shield, deshield and private sends: what changes for your app.'
+---
+
+Private transfers use the same calls as public ones. What changes is time:
+the wallet proves them on the user's machine first.
+
+```qml
+// Into the user's own private account (a shield):
+kit.api.transfer(publicAccount, privateHandle, "5000")
+```
+
+The route (shield, deshield, private-to-private) follows from the accounts;
+see [Accounts](/docs/concepts/accounts).
+
+<Shot name="wallet-private-review" caption="The approval names the route and asks for the password." />
+
+## Design for minutes, not seconds
+
+- `transfer()` resolves at **approval**. Proving comes after.
+- The status goes `building → proving → signing → submitted → included`, and
+  `status.proving.phase` updates while it proves.
+- Proving takes about 4–7 minutes on an M-series Mac and ~4.3 GB of memory.
+- The user may close your app: the proof keeps running in the wallet. When your
+  app opens again, follow the same handle (keep it with your state).
+
+<Shot name="faucet-proving" caption="The faucet app while a shield proves: elapsed time and steps." />
+
+## Confirming the outcome
+
+For private routes, the wallet confirms the outcome from **its own**
+account: the private balance moved by exactly the amount. A shield into the
+user's account usually ends `success`. If a note arrived at the same time, it
+may end `unknown`: re-read the balance.
+
+## Reading private balances
+
+`getWalletBalance(pvtHandle)` answers only if the user shared that private
+account with your app. While the wallet catches up with the chain, `synced` is
+`false`; show "Syncing" rather than a stale number.

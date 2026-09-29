@@ -1,11 +1,15 @@
 ---
 title: 'Quickstart'
-description: 'A Basecamp app on LEZ, from template to installed, in five minutes.'
+description: 'A Basecamp app on LEZ that connects, shows a balance and sends LEZ with a receipt: from template to installed in about ten minutes.'
 ---
 
-You need [Nix](https://nixos.org/download) with flakes, and Basecamp with the
-Logos Kit wallet installed (add the Logos Kit catalog in Basecamp's Package
-Manager).
+You'll end with a Basecamp app that connects to the wallet, shows the
+account's balance, gets test funds in-flow, and sends LEZ with a receipt.
+
+<Shot name="template-receipt" caption="What you'll have: the template after a send, with its receipt." />
+
+You need [Nix](https://nixos.org/download) with flakes, and Basecamp with
+Logos Kit Wallet installed ([Installation](/docs/getting-started/installation)).
 
 <Steps>
 <Step>
@@ -79,6 +83,8 @@ kit.api.transfer(root.account, to, "42").then(function (r) {
 </Step>
 </Steps>
 
+<Shot name="wallet-approval" caption="Your proposals appear in the wallet with your app's icon and name, decoded." />
+
 ## Develop against a local chain
 
 The SDK follows the wallet's network. Run a local sequencer, switch the wallet
@@ -88,5 +94,6 @@ you where you are.
 ## Next
 
 - [The testimonial app](/docs/guides/testimonial): a complete app on the SDK.
+- [Send a transaction](/docs/guides/send): the full lifecycle and every ending.
 - [QML SDK](/docs/sdk/qml): every call.
-- [Errors](/docs/sdk/errors): what can go wrong and what to show.
+- [Errors](/docs/reference/errors): what can go wrong and what to show.

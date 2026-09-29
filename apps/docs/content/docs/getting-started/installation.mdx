@@ -1,0 +1,95 @@
+---
+title: 'Installation'
+description: 'Install the wallet, then add the SDK to your app.'
+---
+
+## 1. The wallet
+
+Your app talks to a wallet the user already has. Install Logos Kit in
+Basecamp from its catalog:
+
+<Steps>
+<Step>
+
+### Add the catalog
+
+In Basecamp: **Settings → Package Repositories → Add**, and paste:
+
+```text
+https://raw.githubusercontent.com/logos-kit/logos-kit-modules/refs/heads/main/logos-repo.json
+```
+
+</Step>
+<Step>
+
+### Install Logos Kit Wallet
+
+Open **Applications**, pick **Logos Kit Wallet** and press **Install**. The
+wallet core (`logos_kit_wallet`) comes with it. The **Logos Kit Testimonials**
+and **Logos Kit Faucet** apps are in the same catalog.
+
+</Step>
+<Step>
+
+### Create a wallet
+
+Open it, choose **Create wallet**, and write down the recovery phrase. The
+wallet starts on the [preview network](/docs/concepts/networks); **Get test
+funds** fills a public account from its faucet.
+
+</Step>
+</Steps>
+
+Every package is signed by the Logos Kit release key. The catalog builds for
+macOS (Apple silicon) and Linux (x86-64 and arm64).
+
+Prefer a terminal? The [CLI](/docs/wallet/cli) is the same wallet.
+
+## 2. The SDK
+
+<Tabs items={['Basecamp app (QML)', 'TypeScript']}>
+<Tab value="Basecamp app (QML)">
+
+Start from the template, which already has the SDK, the UI kit and the
+wallet's contract:
+
+```sh
+nix flake init -t github:logos-kit/logos-kit#dapp
+```
+
+Or copy `sdk/qml/LogosKit/` (and optionally `sdk/qml/LogosKitUi/`) from the
+repo into your module's `qml/` folder, and add the wallet to your
+`metadata.json`:
+
+```json
+"dependencies": ["logos_kit_wallet"],
+"uses": [
+  { "intent": "lez.wallet.connect" },
+  { "intent": "lez.transaction.send" }
+]
+```
+
+Every intent you call must be listed under `uses`, as an object. Otherwise the
+shell answers `not_declared`.
+
+</Tab>
+<Tab value="TypeScript">
+
+```sh
+pnpm add @logos-kit/client @logos-kit/codec
+```
+
+The packages are QML-safe ES2017 (no native `BigInt`), so the same code runs in
+Node, browsers and Basecamp. See [TypeScript client](/docs/sdk/client).
+
+</Tab>
+</Tabs>
+
+## Requirements
+
+| For | You need |
+|---|---|
+| Using the wallet | Basecamp (macOS arm64 or Linux), or the `logos-kit` CLI |
+| Building a Basecamp app | [Nix](https://nixos.org/download) with flakes |
+| Private transfers | ~4.3 GB of free memory while proving; about 4–7 minutes per proof on an M-series Mac |
+| Building from source | Rust 1.98 (`rust-toolchain.toml`), Nix, and Docker for reproducible program builds |

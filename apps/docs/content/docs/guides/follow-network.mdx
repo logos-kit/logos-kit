@@ -1,0 +1,47 @@
+---
+title: 'Follow the network'
+description: 'Your app runs on whichever LEZ network the wallet is on.'
+---
+
+The user picks the network in the wallet (**Settings → Network**). The SDK
+follows it: on start, when your app is shown, and every 5 seconds while it's
+visible.
+
+```qml
+LogosKit {
+    id: kit
+    visible: root.visible
+    onApiChanged: if (api) root.reset()     // a new network: start over
+}
+
+Text { text: kit.chain }                     // "lez:preview", "lez:testnet", "lez:local"
+```
+
+When the network changes, `kit.api` is **rebuilt**. Anything your app holds
+from the old network (session, balances, handles, watchers) is stale:
+
+```qml
+property int epoch: 0
+
+function reset() {
+    epoch++
+    if (watcher) watcher.stop()
+    session = null; balance = ""; phase = "idle"
+}
+
+// Drop answers that arrive after the network changed.
+function live(f) {
+    var ep = epoch
+    return function (v) { if (ep === epoch) return f(v) }
+}
+
+kit.api.getWalletBalance(account).then(live(function (b) { balance = b.amount }))
+```
+
+Always read `kit.api` fresh; never keep a copy.
+
+To pin a network instead (for a demo, say), set `followWallet: false` and
+`chain`. Calls then fail with `4902 UnknownChain` while the wallet is
+elsewhere.
+
+Networks and their programs are listed in [Networks](/docs/concepts/networks).

@@ -1,0 +1,30 @@
+---
+title: 'Build with AI'
+description: 'Give your coding agent the whole of these docs in one file.'
+---
+
+These docs are written to be read by coding agents as well as people.
+
+| | |
+|---|---|
+| [`/llms.txt`](/llms.txt) | An index of every page, one line each |
+| [`/llms-full.txt`](/llms-full.txt) | Every page's text in one file: paste it into your agent's context |
+| Any page as Markdown | The **Copy Markdown** action on each page |
+| [`context7.json`](https://github.com/logos-kit/logos-kit/blob/main/context7.json) | Lets [Context7](https://context7.com) index the repo for MCP clients |
+| [`AGENTS.md`](https://github.com/logos-kit/logos-kit/blob/main/AGENTS.md) | The repo's rules for agents: security, the QML sandbox, naming |
+
+A good first prompt:
+
+```text
+Read https://logos-kit-docs.vercel.app/llms-full.txt. Then build a Basecamp
+ui_qml app from `nix flake init -t github:logos-kit/logos-kit#dapp` that
+connects a public account, shows its balance, and sends LEZ with a receipt.
+Handle user rejection, 6108 timeouts (onLateResult) and outcome "unknown".
+```
+
+Things agents get wrong in QML, and should be told:
+
+- amounts are strings: no `Number()`, no `BigInt` (use `kit.sdk.parseUnits`);
+- no `Intl`, no regex lookbehind or named groups, `short` is reserved;
+- no network access, remote or `data:` images, or `Qt.openUrlExternally`;
+- read `kit.api` fresh; it's rebuilt when the network changes.

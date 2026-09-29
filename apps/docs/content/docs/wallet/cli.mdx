@@ -1,0 +1,89 @@
+---
+title: 'CLI'
+description: 'logos-kit: the same wallet, engine and policy, from a terminal.'
+---
+
+`logos-kit` is the wallet on the command line. It shares the engine, the vault
+format and the approval policy with the Basecamp wallet.
+
+```sh
+git clone https://github.com/logos-kit/logos-kit && cd logos-kit
+cargo xtask lez-vendor                          # pinned LEZ + our patches into vendor/lez
+cargo install --path crates/logos-kit-cli
+logos-kit --help
+```
+
+Every command asks before it spends, and shows the decoded request, the fee
+cap and the request hash. `--yes` skips the prompt only when
+`LOGOS_KIT_PASSWORD` is set (scripts and CI); `--json` prints machine output.
+
+## Set up
+
+```sh
+logos-kit init                                  # new wallet; shows the phrase once
+logos-kit restore --from-date 2026-09-01        # or --from-genesis
+logos-kit status                                # zone, sync, network
+```
+
+## Accounts
+
+```sh
+logos-kit account new                           # public
+logos-kit account new --private                 # private
+logos-kit account list
+logos-kit account label <account> "Savings"
+logos-kit account keys <private account> > keys.txt   # for others to pay it privately
+logos-kit balance <account> [--token <definition>]
+```
+
+## Funds and transfers
+
+```sh
+logos-kit faucet <account>                      # preview network: its drip faucet
+logos-kit send --from <a> --to <b> --amount 42
+logos-kit send --from <a> --to <b> --amount 250 --token <definition>
+logos-kit shield --from <public> --to <your private> --amount 5000
+logos-kit deshield --from <your private> --to <public> --amount 100
+logos-kit send --from <private> --to-keys keys.txt --amount 10   # someone else's private account
+```
+
+Private routes prove locally (about 4–7 minutes on an M-series Mac).
+
+## Tokens and programs
+
+```sh
+logos-kit token create --name KIT --supply 1000000 --holder <public>
+logos-kit token list
+logos-kit program <address or builtin name>     # header and source verification
+logos-kit verify-program <address>              # rebuild in docker and compare
+logos-kit call --from <a> --program <p> --account <id[:shard][:signer]> --data <base64>
+```
+
+## Testimonials
+
+```sh
+logos-kit testimonial post --from <public> --text "…Logos Kit…" [--username alice]
+logos-kit testimonial list
+logos-kit testimonial evidence --snapshot ./snapshots   # adoption evidence from chain data
+```
+
+## Safety
+
+```sh
+logos-kit backup export wallet.backup           # encrypted; needs the same password
+logos-kit backup import wallet.backup
+logos-kit reveal                                # the phrase (asks the password again)
+logos-kit password                              # change it
+logos-kit auto-lock 900                         # seconds (60–86400)
+```
+
+## Networks
+
+```sh
+logos-kit --zone lez-preview …                  # default: Logos Kit's 0.3 network
+logos-kit --zone lez-local …                    # a local sequencer on :3040
+logos-kit --zone my-zone --sequencer https://… …# any other zone
+```
+
+Or set `LOGOS_KIT_ZONE`. The wallet's files live in `--home` /
+`LOGOS_KIT_HOME` (default `~/.logos-kit`).

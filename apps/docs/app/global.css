@@ -36,3 +36,16 @@ html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
 }
+
+/* Screenshot backdrop (components/shot.tsx): a quiet Tray gradient. */
+.lk-backdrop {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgb(31 123 255 / 0.1), transparent 60%),
+    radial-gradient(90% 70% at 100% 100%, rgb(124 92 255 / 0.1), transparent 60%),
+    var(--color-fd-secondary);
+}
+.dark .lk-backdrop {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgb(56 152 255 / 0.14), transparent 60%),
+    radial-gradient(90% 70% at 100% 100%, rgb(139 114 255 / 0.12), transparent 60%), #0b0b0d;
+}

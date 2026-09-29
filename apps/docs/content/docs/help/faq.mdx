@@ -1,0 +1,59 @@
+---
+title: 'FAQ'
+description: 'Short answers to the questions people ask first.'
+---
+
+<Accordions>
+<Accordion title="Is it safe to use with real funds?">
+
+No. Logos Kit runs on LEZ testnets and hasn't been audited. Use test funds
+only.
+
+</Accordion>
+<Accordion title="Where are my keys?">
+
+In the wallet's encrypted vault on your machine (Argon2id and
+XChaCha20-Poly1305). No app, and no Logos Kit server, ever sees them. See the
+[security model](/docs/wallet/security).
+
+</Accordion>
+<Accordion title="Why is a private transfer so slow?">
+
+It's proved on your own machine with RISC Zero, so your keys never leave it.
+That takes minutes on a laptop. Public transfers take seconds.
+
+</Accordion>
+<Accordion title="What is the preview network?">
+
+Logos Kit's public LEZ 0.3 network, run until the official testnet moves from
+0.2 to 0.3. It runs the same release candidate, with real proofs.
+[Details](/docs/concepts/networks).
+
+</Accordion>
+<Accordion title="Do testimonials on the preview network count for LP-0021?">
+
+No. The prize counts testimonials on the official LEZ testnet. The program
+will be redeployed there once it runs 0.3.
+
+</Accordion>
+<Accordion title="Can my web app use it?">
+
+Your web app can read chain data today with `@logos-kit/client` (the preview
+network allows browser calls). Connecting a web app to a wallet (a React
+connect kit and an embedded passkey wallet) is on the roadmap.
+
+</Accordion>
+<Accordion title="Do I need Logos Kit Wallet to build an app?">
+
+Your users need a wallet that answers the LWS-0 intents; Logos Kit Wallet is
+one. During development you can also test against the conformance fake
+(`modules/logos_kit_wallet_fake`, `just conformance <dapp>`).
+
+</Accordion>
+<Accordion title="Is it open source?">
+
+Yes, MIT or Apache-2.0, at
+[github.com/logos-kit/logos-kit](https://github.com/logos-kit/logos-kit).
+
+</Accordion>
+</Accordions>

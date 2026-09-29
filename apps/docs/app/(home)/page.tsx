@@ -62,7 +62,7 @@ export default function HomePage() {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link
-            href="/docs/quickstart"
+            href="/docs/getting-started/quickstart"
             className="rounded-full bg-fd-foreground px-6 py-3 font-medium text-fd-background text-sm transition active:scale-[0.97]"
           >
             Build an app

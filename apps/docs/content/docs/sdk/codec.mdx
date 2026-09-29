@@ -1,0 +1,70 @@
+---
+title: 'Codec'
+description: '@logos-kit/codec: byte-exact LEZ 0.3 encoding, program calls and amounts, without BigInt.'
+---
+
+`@logos-kit/codec` encodes and decodes what LEZ puts on the wire: account ids,
+messages, transactions, program instructions and the testimonial program's
+records. It matches the Rust engine byte for byte (both are checked against the
+same test vectors), and it runs in Qt's JavaScript engine: no native `BigInt`,
+`u128` values are decimal strings.
+
+```sh
+pnpm add @logos-kit/codec
+```
+
+## Program calls
+
+A `ProgramCall` is what `sendCall` proposes: the program, the accounts it
+touches, and the instruction bytes.
+
+```ts twoslash
+import { nativeTransfer, tokenTransfer } from '@logos-kit/codec'
+import type { AccountId } from '@logos-kit/codec'
+
+declare const from: AccountId, to: AccountId, token: AccountId
+
+const pay = nativeTransfer(from, to, '42')
+const give = tokenTransfer(from, to, token, '250')
+//    ^?
+```
+
+<auto-type-table cwd path="../../packages/codec/src/programs.ts" name="ProgramCall" />
+
+## Amounts
+
+```ts twoslash
+import { formatUnits, parseUnits, add, compare } from '@logos-kit/codec'
+
+parseUnits('1.5', 6)      // "1500000"
+formatUnits('1500000', 6) // "1.5"
+add('1', '2')             // "3"
+compare('10', '9')        // 1
+```
+
+## Accounts and bytes
+
+| Export | |
+|---|---|
+| `isAccountId(s)`, `publicAccountId(pubkey)`, `publicPda(program, seed)` | Account ids (base58) |
+| `NATIVE_TOKEN_PROGRAM`, `TOKEN_PROGRAM`, `ATA_PROGRAM`, `PROGRAM_LOADER`, `builtinProgram(name)` | Built-in programs |
+| `toBase58`/`fromBase58`, `toBase64`/`fromBase64`, `toHex`/`fromHex`, `utf8` | Bytes |
+| `sha256(bytes)` | Pure-JS SHA-256 |
+| `Reader`, `Writer` | Borsh |
+
+## Messages and transactions
+
+| Export | |
+|---|---|
+| `encodeMessage`, `decodeMessage`, `messageHash` | Public messages |
+| `encodeTransaction`, `decodeTransaction`, `transactionHash`, `sendTransactionParam` | Signed transactions |
+| `defaultMaxFee(gasLimit)`, `DEFAULT_GAS_LIMIT` | Fees |
+
+## Testimonials
+
+| Export | |
+|---|---|
+| `TESTIMONIAL_PROGRAMS` | The deployed program per chain (`lez:preview` today) |
+| `testimonialPost(…)` | The post call (the page account included) |
+| `decodeTestimonial`, `decodeTestimonialStats` | Records and stats pages |
+| `TESTIMONIAL_MAX_TEXT` (280), `TESTIMONIAL_MAX_USERNAME` (32), `TESTIMONIAL_PAGE_SIZE` (1000) | The program's limits (bytes) |
