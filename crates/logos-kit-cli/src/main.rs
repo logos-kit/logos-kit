@@ -231,13 +231,18 @@ enum TestimonialCmd {
         submission: String,
     },
     /// Adoption evidence from chain data: distinct authors per month, the
-    /// LP-0021 target, each author's other activity. Repeat --program for a
+    /// LP-0021 target, and each author's own transactions before its post
+    /// (prior activity, read from the blocks). Repeat --program for a
     /// redeploy or a chain reset.
     Evidence {
         #[arg(long = "program")]
         programs: Vec<String>,
         #[arg(long, default_value = testimonial::SUBMISSION)]
         submission: String,
+        /// Block-scan cache to resume from (default: `<snapshot>/.blocks-<zone>.json`
+        /// with --snapshot, none otherwise).
+        #[arg(long)]
+        cache: Option<PathBuf>,
         /// Also write `<dir>/<submission>-<date>.json` (records + tip block).
         #[arg(long)]
         snapshot: Option<PathBuf>,
@@ -978,6 +983,7 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
             programs,
             submission,
             snapshot,
+            cache,
         } => {
             let (mut session, _) = open(cli).await?;
             session.connect().await?;
@@ -990,7 +996,13 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                     .collect::<Result<Vec<_>>>()?
             };
             let core = session.core().context("not connected")?;
-            let evidence = testimonial::evidence(core, &programs, submission).await?;
+            let cache = cache.clone().or_else(|| {
+                snapshot
+                    .as_ref()
+                    .map(|d| d.join(format!(".blocks-{}.json", session.zone().id)))
+            });
+            let evidence =
+                testimonial::evidence(core, &programs, submission, cache.as_deref()).await?;
             let value = serde_json::to_value(&evidence)?;
             if let Some(dir) = snapshot {
                 std::fs::create_dir_all(dir)?;
@@ -1018,11 +1030,23 @@ async fn testimonial_cmd(cli: &Cli, cmd: &TestimonialCmd) -> Result<()> {
                 }
                 let t = &evidence.target;
                 println!(
-                    "target: {} total ({}), {} per month over 2 consecutive months ({}) → {}",
+                    "{} of {} author(s) had their own transactions before posting (prior activity)",
+                    t.qualified, evidence.distinct_authors
+                );
+                println!(
+                    "target, qualified authors only: {} total ({}), {} per month over 2 consecutive months ({}) → {}",
                     t.total,
-                    if t.total_met { "met" } else { "not yet" },
+                    if t.qualified_total_met {
+                        "met"
+                    } else {
+                        "not yet"
+                    },
                     t.per_month,
-                    if t.months_met { "met" } else { "not yet" },
+                    if t.qualified_months_met {
+                        "met"
+                    } else {
+                        "not yet"
+                    },
                     if t.met { "MET" } else { "not met" }
                 );
             });

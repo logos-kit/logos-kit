@@ -101,7 +101,10 @@ check "evidence tally consistent" "$(echo "$EV" | field "['programs'][0]['consis
 check "evidence months" "$(echo "$EV" | field "['months'].__len__()")" 1
 check "evidence target met" "$(echo "$EV" | field "['target']['met']")" False
 check "evidence program immutable" "$(echo "$EV" | field "['target']['immutable']")" True
-check "evidence author other txs" "$(echo "$EV" | field "['entries'][0]['otherTxs']")" 0
+# A1 was funded by the faucet (the faucet signs that) and then posted: no
+# transaction of its own before the post, so no prior activity.
+check "evidence first author prior activity" "$(echo "$EV" | field "['entries'][0]['hasPriorActivity']")" False
+check "evidence first author post block found" "$(echo "$EV" | field "['entries'][0]['postBlock'] is not None")" True
 check "snapshot written" "$(ls "$SNAP" | wc -l | tr -d ' ')" 1
 
 echo "OK: S5 testimonial deploy + posts + evidence (dev-mode proofs)"

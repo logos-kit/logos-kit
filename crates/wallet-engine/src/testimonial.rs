@@ -261,8 +261,14 @@ pub struct Entry {
     pub time: String,
     /// `YYYY-MM`.
     pub month: String,
-    /// Transactions the author signed besides this one (public nonce − 1).
-    pub other_txs: String,
+    /// Block and hash of the post (its first call to this program).
+    pub post_block: Option<u64>,
+    pub post_tx: Option<String>,
+    /// Transactions the author itself signed strictly before the post, other
+    /// than calls to the testimonial program: LP-0021's "prior activity".
+    /// A faucet drop doesn't count (the faucet signs it).
+    pub prior_txs: Vec<crate::activity::SignedTx>,
+    pub has_prior_activity: bool,
     /// Native balance now.
     pub balance: String,
 }
@@ -299,6 +305,13 @@ pub struct Target {
     pub months_met: bool,
     /// Every program read is immutable (its whole history is this code).
     pub immutable: bool,
+    /// Authors with prior activity (see [`Entry::prior_txs`]).
+    pub qualified: usize,
+    /// Qualified authors ≥ total, and two consecutive months with ≥ per_month
+    /// new qualified authors each.
+    pub qualified_total_met: bool,
+    pub qualified_months_met: bool,
+    /// Every requirement above, counting qualified authors only.
     pub met: bool,
 }
 
@@ -330,10 +343,12 @@ pub struct Evidence {
     pub generated_ms: u64,
 }
 
+/// `cache`: a file the block scan resumes from (see [`crate::activity`]).
 pub async fn evidence(
     core: &WalletCore,
     programs: &[AccountId],
     submission: &str,
+    cache: Option<&std::path::Path>,
 ) -> Result<Evidence> {
     ensure!(!programs.is_empty(), "name at least one program account");
     let tip_id = core.get_last_block_id().await?;
@@ -341,6 +356,8 @@ pub async fn evidence(
         .get_block(tip_id)
         .await?
         .with_context(|| format!("block {tip_id} not found"))?;
+    let history = crate::activity::History::scan(core, tip_id, cache).await?;
+    let mut qualified_first: HashMap<AccountId, u64> = HashMap::new();
     let mut entries = Vec::new();
     let mut summaries = Vec::new();
     let mut earliest: HashMap<AccountId, u64> = HashMap::new();
@@ -371,6 +388,17 @@ pub async fn evidence(
                 let account = core
                     .get_account_view(ProgramShardSelector::native_balance(author))
                     .await?;
+                let author_s = author.to_string();
+                let program_s = program.to_string();
+                let post = history.first_call(&author_s, &program_s).cloned();
+                let prior = post
+                    .as_ref()
+                    .map(|p| history.before(&author_s, p.block, &program_s))
+                    .unwrap_or_default();
+                if !prior.is_empty() {
+                    let first = qualified_first.entry(author).or_insert(t.timestamp_ms);
+                    *first = (*first).min(t.timestamp_ms);
+                }
                 entries.push(Entry {
                     program: program.to_string(),
                     index,
@@ -380,7 +408,10 @@ pub async fn evidence(
                     timestamp_ms: t.timestamp_ms,
                     time: iso(t.timestamp_ms),
                     month: month_str(month),
-                    other_txs: account.nonce.0.saturating_sub(1).to_string(),
+                    post_block: post.as_ref().map(|p| p.block),
+                    post_tx: post.map(|p| p.hash),
+                    has_prior_activity: !prior.is_empty(),
+                    prior_txs: prior,
                     balance: account.data.native_balance().unwrap_or(0).to_string(),
                 });
                 index += 1;
@@ -406,13 +437,16 @@ pub async fn evidence(
         *months.entry(testimonial_core::yyyymm(first)).or_default() += 1;
     }
     let distinct = earliest.len();
-    let months_met = months.iter().any(|(&m, &n)| {
-        n >= TARGET_PER_MONTH
-            && months
-                .get(&testimonial_core::next_month(m))
-                .is_some_and(|&k| k >= TARGET_PER_MONTH)
-    });
+    let months_met = two_months(&months);
     let immutable = summaries.iter().all(|p| p.immutable);
+    let mut qualified_months: BTreeMap<u32, usize> = BTreeMap::new();
+    for &first in qualified_first.values() {
+        *qualified_months
+            .entry(testimonial_core::yyyymm(first))
+            .or_default() += 1;
+    }
+    let qualified = qualified_first.len();
+    let qualified_months_met = two_months(&qualified_months);
     Ok(Evidence {
         submission: submission.to_owned(),
         programs: summaries,
@@ -431,7 +465,10 @@ pub async fn evidence(
             total_met: distinct >= TARGET_TOTAL,
             months_met,
             immutable,
-            met: distinct >= TARGET_TOTAL && months_met && immutable,
+            qualified,
+            qualified_total_met: qualified >= TARGET_TOTAL,
+            qualified_months_met,
+            met: qualified >= TARGET_TOTAL && qualified_months_met && immutable,
         },
         entries,
         tip: Tip {
@@ -440,6 +477,16 @@ pub async fn evidence(
             timestamp_ms: tip.header.timestamp,
         },
         generated_ms: now_ms(),
+    })
+}
+
+/// Two consecutive calendar months with ≥ [`TARGET_PER_MONTH`] each.
+fn two_months(months: &BTreeMap<u32, usize>) -> bool {
+    months.iter().any(|(&m, &n)| {
+        n >= TARGET_PER_MONTH
+            && months
+                .get(&testimonial_core::next_month(m))
+                .is_some_and(|&k| k >= TARGET_PER_MONTH)
     })
 }
 

@@ -137,6 +137,10 @@ impl KeyFaucet {
         })
     }
 
+    pub const fn drop_amount(&self) -> u128 {
+        self.drop
+    }
+
     pub const fn treasury(&self) -> AccountId {
         self.treasury
     }
@@ -147,7 +151,8 @@ impl KeyFaucet {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    async fn balance(&self, id: AccountId) -> Result<u128> {
+    /// A public account's native balance (the drip reconciles with it).
+    pub async fn balance(&self, id: AccountId) -> Result<u128> {
         let account = self
             .client
             .get_account_view(ProgramShardSelector::native_balance(id))

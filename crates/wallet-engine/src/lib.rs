@@ -4,6 +4,7 @@
 //! zones, sync and auto-lock. Policy, approvals and proving arrive in S3–S4
 //! (see docs/dev/PLAN.md).
 
+pub mod activity;
 pub mod api;
 pub mod auto_lock;
 pub mod backup;
