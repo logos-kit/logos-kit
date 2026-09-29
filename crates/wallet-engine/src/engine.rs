@@ -1268,7 +1268,15 @@ impl Engine {
                 // Native pays the fee too (within the cap); a token moves by
                 // exactly the amount (fees are native).
                 let fee = if w.token.is_some() { 0 } else { w.max_fee };
-                match after.and_then(|a| before.checked_sub(a)) {
+                let moved = if w.incoming {
+                    // Arrives exactly (fees are native, the slot is ours).
+                    after
+                        .and_then(|a| a.checked_sub(before))
+                        .filter(|d| *d == w.out)
+                } else {
+                    after.and_then(|a| before.checked_sub(a))
+                };
+                match moved {
                     Some(d) if d >= w.out && d <= w.out.saturating_add(fee) => {
                         (Outcome::Success, OutcomeSource::OwnAccountInvariant)
                     }
@@ -1309,6 +1317,8 @@ struct PublicWatch {
     token: Option<String>,
     out: u128,
     max_fee: u128,
+    /// The amount arrives instead of leaving (a token create's supply).
+    incoming: bool,
 }
 
 /// For public transactions: the native outflow of our sender, else its one
@@ -1330,6 +1340,7 @@ fn public_invariant(review: &Review) -> Option<PublicWatch> {
             token: None,
             out: native,
             max_fee,
+            incoming: false,
         });
     }
     let mut tokens = ours().filter_map(|f| match &f.asset {
@@ -1339,12 +1350,31 @@ fn public_invariant(review: &Review) -> Option<PublicWatch> {
         } => Some((definition.clone(), f.amount)),
         _ => None,
     });
-    let (definition, out) = tokens.next()?;
-    (tokens.next().is_none() && out > 0).then_some(PublicWatch {
+    if let Some((definition, out)) = tokens.next() {
+        return (tokens.next().is_none() && out > 0).then_some(PublicWatch {
+            from,
+            token: Some(definition),
+            out,
+            max_fee,
+            incoming: false,
+        });
+    }
+    // Nothing leaves: one fungible-token inflow to our sender (token create).
+    let mut ins = review.summary.inflows.iter().filter(|f| f.account == from);
+    let f = ins.next()?;
+    let Asset::Token {
+        definition,
+        nft: None,
+    } = &f.asset
+    else {
+        return None;
+    };
+    (ins.next().is_none() && f.amount > 0).then(|| PublicWatch {
         from,
-        token: Some(definition),
-        out,
+        token: Some(definition.clone()),
+        out: f.amount,
         max_fee,
+        incoming: true,
     })
 }
 

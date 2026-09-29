@@ -295,6 +295,15 @@ fn token(data: &[u8], accounts: &[AccountId], program: AccountId) -> Option<Summ
                 "Total supply {total_supply}, all to {}",
                 short(holding)
             )],
+            // The whole supply lands in the holder's token slot.
+            inflows: vec![Flow {
+                account: holding.to_string(),
+                asset: Asset::Token {
+                    definition: definition.to_string(),
+                    nft: None,
+                },
+                amount: total_supply,
+            }],
             authorities: vec![mint_authority(definition)],
             ..Summary::default()
         },

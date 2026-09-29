@@ -45,6 +45,7 @@ fi
 step "token create (holder A)"
 T=$("$LK" token create --name KIT --supply 1000000 --holder "$A" --yes --json | last); echo "$T"
 DEF=$(echo "$T" | get "['definition']")
+ok "token create" "$(echo "$T" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['status']))")"
 
 step "token send A -> B (public)"
 ok "token public send" "$("$LK" send --from "$A" --to "$B" --amount 250 --token "$DEF" --yes --json | last)"
