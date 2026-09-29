@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Shapes
 
 // Progress ring (proof sheet, island). `value` 0..1, eased, never backwards.

@@ -1,4 +1,5 @@
 import QtQuick
+import "LogosKitUi"
 import QtQuick.Layouts
 import "LogosKitWallet"
 import "LogosKitWallet/Fmt.js" as Fmt
@@ -53,7 +54,17 @@ Item {
             if (!store.unlocked && root.sheet !== "") root.sheet = ""
         }
         function onPendingChanged() { root.showPending() }
-        function onToast(text, tone) { toast.show(text) }
+        function onSettled(s) {
+            var ok = s.lifecycle === "included" && s.outcome === "success"
+            toasts.show({
+                title: ok ? (s.title || "Transaction") + " confirmed"
+                     : s.lifecycle === "included" ? (s.title || "Transaction") + " not confirmed yet"
+                     : (s.title || "Transaction") + (s.lifecycle === "rejected" ? " declined" : " not sent"),
+                body: s.block ? "Block " + Fmt.amount(String(s.block), 0) : (s.error || ""),
+                tone: ok ? "ok" : s.lifecycle === "included" ? "warn" : "danger"
+            })
+        }
+        function onToast(text, tone) { toasts.show({ title: text, tone: tone === "ok" ? "ok" : tone === "danger" || tone === "error" ? "danger" : "info" }) }
     }
 
     // -- screens -------------------------------------------------------------------------
@@ -93,7 +104,7 @@ Item {
         onFunds: {
             var acct = store.current
             if (!acct) return
-            store.requestFunds(acct.accountId, function (v, e) { if (e) toast.show(Fmt.errorText(e)) })
+            store.requestFunds(acct.accountId, function (v, e) { if (e) toasts.show({ title: "Couldn't request test LEZ", body: Fmt.errorText(e), tone: "danger" }) })
         }
         onOpenStatus: function (s) {
             if (s.lifecycle === "awaiting_approval") return
@@ -112,7 +123,7 @@ Item {
     }
 
     // -- the sheet layer ---------------------------------------------------------------------
-    Sheet {
+    TraySheet {
         id: sheetLayer
         open: root.sheet !== "" && store.unlocked
         stepKey: root.sheet + ":" + sendFlow.step
@@ -200,22 +211,6 @@ Item {
         }
     }
 
-    // -- toast ------------------------------------------------------------------------------
-    Rectangle {
-        id: toast
-        property string text: ""
-        function show(t) { text = t; opacity = 1; hide.restart() }
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: parent.height - height - 24
-        z: 60
-        opacity: 0
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-        implicitHeight: 36
-        width: tt.implicitWidth + 32
-        radius: 18
-        color: Theme.text
-        Txt { id: tt; anchors.centerIn: parent; text: toast.text; color: Theme.bg; font.pixelSize: 13; font.weight: Font.DemiBold }
-        Timer { id: hide; interval: 2400; onTriggered: toast.opacity = 0 }
-    }
+    // -- toasts (kit ToastHost: Sonner-style stack) -----------------------------------------------
+    ToastHost { id: toasts; anchors.fill: parent; z: 60 }
 }

@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import "Fmt.js" as Fmt
@@ -40,12 +41,21 @@ Item {
             spacing: 14
 
             // -- header ----------------------------------------------------------
+            Stepper {
+                visible: ob.step === "password" || ob.step === "phrase" || ob.step === "confirm"
+                Layout.fillWidth: true
+                Layout.bottomMargin: 8
+                steps: ["Password", "Back up", "Confirm"]
+                current: ob.step === "password" ? 0 : ob.step === "phrase" ? 1 : 2
+            }
             Rectangle {
+                visible: ob.step !== "ready"
                 Layout.alignment: Qt.AlignHCenter
                 implicitWidth: 64; implicitHeight: 64; radius: 20; color: "#000000"
                 border.width: 1; border.color: "#1affffff"
                 LogosMark { anchors.centerIn: parent; size: 46 }
             }
+            SuccessCheck { visible: ob.step === "ready"; Layout.alignment: Qt.AlignHCenter; size: 72 }
             Txt {
                 Layout.alignment: Qt.AlignHCenter
                 text: ob.step === "unlock" ? "Welcome back"
@@ -73,11 +83,12 @@ Item {
                     : ob.step === "restore" ? "Enter the 24 words of a Logos Kit or LEZ wallet."
                     : "A wallet for the Logos Execution Zone. Private by default."
             }
-            Tag {
+            Badge {
                 Layout.alignment: Qt.AlignHCenter
                 visible: ob.step === "welcome" || ob.step === "unlock"
-                text: ob.store.zone.chain === "lez:local" ? "Local network" : ob.store.zone.chain === "lez:preview" ? "Preview network (LEZ 0.3)" : "Testnet"
-                tone: "action"
+                text: ob.store.zone.chain === "lez:local" ? "Local network" : ob.store.zone.chain === "lez:preview" ? "Preview network · LEZ 0.3" : "Testnet"
+                tone: "ok"
+                live: true
             }
 
             // -- welcome ---------------------------------------------------------
@@ -89,28 +100,21 @@ Item {
                 Btn { objectName: "createWallet"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Create wallet"; onClicked: ob.go("password") }
                 Btn { objectName: "restoreWallet"; Layout.fillWidth: true; large: true; text: "Restore from recovery phrase"; onClicked: ob.go("restore") }
                 // Zones are data: the local sequencer is for development.
-                RowLayout {
+                ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 8
                     spacing: 6
                     visible: (ob.store.state.zones || []).length > 1
-                    Txt { text: "Network"; tone: "text3"; font.pixelSize: 12 }
-                    Repeater {
-                        model: ob.store.state.zones || []
-                        Rectangle {
-                            implicitHeight: 26
-                            implicitWidth: zt.implicitWidth + 18
-                            radius: 13
-                            readonly property bool on: modelData.id === ob.store.zone.id
-                            color: on ? Theme.surface2 : "transparent"
-                            border.width: 1
-                            border.color: on ? Theme.text3 : Theme.line
-                            Txt { id: zt; anchors.centerIn: parent; text: modelData.chain; font.pixelSize: 12; tone: parent.on ? "text" : "text2" }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: ob.store.call("setPrefs", { zone: modelData.id }, function () { ob.store.refreshState() })
-                            }
+                    Txt { Layout.alignment: Qt.AlignHCenter; text: "Network"; tone: "text3"; font.pixelSize: 12 }
+                    SegmentedControl {
+                        Layout.alignment: Qt.AlignHCenter
+                        readonly property var zones: ob.store.state.zones || []
+                        options: zones.map(function (z) { return z.chain === "lez:preview" ? "Preview" : z.chain === "lez:testnet" ? "Testnet" : z.chain === "lez:local" ? "Local" : z.chain })
+                        currentIndex: {
+                            for (var i = 0; i < zones.length; i++) if (zones[i].id === ob.store.zone.id) return i
+                            return 0
                         }
+                        onActivated: function (i) { ob.store.call("setPrefs", { zone: zones[i].id }, function () { ob.store.refreshState() }) }
                     }
                 }
             }
@@ -121,18 +125,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: 10
                 Field { id: pw1; objectName: "password"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password (8+ characters)" }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    Repeater {
-                        model: 4
-                        Rectangle {
-                            Layout.fillWidth: true; height: 4; radius: 2
-                            readonly property int s: Fmt.strength(pw1.text)
-                            color: index < s ? (s <= 1 ? Theme.danger : s === 2 ? Theme.warn : Theme.ok) : Theme.surface2
-                        }
-                    }
-                }
+                PasswordStrength { Layout.fillWidth: true; password: pw1.text; minLength: 8 }
                 Field { id: pw2; objectName: "password2"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Confirm password"; invalid: text.length > 0 && text !== pw1.text; onAccepted: createBtn.clicked() }
                 Btn {
                     id: createBtn
@@ -163,38 +156,19 @@ Item {
                 visible: ob.step === "phrase"
                 Layout.fillWidth: true
                 spacing: 12
-                Rectangle {
+                Card {
                     Layout.fillWidth: true
-                    implicitHeight: grid.implicitHeight + 28
-                    radius: Theme.rCard
-                    color: Theme.surface
-                    GridLayout {
-                        id: grid
-                        anchors.fill: parent
-                        anchors.margins: 14
+                    pad: 14
+                    PhraseGrid {
+                        width: parent.width
+                        words: ob.words
+                        revealed: ob.revealed
                         columns: col.width < 380 ? 2 : 3
-                        rowSpacing: 8
-                        columnSpacing: 8
-                        Repeater {
-                            model: ob.words
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: 34
-                                radius: 12
-                                color: Theme.surface2
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    spacing: 6
-                                    Txt { text: (index + 1) + ""; tone: "text3"; font.pixelSize: 11; num: true; Layout.preferredWidth: 16 }
-                                    Txt { Layout.fillWidth: true; text: ob.revealed ? modelData : "•••••"; font.pixelSize: 14; font.weight: Font.Medium; mono: ob.revealed }
-                                }
-                            }
-                        }
+                        onRevealRequested: ob.revealed = true
                     }
                 }
                 Btn { visible: !ob.revealed; objectName: "revealPhrase"; Layout.fillWidth: true; icon: "eye"; text: "Reveal"; onClicked: ob.revealed = true }
-                Notice { tone: "warn"; text: "Never type these words into a website or share them. Logos Kit will never ask for them." }
+                Notice { tone: "warn"; text: "Write them on paper, in order. Never type them into a website or share them: Logos Kit will never ask for them." }
                 Btn { objectName: "savedPhrase"; Layout.fillWidth: true; large: true; tone: "ink"; text: "I've saved it"; enabled: ob.revealed; onClicked: ob.go("confirm") }
             }
 
@@ -210,7 +184,7 @@ Item {
                     Field {
                         Layout.fillWidth: true
                         objectName: "confirmWord" + modelData
-                        placeholderText: "Word " + modelData
+                        placeholderText: "Word #" + modelData + " of your phrase"
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                     }
                 }
@@ -234,7 +208,8 @@ Item {
                 Btn { Layout.fillWidth: true; tone: "ghost"; text: "Show the phrase again"; onClicked: ob.go("phrase") }
                 SequentialAnimation {
                     id: shake
-                    NumberAnimation { target: confirmCol; property: "x"; to: -8; duration: 50 }
+                    alwaysRunToEnd: true
+                    NumberAnimation { target: confirmCol; property: "x"; to: -8; duration: Theme.reducedMotion ? 0 : 50 }
                     NumberAnimation { target: confirmCol; property: "x"; to: 8; duration: 50 }
                     NumberAnimation { target: confirmCol; property: "x"; to: 0; duration: 50 }
                 }
@@ -247,29 +222,36 @@ Item {
                 spacing: 10
                 Repeater {
                     model: ob.accounts
-                    Rectangle {
+                    Card {
                         Layout.fillWidth: true
-                        implicitHeight: 70
-                        radius: Theme.rCard
-                        color: Theme.surface
+                        pad: 14
                         RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 14
+                            width: parent.width
                             spacing: 12
-                            Identicon { seed: modelData.accountId; size: 38 }
+                            Item {
+                                implicitWidth: 40; implicitHeight: 40
+                                Identicon { seed: modelData.accountId; size: 40 }
+                                Rectangle {
+                                    visible: modelData.kind === "private"
+                                    width: 16; height: 16; radius: 8; x: 27; y: 27
+                                    color: Theme.priv; border.width: 2; border.color: Theme.surface
+                                    Glyph { anchors.centerIn: parent; name: "lock"; color: "#ffffff"; width: 9; height: 9; stroke: 2.6 }
+                                }
+                            }
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 2
                                 RowLayout {
-                                    spacing: 6
-                                    Txt { text: Fmt.accountName(modelData); font.weight: Font.DemiBold }
-                                    Tag { text: modelData.kind === "private" ? "Private" : "Public"; tone: modelData.kind === "private" ? "private" : "pending"; icon: modelData.kind === "private" ? "shield" : "" }
+                                    spacing: 8
+                                    Txt { text: Fmt.accountName(modelData); font.pixelSize: 15; font.weight: Font.DemiBold }
+                                    Badge { text: modelData.kind === "private" ? "Private" : "Public"; tone: modelData.kind === "private" ? "private" : "neutral"; dot: false }
                                 }
                                 Txt {
                                     Layout.fillWidth: true
                                     tone: "text2"
                                     font.pixelSize: 12
                                     wrapMode: Text.Wrap
+                                    elide: Text.ElideNone
                                     text: modelData.kind === "private" ? "Balance and history are only visible to you." : "Visible on-chain. Pays fees and posts publicly."
                                 }
                             }
@@ -278,7 +260,7 @@ Item {
                 }
                 Btn {
                     objectName: "readyFunds"
-                    Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test funds"
+                    Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LEZ"
                     visible: !!ob.store.state.faucet
                     onClicked: {
                         var pub = null
@@ -395,14 +377,11 @@ Item {
                 }
             }
 
-            Txt {
+            Notice {
                 visible: ob.problem !== ""
                 objectName: "onboardingProblem"
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
                 tone: "danger"
-                font.pixelSize: 13
                 text: ob.problem
             }
         }

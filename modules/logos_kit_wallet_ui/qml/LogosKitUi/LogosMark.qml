@@ -4,7 +4,7 @@ import QtQuick
 Image {
     property real size: 20
     property bool white: true
-    source: white ? "assets/Logos-Mark-White.svg" : "assets/Logos-Mark-Black.svg"
+    source: Qt.resolvedUrl(white ? "assets/Logos-Mark-White.svg" : "assets/Logos-Mark-Black.svg")
     width: size
     height: size * 116 / 106
     sourceSize.width: size * 2

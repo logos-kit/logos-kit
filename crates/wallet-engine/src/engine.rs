@@ -101,6 +101,14 @@ pub struct TxStatus {
     /// The wallet account it spends from or signs with.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+    /// For a transfer: its amount (base units), recipient and token (none =
+    /// native). Lets the UI show real activity amounts and private buckets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
     #[serde(skip)]
     requester: Option<String>,
 }
@@ -121,6 +129,9 @@ impl TxStatus {
             title: None,
             route: None,
             from: None,
+            amount: None,
+            to: None,
+            token: None,
             requester,
         }
     }
@@ -533,6 +544,14 @@ impl Engine {
         status.title = Some(review.summary.title.clone());
         status.route = review.route;
         status.from = Some(review.intent.from_account().to_owned());
+        if let tx::Intent::Transfer {
+            to, amount, token, ..
+        } = &review.intent
+        {
+            status.amount = Some(amount.to_string());
+            status.to = to.clone();
+            status.token = token.clone();
+        }
         state.insert_status(status);
         state.pending = Some(Pending {
             handle,

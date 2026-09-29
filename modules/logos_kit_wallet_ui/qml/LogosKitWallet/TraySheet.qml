@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 
 // Tray sheet (brand.md, design-lab Sheet.tsx): floats 10 px off the edges,
@@ -76,11 +77,11 @@ Item {
             id: head
             width: parent.width
             height: 52
-            IconBtn {
+            IconButton {
                 objectName: sheet.first ? "sheetClose" : "sheetBack"
                 x: 20
                 y: 16
-                icon: sheet.first ? "x" : "back"
+                glyph: sheet.first ? "x" : "back"
                 label: sheet.first ? "Close" : "Back"
                 enabled: !sheet.busy
                 onClicked: sheet.first ? sheet.closeRequested() : sheet.backRequested()

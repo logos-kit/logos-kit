@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
@@ -62,100 +63,72 @@ ColumnLayout {
     }
     Notice { visible: av.requester !== ""; tone: "warn"; text: "Unsigned app: Basecamp can't confirm who published it. It can never move funds without your approval." }
 
-    Txt { Layout.fillWidth: true; text: av.summary.title || "Review"; font.pixelSize: 20; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
+    Txt { Layout.fillWidth: true; text: av.summary.title || "Review"; font.pixelSize: 20; font.weight: Font.Bold; wrapMode: Text.Wrap; elide: Text.ElideNone }
 
-    // -- balance change first ------------------------------------------------------
-    Rectangle {
-        visible: av.outNative !== "" || av.outToken !== ""
+    // -- who gets what, first (TxSummary: asset + amount + full destination,
+    //    then effects and authority, then fee cap and source) ----------------
+    readonly property var ownRecipient: {
+        for (var i = 0; i < store.accounts.length; i++)
+            if (store.accounts[i].accountId === review.recipient) return store.accounts[i]
+        return null
+    }
+    readonly property var tokenInfo: {
+        if (!intent.token || !fromAccount) return null
+        var ts = fromAccount.tokens || []
+        for (var i = 0; i < ts.length; i++) if (ts[i].definition === intent.token) return ts[i]
+        return null
+    }
+    TxSummary {
         Layout.fillWidth: true
-        implicitHeight: 70
-        radius: Theme.rCard
-        color: Theme.surface2
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 12
-            LezToken { size: 38; visible: av.outToken === "" }
-            Identicon { visible: av.outToken !== ""; seed: av.intent.token || ""; size: 38; square: true }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                Txt {
-                    text: (av.fromAccount && av.fromAccount.kind === "private" ? "Your private balance changes" : "Your balance changes")
-                    tone: "text2"; font.pixelSize: 12
-                }
-                Txt {
-                    text: "− " + Fmt.amount(av.outToken !== "" ? av.outToken : av.outNative, 0) + (av.outToken !== "" ? "" : " LEZ")
-                    color: Theme.danger; font.pixelSize: 22; font.weight: Font.DemiBold; num: true
-                }
-            }
-        }
+        isPrivate: av.isPrivate
+        outflow: av.outNative !== "" ? ({ amount: av.outNative, symbol: "LEZ" })
+               : av.outToken !== "" ? ({ amount: av.outToken, symbol: av.tokenInfo && av.tokenInfo.name ? av.tokenInfo.name : Fmt.short(av.intent.token), definition: av.intent.token })
+               : null
+        to: !av.review.recipient ? null : ({
+            name: av.ownRecipient ? Fmt.accountName(av.ownRecipient) + " (yours)" : "",
+            address: av.review.recipient,
+            kind: (av.ownRecipient && av.ownRecipient.kind === "private") || (av.intent.toKeys && av.route !== "public") ? "private" : "public"
+        })
+        effects: av.summary.lines || []
+        authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
+        fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee }) : null
+        program: !av.program ? null : ({
+            name: (av.program.name || "Unknown program") + " · " + Fmt.short(av.program.account),
+            status: av.program.status === "verified_local" ? "verified" : av.program.status === "claimed" ? "claimed" : "unknown",
+            immutable: av.program.builtin || av.program.immutable
+        })
     }
 
     ColumnLayout {
         Layout.fillWidth: true
         spacing: 0
-        InfoRow { label: "From"; value: av.fromAccount ? Fmt.accountName(av.fromAccount) : Fmt.short(av.intent.from) }
-        InfoRow {
-            visible: !!av.review.recipient
-            readonly property var own: {
-                for (var i = 0; i < av.store.accounts.length; i++)
-                    if (av.store.accounts[i].accountId === av.review.recipient) return av.store.accounts[i]
-                return null
-            }
-            label: "To"
-            value: own ? Fmt.accountName(own) : Fmt.short(av.review.recipient)
-            mono: !own
-        }
+        InfoRow { label: "From"; value: av.fromAccount ? Fmt.accountName(av.fromAccount) + (av.fromAccount.kind === "private" ? " · private" : " · public") : Fmt.short(av.intent.from) }
         InfoRow {
             visible: av.route !== ""
-            label: "Visibility"
-            value: av.route === "public" ? "Visible on-chain: amount and both accounts"
-                 : av.route === "shield" ? "Into your private account; the amount is visible"
+            label: "Who can see it"
+            value: av.route === "public" ? "Everyone: amount and both accounts"
+                 : av.route === "shield" ? "The amount is public; it lands in your private account"
                  : av.route === "unshield" ? "Leaves your private account publicly"
-                 : "Private: nothing about this transfer is visible"
+                 : "Nobody: nothing about it is public"
             tone: av.isPrivate ? "priv" : "text"
         }
-        InfoRow {
-            visible: av.program !== null
-            label: "Program"
-            value: av.program ? (av.program.name || "Unknown program") + " · " + Fmt.short(av.program.account) : ""
-        }
-        InfoRow {
-            visible: av.program !== null
-            label: "Source"
-            Tag { text: av.badge(av.program)[0]; tone: av.badge(av.program)[1] }
-        }
-        InfoRow {
-            visible: av.program !== null && !av.program.builtin
-            label: "Upgrades"
-            value: av.program && av.program.immutable ? "Immutable" : "Upgradeable by its owner"
-            tone: av.program && av.program.immutable ? "text" : "warn"
-        }
-        InfoRow { visible: av.isPrivate; label: "Proof"; value: "Runs on this device · about " + (av.route === "shield" ? "5–6" : "6–8") + " min" }
-        InfoRow {
-            label: "Network fee"
-            value: av.review.fee && av.review.fee.maxFee ? "≤ " + Fmt.amount(av.review.fee.maxFee, 0) + " LEZ"
-                 : av.isPrivate ? "None: private transactions are fee-exempt"
-                 : "Fee estimate unavailable"
-        }
-    }
-
-    Repeater {
-        model: av.summary.lines || []
-        Txt { Layout.fillWidth: true; text: "· " + modelData; tone: "text2"; font.pixelSize: 13; wrapMode: Text.Wrap }
-    }
-    Repeater {
-        model: av.summary.authorities || []
-        Notice { tone: "warn"; icon: "warning"; text: "Authority change: " + modelData }
+        InfoRow { visible: av.isPrivate; label: "Proof"; value: "Made on this device · usually " + (av.route === "shield" ? "5–6" : "6–8") + " min" }
+        InfoRow { visible: !(av.review.fee && av.review.fee.maxFee); label: "Network fee"; value: av.isPrivate ? "None: private transactions are fee-exempt" : "Not available yet" }
     }
 
     // -- details ---------------------------------------------------------------------
     Txt {
-        text: details.visible ? "Hide details" : "Details"
+        text: details.visible ? "Hide technical details" : "Technical details"
         tone: "action"
         font.pixelSize: 13
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: details.visible = !details.visible }
+        font.weight: Font.DemiBold
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+        Keys.onReturnPressed: details.visible = !details.visible
+        Keys.onSpacePressed: details.visible = !details.visible
+        MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: details.visible = !details.visible }
+        FocusRing { anchors.fill: parent; ringRadius: 6 }
     }
     ColumnLayout {
         id: details
@@ -170,22 +143,12 @@ ColumnLayout {
 
     // -- unknown effects -----------------------------------------------------------------
     Notice { visible: !!av.summary.unknown; tone: "danger"; icon: "warning"; text: "Logos Kit can't read what this program call does. Only approve it if you trust the app completely." }
-    RowLayout {
+    CheckRow {
+        id: ack
+        objectName: "ackUnknown"
         visible: !!av.summary.unknown
-        Layout.fillWidth: true
-        spacing: 10
-        Rectangle {
-            id: ack
-            objectName: "ackUnknown"
-            property bool checked: false
-            implicitWidth: 22; implicitHeight: 22; radius: 7
-            color: checked ? Theme.danger : "transparent"
-            border.width: checked ? 0 : 2
-            border.color: Theme.text3
-            Glyph { anchors.centerIn: parent; visible: ack.checked; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ack.checked = !ack.checked }
-        }
-        Txt { Layout.fillWidth: true; text: "I understand Logos Kit can't describe what this does."; font.pixelSize: 13; wrapMode: Text.Wrap }
+        accent: Theme.danger
+        text: "I understand Logos Kit can't describe what this does."
     }
 
     Field {
@@ -194,11 +157,11 @@ ColumnLayout {
         visible: !!av.ticket && av.ticket.needsPassword
         Layout.fillWidth: true
         echoMode: TextInput.Password
-        placeholderText: "Password"
+        placeholderText: "Password to approve"
         onAccepted: approveBtn.clicked()
     }
 
-    Txt { visible: av.problem !== ""; objectName: "approvalProblem"; Layout.fillWidth: true; text: av.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+    Notice { visible: av.problem !== ""; objectName: "approvalProblem"; Layout.fillWidth: true; text: av.problem; tone: "danger" }
 
     RowLayout {
         Layout.fillWidth: true

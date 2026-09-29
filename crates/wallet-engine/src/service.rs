@@ -74,6 +74,8 @@ struct Prefs {
     /// Zones the user added (the built-in ones are always listed).
     zones: Vec<Zone>,
     theme: Option<String>,
+    /// Motion: "system" (follow the OS), "reduce" or "full".
+    motion: Option<String>,
     /// Zone id → drip service URL.
     faucets: HashMap<String, String>,
 }
@@ -692,6 +694,8 @@ impl Service {
                     #[serde(default)]
                     theme: Option<String>,
                     #[serde(default)]
+                    motion: Option<String>,
+                    #[serde(default)]
                     faucet: Option<(String, Option<String>)>,
                     /// The zone to open (while locked; unlocked, use switchZone).
                     #[serde(default)]
@@ -713,6 +717,13 @@ impl Service {
                         invalid("switch zones from Settings (needs your password)")
                     );
                     prefs.zone = Some(z);
+                }
+                if let Some(m) = a.motion {
+                    ensure!(
+                        matches!(m.as_str(), "system" | "reduce" | "full"),
+                        invalid("motion is system, reduce or full")
+                    );
+                    prefs.motion = Some(m);
                 }
                 if let Some(t) = a.theme {
                     ensure!(
@@ -864,6 +875,8 @@ impl Service {
             "zone": zone,
             "zones": self.zones(),
             "theme": prefs.theme.clone().unwrap_or_else(|| "dark".into()),
+            "motion": prefs.motion.clone().unwrap_or_else(|| "system".into()),
+            "systemReducedMotion": system_reduced_motion(),
             "faucet": faucet_label(&zone, &prefs),
             "status": status,
             "busy": busy,
@@ -2315,4 +2328,39 @@ mod tests {
         assert_eq!((keys.npk, keys.vpk), (npk, vpk));
         assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
     }
+}
+
+/// The OS "reduce motion" setting, read once per process (Qt 6.9 exposes no
+/// such hint to QML): macOS Accessibility → Display → Reduce motion, GNOME's
+/// `enable-animations = false`. Anything unreadable counts as "not reduced".
+fn system_reduced_motion() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        let out = |cmd: &str, args: &[&str]| {
+            std::process::Command::new(cmd)
+                .args(args)
+                .stderr(std::process::Stdio::null())
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        };
+        if cfg!(target_os = "macos") {
+            out(
+                "defaults",
+                &["read", "com.apple.universalaccess", "reduceMotion"],
+            )
+            .as_deref()
+                == Some("1")
+        } else if cfg!(target_os = "linux") {
+            out(
+                "gsettings",
+                &["get", "org.gnome.desktop.interface", "enable-animations"],
+            )
+            .as_deref()
+                == Some("false")
+        } else {
+            false
+        }
+    })
 }

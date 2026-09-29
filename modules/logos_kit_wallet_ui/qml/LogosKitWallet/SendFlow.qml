@@ -1,6 +1,8 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
 // Send (ux-spec §3; design-lab keypad send): to → amount → review → proof.
 // The route (public, shield, unshield, private) follows from the accounts;
@@ -34,6 +36,11 @@ ColumnLayout {
         return "0"
     }
     readonly property string base: Fmt.toBase(amountText, 0)
+    readonly property string tokenName: {
+        var ts = from ? (from.tokens || []) : []
+        for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return ts[i].name || ""
+        return ""
+    }
     readonly property bool tooMuch: base !== "" && balance !== "" && Fmt.cmp(base, balance) > 0
     readonly property bool isCode: to.trim().indexOf("lezpriv1:") === 0
     readonly property bool toValid: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
@@ -127,43 +134,35 @@ ColumnLayout {
             invalid: text.trim() !== "" && !sf.toValid
         }
         Txt { visible: sf.isCode; text: "Private payment: only you and the recipient will see it."; tone: "priv"; font.pixelSize: 12 }
-        Txt { text: "Your accounts"; tone: "text3"; font.pixelSize: 12; Layout.topMargin: 4 }
+        Txt { text: "Or one of your accounts"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 6 }
         Repeater {
             model: sf.store.accounts
-            Rectangle {
+            AccountCard {
                 visible: !sf.from || modelData.accountId !== sf.from.accountId
-                Layout.fillWidth: true
-                implicitHeight: 52
-                radius: Theme.rRow
-                color: sf.to === modelData.accountId ? Theme.surface2 : "transparent"
-                border.width: 1
-                border.color: sf.to === modelData.accountId ? Theme.action : Theme.line
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
-                    Identicon { seed: modelData.accountId; size: 30 }
-                    Txt { Layout.fillWidth: true; text: Fmt.accountName(modelData); font.weight: Font.DemiBold }
-                    Tag { text: modelData.kind === "private" ? "Private" : "Public"; tone: modelData.kind === "private" ? "private" : "pending" }
-                }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { toField.text = modelData.accountId } }
+                multi: false
+                accountId: modelData.accountId
+                name: Fmt.accountName(modelData)
+                kind: modelData.kind
+                balance: modelData.native === null || modelData.native === undefined ? "" : String(modelData.native)
+                checked: sf.to === modelData.accountId
+                onToggled: toField.text = modelData.accountId
             }
         }
         // Asset: native, or a token this account holds.
-        Flow {
-            visible: sf.from && (sf.from.tokens || []).length > 0
+        ColumnLayout {
+            visible: !!sf.from && (sf.from.tokens || []).length > 0
             Layout.fillWidth: true
+            Layout.topMargin: 6
             spacing: 6
-            Repeater {
-                model: [{ definition: "", name: "LEZ" }].concat(sf.from ? (sf.from.tokens || []) : [])
-                Rectangle {
-                    implicitHeight: 30
-                    implicitWidth: at.implicitWidth + 22
-                    radius: 15
-                    color: sf.token === modelData.definition ? Theme.text : Theme.surface2
-                    Txt { id: at; anchors.centerIn: parent; text: modelData.name || Fmt.short(modelData.definition); font.pixelSize: 12; font.weight: Font.DemiBold; color: sf.token === modelData.definition ? Theme.bg : Theme.text }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: sf.token = modelData.definition }
+            Txt { text: "Asset"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+            SegmentedControl {
+                readonly property var assets: [{ definition: "", name: "LEZ" }].concat(sf.from ? (sf.from.tokens || []) : [])
+                options: assets.map(function (t) { return t.name || Fmt.short(t.definition) })
+                currentIndex: {
+                    for (var i = 0; i < assets.length; i++) if (assets[i].definition === sf.token) return i
+                    return 0
                 }
+                onActivated: function (i) { sf.token = assets[i].definition }
             }
         }
         Btn { objectName: "sendNext"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Continue"; enabled: sf.toValid; onClicked: sf.go("amount") }
@@ -175,39 +174,34 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 8
         Txt { text: "Send " + sf.routeWord; font.pixelSize: 20; font.weight: Font.DemiBold }
-        Txt { text: "From " + (sf.from ? Fmt.accountName(sf.from) : "") + " · " + Fmt.amount(sf.balance, 0) + " spendable"; tone: "text2"; font.pixelSize: 13 }
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 40
+            implicitHeight: 44
             radius: Theme.rRow
             color: Theme.surface2
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                spacing: 8
                 Txt { text: "To"; tone: "text2"; font.pixelSize: 13 }
                 Txt { Layout.fillWidth: true; text: sf.toLabel; font.weight: Font.DemiBold; font.pixelSize: 13 }
+                Badge { visible: sf.routeWord !== "publicly"; text: "Private"; tone: "private"; dot: false }
             }
         }
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 10
-            Layout.bottomMargin: 10
-            spacing: 6
-            Txt {
-                id: amt
-                objectName: "sendAmount"
-                text: sf.amountText === "" ? "0" : Fmt.amount(sf.amountText, 0)
-                font.pixelSize: 50; font.weight: Font.DemiBold; font.letterSpacing: -1.5; num: true
-                tone: sf.amountText === "" ? "text3" : "text"
-                onTextChanged: if (!Theme.reducedMotion) bump.restart()
-                SequentialAnimation {
-                    id: bump
-                    NumberAnimation { target: amt; property: "scale"; to: 1.06; duration: 60 }
-                    NumberAnimation { target: amt; property: "scale"; to: 1; duration: 160; easing.type: Easing.OutBack }
-                }
-            }
-            Txt { text: sf.token === "" ? "LEZ" : "tokens"; tone: "text2"; font.pixelSize: 20; Layout.alignment: Qt.AlignBaseline }
+        AmountField {
+            id: amtField
+            objectName: "sendAmount"
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            symbol: sf.token === "" ? "LEZ" : (sf.tokenName || "tokens")
+            tokenSelectable: false
+            tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; isPrivate: sf.fromPrivate } }
+            balance: sf.balance
+            text: sf.amountText
+            onTextChanged: if (text !== sf.amountText) sf.amountText = text
+            onMaxClicked: sf.amountText = sf.balance
+            onSubmitted: if (reviewBtn.enabled) reviewBtn.clicked()
         }
         GridLayout {
             Layout.fillWidth: true
@@ -234,14 +228,6 @@ ColumnLayout {
             }
         }
         Btn { id: reviewBtn; objectName: "sendReview"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Review"; busy: sf.busy; enabled: sf.base !== "" && !sf.tooMuch; onClicked: sf.prepare() }
-        Txt {
-            visible: sf.tooMuch
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            tone: "danger"; font.pixelSize: 12
-            text: "You have " + Fmt.amount(sf.balance, 0) + " spendable. Lower the amount" + (sf.fromPrivate ? "." : ", or add funds first.")
-        }
     }
 
     // -- review ------------------------------------------------------------------------------
@@ -265,5 +251,5 @@ ColumnLayout {
         onClose: sf.finished()
     }
 
-    Txt { visible: sf.problem !== "" && sf.step !== "review"; objectName: "sendProblem"; Layout.fillWidth: true; text: sf.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+    Notice { visible: sf.problem !== "" && sf.step !== "review"; objectName: "sendProblem"; Layout.fillWidth: true; text: sf.problem; tone: "danger" }
 }

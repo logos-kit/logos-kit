@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 
 // A requesting app's icon from its installed metadata (Store.apps), else its
 // initials. The sandbox loads no data: URLs or other modules' files, so the
