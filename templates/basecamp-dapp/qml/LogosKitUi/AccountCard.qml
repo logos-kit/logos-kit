@@ -15,6 +15,7 @@ Rectangle {
     property string balance: ""           // raw integer, native LEZ
     property bool checked: false
     property bool multi: true             // check box (true) or radio (false)
+    property bool controlled: false       // the parent owns `checked` (keep its binding)
     signal toggled(bool checked)
     Layout.fillWidth: true
     implicitHeight: 66
@@ -28,7 +29,11 @@ Rectangle {
     Accessible.checkable: true
     Accessible.checked: checked
     Accessible.name: name + ", " + (kind === "private" ? "private" : "public") + " account" + (balance !== "" ? ", " + Units.lez(balance) : "")
-    function flip() { checked = multi ? !checked : true; toggled(checked) }
+    function flip() {
+        var next = multi ? !checked : true
+        if (!controlled) checked = next
+        toggled(next)
+    }
     Keys.onSpacePressed: flip()
     Keys.onReturnPressed: flip()
 

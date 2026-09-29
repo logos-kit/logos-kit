@@ -297,7 +297,7 @@ Item {
                 spacing: 10
                 LogosMark { size: 22; white: Theme.dark }
                 Txt { text: "Faucet"; font.pixelSize: 20; font.weight: Font.DemiBold }
-                Tag { text: root.chain.replace("lez:", ""); tone: "pending" }
+                Badge { text: root.chain === "lez:preview" ? "LEZ preview" : root.chain === "lez:testnet" ? "LEZ testnet" : root.chain.replace("lez:", "LEZ "); tone: "ok"; live: true }
                 Item { Layout.fillWidth: true }
                 Btn {
                     objectName: "fcConnectTop"
@@ -316,7 +316,7 @@ Item {
                     Txt { text: "Test LEZ"; font.pixelSize: 26; font.weight: Font.DemiBold }
                     Txt {
                         Layout.fillWidth: true
-                        text: "Free tokens for trying things on the testnet: sending, private payments, Basecamp apps. They have no value."
+                        text: "Free test tokens for trying LEZ: sends, private payments, Basecamp apps. They have no value. Native LEZ has no decimals, so a claim is a whole number of LEZ (on the preview network, 1,000,000,000 LEZ)."
                         tone: "text2"
                         wrapMode: Text.Wrap
                         elide: Text.ElideNone
@@ -360,40 +360,17 @@ Item {
                         }
                         Repeater {
                             model: root.accounts
-                            Rectangle {
+                            AccountCard {
                                 objectName: "fcAccount_" + index
-                                Layout.fillWidth: true
-                                implicitHeight: 56
-                                radius: Theme.rRow
-                                readonly property bool on: modelData.address === root.account
-                                color: on ? Theme.surface2 : "transparent"
-                                border.width: on ? 2 : 1
-                                border.color: on ? Theme.text : Theme.line
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 14
-                                    spacing: 10
-                                    Identicon { seed: modelData.address; size: 30 }
-                                    ColumnLayout {
-                                        spacing: 1
-                                        Layout.fillWidth: true
-                                        RowLayout {
-                                            spacing: 6
-                                            Txt { text: root.nameOf(modelData); font.pixelSize: 14; font.weight: Font.DemiBold; Layout.maximumWidth: 200 }
-                                            Tag { text: modelData.kind === "private" ? "Private" : "Public"; tone: modelData.kind === "private" ? "private" : "pending"; icon: modelData.kind === "private" ? "shield" : "" }
-                                        }
-                                        Txt { visible: !!modelData.label && modelData.kind !== "private"; text: root.shortId(modelData.address); tone: "text3"; mono: true; font.pixelSize: 11 }
-                                    }
-                                    Txt {
-                                        objectName: "fcBalance_" + index
-                                        text: root.amount(root.balances[modelData.address]) + " LEZ"
-                                        tone: "text2"
-                                        num: true
-                                        font.pixelSize: 13
-                                    }
-                                }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.select(modelData.address) }
+                                multi: false
+                                controlled: true
+                                enabled: root.phase === "idle" || root.phase === "limited" || root.phase === "done" || root.phase === "declined" || root.phase === "failed"
+                                accountId: modelData.address
+                                name: root.nameOf(modelData)
+                                kind: modelData.kind === "private" ? "private" : "public"
+                                balance: root.balances[modelData.address] === undefined || root.balances[modelData.address] === null ? "" : String(root.balances[modelData.address])
+                                checked: modelData.address === root.account
+                                onToggled: root.select(modelData.address)
                             }
                         }
                     }
@@ -442,10 +419,10 @@ Item {
                         objectName: "fcChecking"
                         visible: root.phase === "checking"
                         spacing: 10
-                        Spinner { size: 20 }
+                        Dots { color: Theme.action }
                         ColumnLayout {
                             spacing: 2
-                            Txt { text: "Checking whether it arrived…"; font.weight: Font.DemiBold }
+                            ShimmerText { text: "Checking whether it arrived"; pixelSize: 14; weight: Font.DemiBold }
                             Txt { text: "The faucet didn't confirm yet. We watch your balance instead of asking twice."; tone: "text2"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.maximumWidth: 400 }
                         }
                     }
@@ -494,36 +471,23 @@ Item {
                         Layout.fillWidth: true
                         spacing: 12
                         Txt { text: "Moving it in privately"; font.pixelSize: 18; font.weight: Font.DemiBold }
-                        Repeater {
-                            model: [
-                                { label: "Faucet paid your public account", at: 0 },
-                                { label: "Approve the private move in your wallet", at: 1 },
-                                { label: "Proving on this computer", at: 2 },
-                                { label: "Included in a block", at: 3 }
-                            ]
-                            RowLayout {
-                                readonly property int reached: {
-                                    var s = root.shield && root.shield.status
-                                    var lc = s ? s.lifecycle : "awaiting_approval"
-                                    return lc === "awaiting_approval" ? 1 : (lc === "building" || lc === "proving" || lc === "signing") ? 2 : lc === "submitted" ? 3 : 4
-                                }
-                                spacing: 10
-                                Item {
-                                    implicitWidth: 22; implicitHeight: 22
-                                    Rectangle { anchors.fill: parent; radius: 11; visible: parent.parent.reached > modelData.at; color: Theme.soft(Theme.ok, 0.16) }
-                                    Glyph { anchors.centerIn: parent; visible: parent.parent.reached > modelData.at; name: "check"; color: Theme.ok; width: 13; height: 13; stroke: 2.6 }
-                                    Spinner { anchors.centerIn: parent; visible: parent.parent.reached === modelData.at; size: 18; color: modelData.at === 2 ? Theme.privText : Theme.text2 }
-                                    Rectangle { anchors.centerIn: parent; visible: parent.parent.reached < modelData.at; width: 8; height: 8; radius: 4; color: Theme.text3 }
-                                }
-                                Txt { text: modelData.label; tone: parent.reached >= modelData.at ? "text" : "text3" }
-                                Item { Layout.fillWidth: true }
-                                Txt {
-                                    visible: modelData.at === 2 && parent.reached === 2 && !!root.shield && root.shield.startedAt > 0
-                                    text: root.shield && root.shield.startedAt ? root.mmss((root.now - root.shield.startedAt) / 1000) : ""
-                                    tone: "priv"
-                                    num: true
-                                    font.pixelSize: 13
-                                }
+                        Pipeline {
+                            Layout.fillWidth: true
+                            accent: Theme.priv
+                            stages: {
+                                var st = root.shield && root.shield.status
+                                var lc = st ? st.lifecycle : "awaiting_approval"
+                                var reached = lc === "awaiting_approval" ? 1 : (lc === "building" || lc === "proving" || lc === "signing") ? 2 : lc === "submitted" ? 3 : 4
+                                function at(i) { return reached > i ? "done" : reached === i ? "active" : "pending" }
+                                var proving = { label: "Proving on this computer", status: at(2), progress: reached === 2 ? -1 : undefined,
+                                                detail: "Keeps the move private.", estimate: "Usually about 5 minutes" }
+                                if (reached === 2 && root.shield && root.shield.startedAt) proving.elapsed = root.mmss((root.now - root.shield.startedAt) / 1000)
+                                return [
+                                    { label: "Faucet paid your public account", status: "done" },
+                                    { label: "Approve the private move in your wallet", status: at(1), progress: reached === 1 ? -1 : undefined },
+                                    proving,
+                                    { label: "Included in a block", status: at(3), progress: reached === 3 ? -1 : undefined }
+                                ]
                             }
                         }
                         Txt { text: "You can leave this screen; the wallet keeps going."; tone: "text3"; font.pixelSize: 12 }
@@ -537,11 +501,7 @@ Item {
                         spacing: 10
                         RowLayout {
                             spacing: 12
-                            Rectangle {
-                                implicitWidth: 44; implicitHeight: 44; radius: 22
-                                color: Theme.soft(Theme.ok, 0.16)
-                                Glyph { anchors.centerIn: parent; name: "check"; color: Theme.ok; width: 22; height: 22; stroke: 2.6 }
-                            }
+                            SuccessCheck { size: 52; color: root.selected && root.selected.kind === "private" ? Theme.priv : Theme.ok }
                             ColumnLayout {
                                 spacing: 2
                                 Txt {
@@ -552,6 +512,7 @@ Item {
                                     num: true
                                 }
                                 Txt { text: "in " + root.nameOf(root.selected); tone: "text2"; font.pixelSize: 13 }
+                                AddressChip { visible: !!root.selected && root.selected.kind !== "private"; address: root.account; Layout.topMargin: 4 }
                             }
                         }
                         Txt { visible: root.note !== ""; Layout.fillWidth: true; text: root.note; tone: "warn"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone }
@@ -574,8 +535,14 @@ Item {
                         visible: root.phase === "declined" || root.phase === "failed"
                         Layout.fillWidth: true
                         spacing: 10
-                        Notice { tone: root.phase === "declined" ? "warn" : "danger"; text: root.failure }
-                        Btn { objectName: "fcRetry"; text: "Back"; onClicked: { root.phase = "idle"; root.refreshBalance(root.account) } }
+                        ErrorCard {
+                            objectName: "fcRetry"
+                            title: root.phase === "declined" ? "The faucet said no" : "Couldn't get test LEZ"
+                            body: root.failure
+                            glyph: root.phase === "declined" ? "info" : "warning"
+                            retryText: "Back"
+                            onRetry: { root.phase = "idle"; root.refreshBalance(root.account) }
+                        }
                     }
                 }
             }

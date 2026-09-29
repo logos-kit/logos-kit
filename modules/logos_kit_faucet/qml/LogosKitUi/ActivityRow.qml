@@ -4,7 +4,7 @@ import QtQuick.Layouts
 // From 21st.dev hari/transaction-list (id 2943) and felipemenezes098/
 // activity-feed (id 29394): https://21st.dev/@hari/components/transaction-list
 // kind: send | receive | shield | unshield | faucet | testimonial | call.
-// status: pending (dots) | included | unconfirmed | failed. The amount is
+// status: pending (dots) | included | unconfirmed | failed | declined (neutral). The amount is
 // signed and coloured: incoming green, outgoing neutral, failed struck out.
 Item {
     id: ar
@@ -47,8 +47,8 @@ Item {
                  : ar.incoming ? Theme.soft(Theme.ok, 0.13) : Theme.surface2
             Glyph {
                 anchors.centerIn: parent
-                name: ar.status === "failed" ? "x" : ar.glyph
-                color: ar.status === "failed" ? Theme.danger : ar.isPrivate || ar.kind === "shield" ? Theme.privText
+                name: ar.status === "failed" || ar.status === "declined" ? "x" : ar.glyph
+                color: ar.status === "failed" ? Theme.danger : ar.status === "declined" ? Theme.text2 : ar.isPrivate || ar.kind === "shield" ? Theme.privText
                      : ar.incoming ? Theme.ok : Theme.text
                 width: 18; height: 18
             }
@@ -74,7 +74,8 @@ Item {
                 Layout.fillWidth: true
                 Dots { visible: ar.status === "pending"; size: 4; color: Theme.action }
                 Txt {
-                    text: ar.status === "pending" ? "Pending" + (ar.sub ? " · " + ar.sub : "")
+                    text: ar.status === "declined" ? ar.sub
+                        : ar.status === "pending" ? "Pending" + (ar.sub ? " · " + ar.sub : "")
                         : ar.status === "unconfirmed" ? "Not confirmed yet" + (ar.sub ? " · " + ar.sub : "")
                         : ar.status === "failed" ? "Failed" + (ar.sub ? " · " + ar.sub : "") : ar.sub
                     tone: ar.status === "failed" ? "danger" : ar.status === "unconfirmed" ? "warn" : "text2"
@@ -89,8 +90,8 @@ Item {
             num: true
             font.pixelSize: 14
             font.weight: Font.DemiBold
-            font.strikeout: ar.status === "failed"
-            tone: ar.status === "failed" ? "text3" : ar.incoming ? "ok" : "text"
+            font.strikeout: ar.status === "failed" || ar.status === "declined"
+            tone: ar.status === "failed" || ar.status === "declined" ? "text3" : ar.incoming ? "ok" : "text"
         }
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ar.clicked() }

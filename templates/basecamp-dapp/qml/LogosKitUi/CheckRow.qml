@@ -8,6 +8,7 @@ Item {
     property string text: ""
     property bool checked: false
     property color accent: Theme.action
+    property bool controlled: false
     signal toggled(bool checked)
     Layout.fillWidth: true
     implicitHeight: Math.max(28, lab.implicitHeight + 8)
@@ -16,7 +17,11 @@ Item {
     Accessible.checkable: true
     Accessible.checked: checked
     Accessible.name: text
-    function flip() { checked = !checked; toggled(checked) }
+    function flip() {
+        var next = !checked
+        if (!controlled) checked = next
+        toggled(next)
+    }
     Keys.onSpacePressed: flip()
     Keys.onReturnPressed: flip()
     RowLayout {

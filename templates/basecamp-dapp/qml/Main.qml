@@ -1,7 +1,8 @@
 import QtQuick
 import QtQuick.Layouts
 import "LogosKit"      // the SDK: kit.api.connect(), .transfer(), .watchTransaction(), …
-import "LogosKitUi"    // optional: the wallet's look (Theme, Btn, Card, Field, Notice, …)
+import "LogosKitUi"    // optional: the wallet's look (Theme, Btn, Card, Pipeline, AddressChip, …)
+import "LogosKitUi/Units.js" as Units   // integer-string amounts (native LEZ has no decimals)
 
 // A Basecamp app on the Logos Execution Zone, built with Logos Kit.
 //
@@ -129,13 +130,20 @@ Item {
         }), live(show))
     }
 
-    // Outcome unknown: our balance going down since we sent confirms it
-    // (amounts are digit strings: u128 never becomes a JS number).
-    function below(a, b) { return a.length !== b.length ? a.length < b.length : a < b }
+    // Outcome unknown: prove it from our own balance, or say "unconfirmed".
+    // Done only when the sender went down by the amount plus a fee within the
+    // cap you approved: now + amount <= before <= now + amount + maxFee.
+    // Anything else (an incoming payment meanwhile, no fee cap to check
+    // against) proves nothing. Amounts are digit strings: u128 never becomes a
+    // JS number.
     function confirm() {
         refresh(function (now) {
             var s = root.sent
-            root.phase = s && s.before !== "" && below(now, s.before) ? "done" : "unconfirmed"
+            var cap = root.receipt && root.receipt.fee ? root.receipt.fee.estimatedMax : undefined
+            if (!s || s.before === "" || cap === undefined) { root.phase = "unconfirmed"; return }
+            var spent = Units.add(now, s.amount)
+            var ok = Units.cmp(spent, s.before) <= 0 && Units.cmp(s.before, Units.add(spent, cap)) <= 0
+            root.phase = ok ? "done" : "unconfirmed"
         })
     }
 
@@ -146,67 +154,106 @@ Item {
 
     Rectangle { anchors.fill: parent; color: Theme.bg }
 
+    Flickable {
+        anchors.fill: parent
+        contentHeight: col.implicitHeight + 48
+        boundsBehavior: Flickable.StopAtBounds
+
     ColumnLayout {
+        id: col
         width: Math.min(parent.width - 32, 520)
         x: (parent.width - width) / 2
         y: 24
         spacing: 14
 
         RowLayout {
+            Layout.fillWidth: true
             spacing: 10
-            LogosMark { size: 22 }
-            Txt { text: "My LEZ dApp"; font.pixelSize: 20; font.weight: Font.DemiBold }
-            Tag { text: root.chain.replace("lez:", "") }
+            LogosMark { size: 22; white: Theme.dark }
+            Txt { text: "My LEZ dApp"; font.pixelSize: 20; font.weight: Font.Bold }
+            Item { Layout.fillWidth: true }
+            Badge { text: root.chain === "lez:preview" ? "LEZ preview" : root.chain === "lez:testnet" ? "LEZ testnet" : root.chain.replace("lez:", "LEZ "); tone: "ok"; live: true }
         }
 
-        // 1. Connect
-        Btn {
-            objectName: "connect"
+        // Start: what this app does, then connect.
+        Card {
             visible: !root.session
             Layout.fillWidth: true
-            large: true
-            tone: "action"
-            text: "Connect wallet"
-            onClicked: root.connect()
-        }
-
-        // 2. Account and balance
-        Card {
-            visible: !!root.session
-            Layout.fillWidth: true
-            RowLayout {
+            pad: 22
+            ColumnLayout {
                 width: parent.width
-                spacing: 12
-                Identicon { seed: root.account; size: 36 }
-                ColumnLayout {
-                    spacing: 2
+                spacing: 14
+                Txt { text: "Send LEZ from Basecamp"; font.pixelSize: 24; font.weight: Font.Bold; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.fillWidth: true }
+                Txt {
                     Layout.fillWidth: true
-                    Txt { text: root.account; mono: true; font.pixelSize: 12; tone: "text2"; Layout.fillWidth: true }
-                    Txt { objectName: "balance"; text: (root.balance || "–") + " LEZ"; font.pixelSize: 22; font.weight: Font.DemiBold; num: true }
+                    text: "A starter app for the Logos Kit SDK. Your keys stay in the wallet: this app only proposes, and you approve every transaction there."
+                    tone: "text2"; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.2
+                }
+                Pipeline {
+                    Layout.fillWidth: true
+                    compact: true
+                    stages: [
+                        { label: "Connect", detail: "The wallet asks which account to share", status: "active" },
+                        { label: "Get test LEZ", detail: "Right here, if the account is empty", status: "pending" },
+                        { label: "Send", detail: "You approve it in the wallet, fee shown first", status: "pending" },
+                        { label: "Receipt", detail: "Followed until the block, outcome checked", status: "pending" }
+                    ]
+                }
+                Btn {
+                    objectName: "connect"
+                    Layout.fillWidth: true
+                    large: true
+                    tone: "action"
+                    text: "Connect wallet"
+                    onClicked: root.connect()
                 }
             }
         }
 
-        // 3. Funds in the flow
-        Btn {
-            objectName: "funds"
-            visible: !!root.session && root.balance === "0"
-            text: root.phase === "funding" ? "Getting test LEZ…" : "Get test LEZ"
-            icon: "droplet"
-            busy: root.phase === "funding"
-            onClicked: root.getFunds()
-        }
-
-        // 4. Propose a transfer
+        // Account and balance
         Card {
             visible: !!root.session
             Layout.fillWidth: true
+            pad: 20
             ColumnLayout {
                 width: parent.width
                 spacing: 10
-                Txt { text: "Send LEZ"; font.pixelSize: 16; font.weight: Font.DemiBold }
-                Field { id: to; objectName: "to"; Layout.fillWidth: true; mono: true; placeholderText: "Recipient account" }
-                Field { id: amount; objectName: "amount"; Layout.fillWidth: true; placeholderText: "Amount"; inputMethodHints: Qt.ImhDigitsOnly }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Txt { text: "Balance"; tone: "text2"; font.pixelSize: 13 }
+                    Item { Layout.fillWidth: true }
+                    AddressChip { address: root.account }
+                }
+                RowLayout {
+                    spacing: 8
+                    Txt { objectName: "balance"; text: root.balance === "" ? "–" : Units.group(root.balance); font.pixelSize: 34; font.weight: Font.Bold; num: true }
+                    Txt { text: "LEZ"; tone: "text2"; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
+                }
+                Btn {
+                    objectName: "funds"
+                    visible: root.balance === "0"
+                    text: root.phase === "funding" ? "Getting test LEZ…" : "Get test LEZ"
+                    icon: "droplet"
+                    tone: "ink"
+                    busy: root.phase === "funding"
+                    onClicked: root.getFunds()
+                }
+            }
+        }
+
+        // Propose a transfer
+        Card {
+            visible: !!root.session
+            Layout.fillWidth: true
+            pad: 20
+            ColumnLayout {
+                width: parent.width
+                spacing: 10
+                Txt { text: "Send LEZ"; font.pixelSize: 17; font.weight: Font.DemiBold }
+                Txt { text: "Recipient"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                Field { id: to; objectName: "to"; Layout.fillWidth: true; mono: true; placeholderText: "Public account address" }
+                Txt { text: "Amount (whole LEZ: native LEZ has no decimals)"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                Field { id: amount; objectName: "amount"; Layout.fillWidth: true; placeholderText: "e.g. 42"; inputMethodHints: Qt.ImhDigitsOnly }
                 Btn {
                     objectName: "send"
                     Layout.fillWidth: true
@@ -220,32 +267,47 @@ Item {
             }
         }
 
-        // 5. Receipt
+        // Receipt
         Card {
             objectName: "receipt"
-            visible: !!root.receipt
+            visible: !!root.receipt || root.phase === "waiting"
             Layout.fillWidth: true
+            pad: 20
             ColumnLayout {
                 width: parent.width
-                spacing: 4
+                spacing: 12
                 RowLayout {
-                    Txt { text: "Transaction"; font.weight: Font.DemiBold }
-                    Item { Layout.fillWidth: true }
-                    Tag {
+                    Layout.fillWidth: true
+                    SuccessCheck { visible: root.phase === "done"; size: 40 }
+                    Txt { text: root.phase === "done" ? "Sent " + (root.sent ? Units.group(root.sent.amount) : "") + " LEZ" : "Transaction"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    Badge {
                         objectName: "lifecycle"
-                        text: root.receipt ? root.receipt.lifecycle : ""
-                        tone: root.phase === "done" ? "ok" : root.phase === "failed" ? "danger" : "pending"
+                        text: root.phase === "done" ? "Confirmed" : root.phase === "failed" ? "Failed" : root.phase === "unconfirmed" ? "Not confirmed" : root.receipt ? root.receipt.lifecycle : "Waiting"
+                        tone: root.phase === "done" ? "ok" : root.phase === "failed" ? "danger" : root.phase === "unconfirmed" ? "warn" : "action"
+                        live: root.phase === "sending" || root.phase === "waiting"
                     }
                 }
-                Txt {
-                    visible: root.phase === "unconfirmed"
+                Pipeline {
+                    visible: root.phase !== "done"
                     Layout.fillWidth: true
-                    text: "In a block, but the wallet couldn't confirm it worked. Check your balance before sending again."
-                    tone: "warn"; font.pixelSize: 12; wrapMode: Text.Wrap
+                    compact: true
+                    stages: {
+                        var lc = root.receipt ? root.receipt.lifecycle : ""
+                        var failed = root.phase === "failed"
+                        var reached = root.phase === "waiting" ? 0 : lc === "submitted" ? 2 : (lc === "included" || lc === "finalized") ? 3 : 1
+                        function st(i) { return failed && i === reached ? "failed" : reached > i ? "done" : reached === i ? "active" : "pending" }
+                        return [
+                            { label: "Approved in your wallet", status: st(0), progress: reached === 0 ? -1 : undefined },
+                            { label: "Signed and sent", status: st(1), progress: reached === 1 ? -1 : undefined },
+                            { label: "Included in a block", status: st(2), progress: reached === 2 ? -1 : undefined },
+                            { label: root.phase === "unconfirmed" ? "Outcome not confirmed" : "Outcome checked", status: root.phase === "unconfirmed" ? "failed" : st(3),
+                              detail: root.phase === "unconfirmed" ? "In a block, but neither the wallet nor your balance proves it worked. Check your balance before sending again." : "" }
+                        ]
+                    }
                 }
-                Btn { visible: root.phase === "unconfirmed"; text: "Check again"; onClicked: root.confirm() }
-                Txt { visible: !!(root.receipt && root.receipt.txHash); text: root.receipt && root.receipt.txHash ? root.receipt.txHash : ""; mono: true; tone: "text2"; font.pixelSize: 11; Layout.fillWidth: true }
-                Txt { visible: !!(root.receipt && root.receipt.block); text: root.receipt && root.receipt.block ? "Block #" + root.receipt.block.id : ""; tone: "text2"; font.pixelSize: 12 }
+                Btn { visible: root.phase === "unconfirmed"; text: "Check again"; icon: "refresh"; onClicked: root.confirm() }
+                InfoRow { visible: !!(root.receipt && root.receipt.block); label: "Block"; value: root.receipt && root.receipt.block ? Units.group(root.receipt.block.id) : "" }
+                InfoRow { visible: !!(root.receipt && root.receipt.txHash); label: "Transaction"; value: root.receipt && root.receipt.txHash ? root.receipt.txHash.slice(0, 10) + "…" + root.receipt.txHash.slice(-6) : ""; mono: true }
             }
         }
 
@@ -254,5 +316,6 @@ Item {
             text: "Still waiting for your wallet. Finish or cancel the request there."
         }
         Notice { visible: root.message !== ""; tone: "warn"; text: root.message }
+    }
     }
 }

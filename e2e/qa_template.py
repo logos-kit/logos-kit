@@ -18,7 +18,7 @@ w.wait(lambda: w.find("fundsApprove"), 30, "faucet sheet")
 w.click("fundsApprove")
 # The result holds the wallet's sheet until Done (new requests wait for it).
 w.click("fundsDone", 60)
-d.wait(lambda: d.prop("balance", "text").startswith("1000000000"), 60, "funded")
+d.wait(lambda: d.prop("balance", "text").replace(",", "").startswith("1000000000"), 60, "funded")
 # Send to a public account other than the one the app was given (the
 # connect sheet shares the wallet's current account, which may be "Other").
 publics = [a["accountId"] for a in created["accounts"] if a["kind"] == "public"] + [other]

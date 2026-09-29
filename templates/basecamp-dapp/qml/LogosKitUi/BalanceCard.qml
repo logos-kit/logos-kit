@@ -18,6 +18,8 @@ ColumnLayout {
     property string privLocked: ""
     property bool hidden: false
     property bool loading: false
+    property string tickerName: ""     // objectName for the figure (tests read its `text`)
+    property string note: ""           // one line under the figure
     default property alias actions: act.data
     signal hideToggled(bool hidden)
     spacing: 8
@@ -35,9 +37,18 @@ ColumnLayout {
             visible: !bc.loading
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
-            NumberTicker { value: Units.group(bc.value); masked: bc.hidden; pixelSize: 44; weight: Font.Bold }
+            NumberTicker { objectName: bc.tickerName; value: Units.group(bc.value); masked: bc.hidden; pixelSize: bc.width < 380 ? 36 : 44; weight: Font.Bold }
             Txt { text: bc.symbol; tone: "text2"; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
         }
+    }
+    Txt {
+        visible: bc.note !== ""
+        text: bc.note
+        tone: "text2"
+        font.pixelSize: 13
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        Layout.fillWidth: true
     }
     RowLayout {
         visible: bc.privateLine !== ""

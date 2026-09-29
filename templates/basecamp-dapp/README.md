@@ -7,11 +7,11 @@ transfer the user approves in the wallet, and follows it to a receipt.
 
 ```sh
 nix flake init -t github:logos-kit/logos-kit#dapp   # this folder, in an empty directory
-nix build .#lgx-portable                            # → result-portable/*.lgx
+nix build .#lgx-portable                            # → result/*.lgx (the `result` symlink nix build writes)
 ```
 
 Install the `.lgx` in Basecamp (Package Manager → Install from file, or
-`lgpm install --file result-portable/*.lgx`). Users also need the Logos Kit
+`lgpm install --file result/*.lgx`). Users also need the Logos Kit
 wallet; it installs from the Logos Kit catalog.
 
 ## Make it yours

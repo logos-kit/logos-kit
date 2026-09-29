@@ -14,6 +14,9 @@ Row {
     property color color: Theme.text
     property bool masked: false       // "••••" for hidden balances
     readonly property string shown: masked ? "••••••" : value
+    readonly property string text: shown      // for tests and accessibility
+    Accessible.role: Accessible.StaticText
+    Accessible.name: masked ? "Hidden" : value
     spacing: 0
     Repeater {
         model: nt.shown.length

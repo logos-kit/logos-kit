@@ -7,12 +7,13 @@ Item {
     property real size: 36
     property color color: Theme.text2
     property bool filled: false
+    property string label: ""
     signal clicked()
     implicitWidth: size
     implicitHeight: size
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
-    Accessible.name: glyph
+    Accessible.name: label !== "" ? label : glyph
     Rectangle {
         anchors.fill: parent
         radius: width / 2
