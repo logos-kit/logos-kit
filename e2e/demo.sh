@@ -156,19 +156,19 @@ if [[ "$MODE" == local ]]; then
   if [[ -n "$PROG" ]]; then pass "testimonial program deploy" "immutable ${PROG:0:8}…"; PROGRAM_ARGS=(--program "$PROG")
   else fail "testimonial program deploy" "$(echo "$D" | cut -c1-160)"; fi
 fi
-ok_outcome "testimonial post (A)" "$(LK testimonial post "${PROGRAM_ARGS[@]}" --from "$A" --username demo \
+ok_outcome "testimonial post (A)" "$(LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$A" --username demo \
   --text "Logos Kit demo: every wallet flow end to end." --yes --json 2>&1 | last)"
 
 SNAP="$LOGOS_KIT_HOME/snapshots"
-EV=$(LK testimonial evidence "${PROGRAM_ARGS[@]}" --snapshot "$SNAP" --json 2>&1 | last)
+EV=$(LK testimonial evidence ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --snapshot "$SNAP" --json 2>&1 | last)
 N=$(echo "$EV" | get "['distinctAuthors']")
 [[ -n "$N" && "$N" -ge 1 ]] && pass "evidence export" "$N distinct author(s); snapshot $(ls "$SNAP" 2>/dev/null | head -1)" || fail "evidence export" "$(echo "$EV" | cut -c1-160)"
 
 bold "Refusals"
 refused "second post by the same account" "already posted" \
-  LK testimonial post "${PROGRAM_ARGS[@]}" --from "$A" --text "again with Logos Kit" --yes --json
+  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$A" --text "again with Logos Kit" --yes --json
 refused "post from a private account" "must be public" \
-  LK testimonial post "${PROGRAM_ARGS[@]}" --from "$P" --text "hidden Logos Kit" --yes --json
+  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$P" --text "hidden Logos Kit" --yes --json
 refused "send more than the balance" "Can not pay|not enough" \
   LK send --from "$B" --to "$A" --amount 999999999999999 --yes --json
 if [[ "$MODE" == local ]]; then
