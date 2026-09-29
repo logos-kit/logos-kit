@@ -71,6 +71,12 @@ Item {
         Rectangle {
             anchors.centerIn: parent
             implicitWidth: hint.implicitWidth + 28; implicitHeight: 40; radius: 20
+            activeFocusOnTab: parent.visible
+            Accessible.role: Accessible.Button
+            Accessible.name: "Reveal recovery phrase"
+            Keys.onReturnPressed: pg.revealRequested()
+            Keys.onSpacePressed: pg.revealRequested()
+            FocusRing { anchors.fill: parent }
             width: implicitWidth; height: implicitHeight
             color: Theme.text
             Row {

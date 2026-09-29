@@ -16,6 +16,8 @@ Rectangle {
     radius: height / 2
     color: Theme.surface2
     activeFocusOnTab: true
+    Accessible.role: Accessible.PageTabList
+    Accessible.name: options.length > currentIndex ? labelOf(options[currentIndex]) + " selected" : ""
 
     function labelOf(o) { return typeof o === "string" ? o : o.label }
     function glyphOf(o) { return typeof o === "string" ? "" : (o.glyph || "") }
@@ -66,4 +68,5 @@ Rectangle {
     }
     Keys.onLeftPressed: if (currentIndex > 0) { currentIndex--; activated(currentIndex) }
     Keys.onRightPressed: if (currentIndex < options.length - 1) { currentIndex++; activated(currentIndex) }
+    FocusRing { anchors.fill: parent }
 }

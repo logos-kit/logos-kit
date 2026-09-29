@@ -17,8 +17,6 @@ Item {
         anchors.fill: parent
         radius: width / 2
         color: ib.filled ? Theme.surface2 : mouse.containsMouse ? Theme.soft(Theme.text, 0.07) : "transparent"
-        border.width: ib.activeFocus ? 2 : 0
-        border.color: Theme.action
         scale: mouse.pressed ? 0.92 : 1
         Behavior on scale { NumberAnimation { duration: Theme.dPress } }
         Behavior on color { ColorAnimation { duration: Theme.dFast } }
@@ -27,4 +25,5 @@ Item {
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ib.clicked() }
     Keys.onReturnPressed: clicked()
     Keys.onSpacePressed: clicked()
+    FocusRing { anchors.fill: parent; ringRadius: width / 2 + 3 }
 }

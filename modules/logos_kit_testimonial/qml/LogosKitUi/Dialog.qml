@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
+import "Focus.js" as Focus
 
 // From 21st.dev ai2/alert-dialog-layout (id 28277) and originui/alert-dialog
 // (id 1144): https://21st.dev/@ai2/components/alert-dialog-layout
@@ -27,7 +29,7 @@ Item {
         anchors.fill: parent
         color: Theme.scrim
         opacity: dlg.opened ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 200 } }
         MouseArea { anchors.fill: parent; onClicked: {} }
     }
     Item {
@@ -37,8 +39,8 @@ Item {
         anchors.centerIn: parent
         opacity: dlg.opened ? 1 : 0
         scale: dlg.opened ? 1 : 0.96
-        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.emph } }
-        Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.emph } }
+        Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.emph } }
+        Behavior on scale { enabled: !Theme.reducedMotion; NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.emph } }
         Shadow { anchors.fill: card; radius: card.radius; level: 3 }
         Rectangle {
             id: card
@@ -78,5 +80,17 @@ Item {
             }
         }
     }
+
+    // Focus trap: Tab stays inside while open; focus returns on close.
+    property Item _returnFocus: null
+    onOpenedChanged: {
+        var w = dlg.Window.window
+        if (opened) { _returnFocus = w ? w.activeFocusItem : null; Qt.callLater(function () { Focus.first(dlg) }) }
+        else if (_returnFocus) { _returnFocus.forceActiveFocus(); _returnFocus = null }
+    }
+    Keys.onTabPressed: function (e) { if (opened) { Focus.cycle(dlg, dlg.Window.window, true); e.accepted = true } }
+    Keys.onBacktabPressed: function (e) { if (opened) { Focus.cycle(dlg, dlg.Window.window, false); e.accepted = true } }
+    Accessible.role: Accessible.Dialog
+    Accessible.name: title
     Keys.onEscapePressed: if (!busy) { cancelled(); close() }
 }

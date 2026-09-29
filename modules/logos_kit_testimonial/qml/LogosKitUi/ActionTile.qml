@@ -11,8 +11,15 @@ ColumnLayout {
     signal clicked()
     spacing: 6
     Rectangle {
+        id: disc
         Layout.alignment: Qt.AlignHCenter
         implicitWidth: 52; implicitHeight: 52; radius: 26
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: at.text
+        Keys.onReturnPressed: at.clicked()
+        Keys.onSpacePressed: at.clicked()
+        FocusRing { anchors.fill: parent }
         color: at.tone === "ink" ? Theme.text : at.tone === "private" ? Theme.priv
              : m.containsMouse ? Theme.soft(Theme.text, 0.1) : Theme.surface2
         scale: m.pressed ? 0.94 : 1

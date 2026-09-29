@@ -65,6 +65,12 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Txt {
                 visible: ec.detail !== ""
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: text
+                Keys.onReturnPressed: ec.showDetail = !ec.showDetail
+                Keys.onSpacePressed: ec.showDetail = !ec.showDetail
+                FocusRing { anchors.fill: parent; ringRadius: 6 }
                 text: ec.showDetail ? "Hide details" : "Details"
                 tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold
                 MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: ec.showDetail = !ec.showDetail }

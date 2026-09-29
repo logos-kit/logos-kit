@@ -5,6 +5,7 @@ Btn 1.0 Btn.qml
 IconButton 1.0 IconButton.qml
 Card 1.0 Card.qml
 Shadow 1.0 Shadow.qml
+FocusRing 1.0 FocusRing.qml
 Field 1.0 Field.qml
 TextBox 1.0 TextBox.qml
 Spinner 1.0 Spinner.qml
@@ -47,3 +48,7 @@ Identicon 1.0 Identicon.qml
 LogosMark 1.0 LogosMark.qml
 Glyph 1.0 Glyph.qml
 InfoRow 1.0 InfoRow.qml
+TxSummary 1.0 TxSummary.qml
+AccountCard 1.0 AccountCard.qml
+Permissions 1.0 Permissions.qml
+CheckRow 1.0 CheckRow.qml

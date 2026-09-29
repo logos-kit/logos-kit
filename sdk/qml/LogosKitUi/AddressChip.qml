@@ -14,6 +14,12 @@ Rectangle {
     property int head: 6
     property int tail: 4
     signal copied(string value)
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: "Copy address " + ac.address
+    Keys.onReturnPressed: ac.copy()
+    Keys.onSpacePressed: ac.copy()
+
     property bool done: false
     readonly property string shortId: address.length > head + tail + 1
         ? address.slice(0, head) + "…" + address.slice(address.length - tail) : address
@@ -50,10 +56,11 @@ Rectangle {
                 anchors.fill: parent; name: "check"; color: Theme.ok; stroke: 2.6
                 opacity: ac.done ? 1 : 0; scale: ac.done ? 1 : 0.5
                 Behavior on opacity { NumberAnimation { duration: Theme.dFast } }
-                Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
+                Behavior on scale { enabled: !Theme.reducedMotion; NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
             }
         }
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ac.copy() }
     Tooltip { text: ac.done ? "Copied" : "Copy " + ac.address; target: ac }
+    FocusRing { anchors.fill: parent }
 }

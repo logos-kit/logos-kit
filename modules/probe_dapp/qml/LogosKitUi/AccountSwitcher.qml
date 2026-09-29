@@ -25,6 +25,13 @@ Item {
     Rectangle {
         id: trig
         anchors.fill: parent
+        activeFocusOnTab: true
+        Accessible.role: Accessible.ComboBox
+        Accessible.name: "Account " + (sw.current ? sw.current.name : "none")
+        Keys.onReturnPressed: pop.opened ? pop.close() : pop.open()
+        Keys.onSpacePressed: pop.opened ? pop.close() : pop.open()
+        Keys.onDownPressed: pop.open()
+        FocusRing { anchors.fill: parent }
         implicitWidth: tl.implicitWidth + 22
         radius: height / 2
         color: tm.containsMouse || pop.opened ? Theme.soft(Theme.text, 0.08) : Theme.surface2
@@ -60,6 +67,12 @@ Item {
             Rectangle {
                 width: pop.panelWidth - 12
                 height: 54
+                activeFocusOnTab: true
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: modelData.name + ", " + modelData.kind + (modelData.id === sw.currentId ? ", selected" : "")
+                Keys.onReturnPressed: { sw.currentId = modelData.id; sw.selected(modelData.id); pop.close() }
+                Keys.onSpacePressed: { sw.currentId = modelData.id; sw.selected(modelData.id); pop.close() }
+                FocusRing { anchors.fill: parent }
                 radius: 14
                 color: am.containsMouse ? Theme.soft(Theme.text, 0.06) : "transparent"
                 RowLayout {
@@ -87,6 +100,12 @@ Item {
         Rectangle {
             width: pop.panelWidth - 12
             height: 46
+            activeFocusOnTab: true
+            Accessible.role: Accessible.MenuItem
+            Accessible.name: "New account"
+            Keys.onReturnPressed: { pop.close(); sw.createRequested() }
+            Keys.onSpacePressed: { pop.close(); sw.createRequested() }
+            FocusRing { anchors.fill: parent }
             radius: 14
             color: nm.containsMouse ? Theme.soft(Theme.text, 0.06) : "transparent"
             RowLayout {

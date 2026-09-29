@@ -14,6 +14,12 @@ Item {
     property string tone: "text"
     default property alias trailing: slot.data
     signal clicked()
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: sr.title + (sr.value ? ", " + sr.value : "")
+    Keys.onReturnPressed: if (sr.chevron) sr.clicked()
+    Keys.onSpacePressed: if (sr.chevron) sr.clicked()
+
     Layout.fillWidth: true
     implicitHeight: Math.max(60, lay.implicitHeight + 20)
 
@@ -45,4 +51,5 @@ Item {
         Glyph { visible: sr.chevron && slot.children.length === 0; name: "chevronRight"; color: Theme.text3; width: 16; height: 16 }
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; enabled: sr.chevron; cursorShape: Qt.PointingHandCursor; onClicked: sr.clicked(); z: -1 }
+    FocusRing { anchors.fill: parent; ringRadius: Theme.rRow + 3 }
 }

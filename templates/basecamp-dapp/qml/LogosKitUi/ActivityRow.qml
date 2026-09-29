@@ -16,6 +16,12 @@ Item {
     property string status: "included"
     property bool isPrivate: false
     signal clicked()
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: ar.title + ", " + ar.status + (ar.amount ? ", " + ar.amount + " " + ar.symbol : "")
+    Keys.onReturnPressed: ar.clicked()
+    Keys.onSpacePressed: ar.clicked()
+
     Layout.fillWidth: true
     implicitHeight: 62
     readonly property bool incoming: kind === "receive" || kind === "faucet" || kind === "unshield"
@@ -88,4 +94,5 @@ Item {
         }
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ar.clicked() }
+    FocusRing { anchors.fill: parent; ringRadius: Theme.rRow + 3 }
 }

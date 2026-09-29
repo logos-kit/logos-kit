@@ -69,7 +69,7 @@ ColumnLayout {
                     color: modelData.ok ? Theme.soft(Theme.ok, 0.18) : Theme.surface2
                     Behavior on color { ColorAnimation { duration: Theme.dFast } }
                     Glyph { anchors.centerIn: parent; name: "check"; color: Theme.ok; width: 9; height: 9; stroke: 3
-                            scale: modelData.ok ? 1 : 0; Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } } }
+                            scale: modelData.ok ? 1 : 0; Behavior on scale { enabled: !Theme.reducedMotion; NumberAnimation { duration: 200; easing.type: Easing.OutBack } } }
                 }
                 Txt { text: modelData.label; tone: modelData.ok ? "text" : "text3"; font.pixelSize: 12 }
             }

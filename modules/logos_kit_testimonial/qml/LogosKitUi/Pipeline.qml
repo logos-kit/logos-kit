@@ -8,12 +8,24 @@ import QtQuick.Layouts
 // advances by itself or claims a stage finished.
 //
 // stages: [{ label, detail?, status: pending|active|done|failed|skipped,
-//            progress?: 0..1, elapsed?: "1:24" }]
+//            elapsed?: "1:24", estimate?: "About 5 min",
+//            progress?: 0..1 (only for truly measured work) | -1 (indeterminate) }]
+// Proving has no honest percentage: give it `estimate` + `elapsed` and
+// progress -1. The timeline ends at a failed stage: later stages never
+// happened, so they aren't shown as pending.
 // Rail 2 px, travelled in `accent`; the active node pulses (scale 1→1.7,
 // 1.4 s); rows enter with a 260 ms rise on the emphasized curve.
 ColumnLayout {
     id: pl
     property var stages: []
+    readonly property var shown: {
+        var out = []
+        for (var i = 0; i < stages.length; i++) {
+            out.push(stages[i])
+            if (stages[i].status === "failed") break
+        }
+        return out
+    }
     property color accent: Theme.action
     property bool compact: false
     spacing: 0
@@ -24,11 +36,11 @@ ColumnLayout {
     }
 
     Repeater {
-        model: pl.stages
+        model: pl.shown
         Item {
             id: row
             readonly property var st: modelData
-            readonly property bool last: index === pl.stages.length - 1
+            readonly property bool last: index === pl.shown.length - 1
             readonly property bool travelled: st.status === "done" || st.status === "skipped"
             Layout.fillWidth: true
             implicitHeight: body.implicitHeight + (last ? 0 : (pl.compact ? 12 : 18))
@@ -127,6 +139,12 @@ ColumnLayout {
                         tone: row.st.status === "active" ? "text" : "text3"
                         font.pixelSize: 12
                     }
+                }
+                Txt {
+                    visible: row.st.status === "active" && !!row.st.estimate
+                    text: row.st.estimate || ""
+                    tone: "text3"
+                    font.pixelSize: 12
                 }
                 Txt {
                     visible: !!row.st.detail

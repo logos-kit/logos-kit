@@ -8,6 +8,8 @@ Item {
     id: sw
     property bool checked: false
     property color onColor: Theme.ok
+    property string label: ""
+    Accessible.name: label
     signal toggled(bool checked)
     implicitWidth: 46
     implicitHeight: 28
@@ -22,8 +24,6 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: sw.checked ? sw.onColor : Theme.soft(Theme.text, Theme.dark ? 0.16 : 0.12)
-        border.width: sw.activeFocus ? 2 : 0
-        border.color: Theme.action
         Behavior on color { ColorAnimation { duration: Theme.dBase } }
     }
     Rectangle {
@@ -42,4 +42,5 @@ Item {
     MouseArea { id: mouse; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: sw.flip() }
     Keys.onSpacePressed: flip()
     Keys.onReturnPressed: flip()
+    FocusRing { anchors.fill: parent; ringRadius: height / 2 + 3 }
 }

@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
+import "Focus.js" as Focus
 
 // From 21st.dev animbits/magnetic-drawer (id 19360, spring stiffness 300 /
 // damping 30, drag to dismiss) and wensity/drawer (id 31360, snap + handle):
@@ -87,5 +89,17 @@ Item {
             }
         }
     }
+
+    // Focus trap: Tab stays inside while open; focus returns on close.
+    property Item _returnFocus: null
+    onOpenedChanged: {
+        var w = sh.Window.window
+        if (opened) { _returnFocus = w ? w.activeFocusItem : null; Qt.callLater(function () { Focus.first(sh) }) }
+        else if (_returnFocus) { _returnFocus.forceActiveFocus(); _returnFocus = null }
+    }
+    Keys.onTabPressed: function (e) { if (opened) { Focus.cycle(sh, sh.Window.window, true); e.accepted = true } }
+    Keys.onBacktabPressed: function (e) { if (opened) { Focus.cycle(sh, sh.Window.window, false); e.accepted = true } }
+    Accessible.role: Accessible.Dialog
+    Accessible.name: title
     Keys.onEscapePressed: if (dismissable) close()
 }

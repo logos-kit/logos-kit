@@ -13,7 +13,7 @@ from PySide6.QtQuick import QQuickView
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-SECTIONS = ["foundations", "loading", "pipeline", "feedback", "wallet", "onboarding", "overlays"]
+SECTIONS = ["foundations", "loading", "pipeline", "feedback", "wallet", "connect", "onboarding", "overlays"]
 
 
 def main():

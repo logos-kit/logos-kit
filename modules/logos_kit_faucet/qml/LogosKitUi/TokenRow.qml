@@ -18,6 +18,12 @@ Item {
     property bool loading: false
     property bool chevron: false
     signal clicked()
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: tr.name + " " + tr.amount + " " + tr.symbol
+    Keys.onReturnPressed: if (!tr.loading) tr.clicked()
+    Keys.onSpacePressed: if (!tr.loading) tr.clicked()
+
     Layout.fillWidth: true
     implicitHeight: 64
 
@@ -49,4 +55,5 @@ Item {
         Glyph { visible: tr.chevron; name: "chevronRight"; color: Theme.text3; width: 16; height: 16 }
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; enabled: !tr.loading; cursorShape: Qt.PointingHandCursor; onClicked: tr.clicked() }
+    FocusRing { anchors.fill: parent; ringRadius: Theme.rRow + 3 }
 }

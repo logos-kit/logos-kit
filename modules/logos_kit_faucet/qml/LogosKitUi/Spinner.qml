@@ -10,7 +10,13 @@ Item {
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
-        RotationAnimator on rotation { from: 0; to: 360; duration: 900; loops: Animation.Infinite; running: sp.visible }
+        RotationAnimator on rotation { from: 0; to: 360; duration: 900; loops: Animation.Infinite; running: sp.visible && !Theme.reducedMotion }
+        // Reduced motion: the arc stays still and breathes instead of spinning.
+        SequentialAnimation on opacity {
+            loops: Animation.Infinite; running: sp.visible && Theme.reducedMotion
+            NumberAnimation { to: 0.35; duration: 1000; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: 1000; easing.type: Easing.InOutSine }
+        }
         ShapePath {
             strokeColor: sp.color
             strokeWidth: Math.max(2, sp.size / 9)

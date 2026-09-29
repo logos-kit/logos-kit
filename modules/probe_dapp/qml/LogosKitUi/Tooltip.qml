@@ -26,6 +26,6 @@ C.ToolTip {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.dFast }
         NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.dFast; easing.type: Easing.OutCubic }
     }
-    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 100 } }
+    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.reducedMotion ? 0 : 100 } }
     HoverHandler { id: hov; parent: tip.target }
 }

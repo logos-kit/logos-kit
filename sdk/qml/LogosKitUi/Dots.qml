@@ -18,7 +18,7 @@ Row {
             color: d.color
             opacity: 0.35
             SequentialAnimation {
-                running: d.running
+                running: d.running   // false under reduced motion: three static dots
                 loops: Animation.Infinite
                 PauseAnimation { duration: index * 160 }
                 ParallelAnimation {

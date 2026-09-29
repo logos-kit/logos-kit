@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "Units.js" as Units
 
 // From 21st.dev cnippet-dev/currency-amount-input-group (id 28357), laid out
 // the way Family and Rabby do sends: a large centred figure that shrinks to
@@ -11,7 +12,13 @@ ColumnLayout {
     property alias text: input.text
     property string symbol: "LEZ"
     property Component tokenIcon: null
-    property string balance: ""        // formatted, shown as "Balance 12.5 LEZ"
+    property string balance: ""        // raw integer in base units ("12480")
+    property string feeCap: ""         // raw integer; native sends need amount + fee ≤ balance
+    // Affordability, from integer strings (no JS numbers): over when the
+    // amount (plus the fee cap for native) exceeds the balance.
+    readonly property bool over: balance !== "" && text !== "" && decimals === 0
+        && Units.cmp(feeCap !== "" ? Units.add(text, feeCap) : text, balance) > 0
+    readonly property bool empty: text === "" || /^0*$/.test(text)
     property int decimals: 0
     property bool invalid: false
     property string errorText: ""
@@ -21,8 +28,9 @@ ColumnLayout {
     signal submitted()
     spacing: 10
 
-    function shake() { if (!Theme.reducedMotion) shakeAnim.restart() }
+    function shake() { if (!Theme.reducedMotion) shakeAnim.restart() }   // reduced motion: the red text alone
     onInvalidChanged: if (invalid) shake()
+    onOverChanged: if (over) shake()
 
     Item {
         Layout.fillWidth: true
@@ -34,9 +42,12 @@ ColumnLayout {
             transform: Translate { id: nudge }
             TextInput {
                 id: input
+                activeFocusOnTab: true
+                Accessible.role: Accessible.EditableText
+                Accessible.name: "Amount in " + af.symbol
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(contentWidth, 24)
-                color: af.invalid ? Theme.danger : Theme.text
+                color: af.invalid || af.over ? Theme.danger : Theme.text
                 font.family: Theme.font
                 font.pixelSize: Math.max(26, Math.min(52, 52 * 7 / Math.max(7, text.length)))
                 font.weight: Font.DemiBold
@@ -60,6 +71,12 @@ ColumnLayout {
             }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
+                activeFocusOnTab: af.tokenSelectable
+                Accessible.role: Accessible.Button
+                Accessible.name: "Asset " + af.symbol + (af.tokenSelectable ? ", change" : "")
+                Keys.onReturnPressed: if (af.tokenSelectable) af.tokenClicked()
+                Keys.onSpacePressed: if (af.tokenSelectable) af.tokenClicked()
+                FocusRing { anchors.fill: parent }
                 implicitWidth: chip.implicitWidth + 20
                 implicitHeight: 38
                 width: implicitWidth; height: implicitHeight
@@ -90,14 +107,21 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         spacing: 8
         Txt {
-            visible: af.errorText === "" && af.balance !== ""
-            text: "Balance " + af.balance + " " + af.symbol
+            visible: af.errorText === "" && !af.over && af.balance !== ""
+            text: "Balance " + Units.group(af.balance) + " " + af.symbol + (af.feeCap !== "" ? " · fee ≤ " + Units.group(af.feeCap) : "")
             tone: "text2"; num: true; font.pixelSize: 13
         }
         Txt { visible: af.errorText !== ""; text: af.errorText; tone: "danger"; font.pixelSize: 13 }
+        Txt { visible: af.errorText === "" && af.over; text: af.feeCap !== "" ? "Not enough for the amount plus the fee" : "More than your balance"; tone: "danger"; font.pixelSize: 13 }
         Rectangle {
             visible: af.balance !== ""
             implicitWidth: mx.implicitWidth + 16; implicitHeight: 24; radius: 12
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: "Use maximum amount"
+            Keys.onReturnPressed: af.maxClicked()
+            Keys.onSpacePressed: af.maxClicked()
+            FocusRing { anchors.fill: parent }
             color: Theme.soft(Theme.action, 0.13)
             Txt { id: mx; anchors.centerIn: parent; text: "Max"; tone: "action"; font.pixelSize: 12; font.weight: Font.DemiBold }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: af.maxClicked() }

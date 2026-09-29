@@ -13,6 +13,9 @@ ColumnLayout {
     property string actionText: ""
     property string actionTone: "neutral"
     signal action()
+    Accessible.role: Accessible.Grouping
+    Accessible.name: es.title
+
     spacing: 10
     Item {
         Layout.alignment: Qt.AlignHCenter

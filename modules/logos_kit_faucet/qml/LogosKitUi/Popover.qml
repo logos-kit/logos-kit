@@ -25,8 +25,8 @@ C.Popup {
         NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.dFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.emph }
     }
     exit: Transition {
-        NumberAnimation { property: "opacity"; to: 0; duration: 100 }
-        NumberAnimation { property: "scale"; to: 0.98; duration: 100 }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.reducedMotion ? 0 : 100 }
+        NumberAnimation { property: "scale"; to: 0.98; duration: Theme.reducedMotion ? 0 : 100 }
     }
     transformOrigin: C.Popup.Top
 }

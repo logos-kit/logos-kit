@@ -53,6 +53,11 @@ Item {
             from: 0; to: 360; duration: 1100; loops: Animation.Infinite
             running: ring.indeterminate && ring.visible && !Theme.reducedMotion
         }
+        SequentialAnimation on opacity {
+            loops: Animation.Infinite; running: ring.indeterminate && ring.visible && Theme.reducedMotion
+            NumberAnimation { to: 0.35; duration: 1000; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: 1000; easing.type: Easing.InOutSine }
+        }
     }
     Item { id: centre; anchors.centerIn: parent; width: childrenRect.width; height: childrenRect.height }
 }

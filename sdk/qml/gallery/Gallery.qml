@@ -15,7 +15,7 @@ Rectangle {
     height: 820
     color: Theme.bg
 
-    readonly property var sections: ["foundations", "loading", "pipeline", "feedback", "wallet", "onboarding", "overlays"]
+    readonly property var sections: ["foundations", "loading", "pipeline", "feedback", "wallet", "connect", "onboarding", "overlays"]
 
     // Header
     RowLayout {
@@ -40,7 +40,7 @@ Rectangle {
         height: g.height - 110
         sourceComponent: g.section === "foundations" ? foundations : g.section === "loading" ? loading
             : g.section === "pipeline" ? pipeline : g.section === "feedback" ? feedback
-            : g.section === "wallet" ? wallet : g.section === "onboarding" ? onboarding : overlays
+            : g.section === "wallet" ? wallet : g.section === "connect" ? connect : g.section === "onboarding" ? onboarding : overlays
     }
 
     component Label: Txt { tone: "text3"; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.8 }
@@ -189,7 +189,7 @@ Rectangle {
                         accent: Theme.priv
                         stages: [
                             { label: "Approved", detail: "You approved it in Logos Kit", status: "done", elapsed: "0:00" },
-                            { label: "Proving on this device", detail: "Keeps the amount and recipient private. About 5 minutes.", status: "active", progress: 0.46, elapsed: "2:18" },
+                            { label: "Proving on this device", detail: "Keeps the amount and recipient private. You can keep using the wallet.", estimate: "Usually about 5 minutes", status: "active", progress: -1, elapsed: "2:18" },
                             { label: "Signing", status: "pending" },
                             { label: "Submitted to LEZ preview", status: "pending" },
                             { label: "Included in a block", status: "pending" }
@@ -220,7 +220,7 @@ Rectangle {
                             { label: "Approved", status: "done" },
                             { label: "Signed", status: "done" },
                             { label: "Rejected by the program", detail: "This account already posted a testimonial.", status: "failed" },
-                            { label: "Included", status: "skipped" }
+                            { label: "Included", status: "pending" }
                         ]
                     }
                     RowLayout { spacing: 18
@@ -273,7 +273,7 @@ Rectangle {
                 ColumnLayout { width: parent.width; spacing: 14
                     RowLayout { Layout.fillWidth: true
                         AccountSwitcher {
-                            accounts: [{ id: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x", name: "Main", kind: "public", balance: "12,480" },
+                            accounts: [{ id: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x", name: "Main", kind: "public", balance: "1,000,012,480" },
                                        { id: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R", name: "Vault", kind: "private", balance: "5,000" }]
                             currentId: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x"
                         }
@@ -282,15 +282,17 @@ Rectangle {
                     BalanceCard {
                         objectName: "balance"
                         Layout.fillWidth: true
-                        value: "12,480"
-                        privateLine: "5,000 LEZ private"
+                        value: "1000012480"
+                        privSpendable: "5000"
+                        privPending: "1000"
+                        privLocked: "0"
                         ActionTile { glyph: "arrowUp"; text: "Send"; tone: "ink" }
                         ActionTile { glyph: "arrowDown"; text: "Receive" }
                         ActionTile { glyph: "shield"; text: "Shield"; tone: "private" }
                         ActionTile { glyph: "droplet"; text: "Faucet" }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
-                    TokenRow { name: "Logos"; symbol: "LEZ"; amount: "12,480"; amountSub: "Public" }
+                    TokenRow { name: "Logos"; symbol: "LEZ"; amount: "1,000,012,480"; amountSub: "Public" }
                     TokenRow { name: "Logos"; symbol: "LEZ"; amount: "5,000"; sub: "Private · 2 notes"; isPrivate: true }
                     TokenRow { name: "Kit Token"; symbol: "KIT"; definition: "He3w5dZRHnVUYMgn1xqZmSmij3wA43kHrLcFa5MJ8KEH"; amount: "999,740"; amountSub: "KIT"; chevron: true }
                     TokenRow { loading: true } } }
@@ -300,16 +302,56 @@ Rectangle {
                         Label { text: "Activity" }
                         ActivityRow { kind: "shield"; title: "Shielded"; sub: "Proving · 2:18"; amount: "5,000"; status: "pending"; isPrivate: true }
                         ActivityRow { kind: "send"; title: "Sent to Savings"; sub: "2 min ago"; amount: "1,000" }
-                        ActivityRow { kind: "faucet"; title: "Test LEZ from the faucet"; sub: "Today, 20:46"; amount: "1" }
+                        ActivityRow { kind: "faucet"; title: "Test LEZ from the faucet"; sub: "Today, 20:46"; amount: "1,000,000,000" }
                         ActivityRow { kind: "testimonial"; title: "Testimonial posted"; sub: "Block 221" }
                         ActivityRow { kind: "send"; title: "Sent to 3kS…9Y"; sub: "Yesterday"; amount: "250"; symbol: "KIT"; status: "unconfirmed" }
                         ActivityRow { kind: "send"; title: "Send"; sub: "Yesterday"; amount: "40"; status: "failed" } } }
                 Card { Layout.fillWidth: true
                     ColumnLayout { width: parent.width; spacing: 10
                         Label { text: "Amount" }
-                        AmountField { Layout.fillWidth: true; text: "1250"; balance: "12,480"; tokenIcon: Component { TokenIcon { size: 24 } } }
-                        AmountField { Layout.fillWidth: true; text: "99999"; symbol: "KIT"; invalid: true; errorText: "More than your 999,740 KIT"
+                        AmountField { Layout.fillWidth: true; text: "1250"; balance: "1000012480"; feeCap: "134400000"; tokenIcon: Component { TokenIcon { size: 24 } } }
+                        AmountField { Layout.fillWidth: true; text: "1000000"; symbol: "KIT"; balance: "999740"; tokenSelectable: false
                                       tokenIcon: Component { TokenIcon { size: 24; definition: "He3w5dZRHnVUYMgn1xqZmSmij3wA43kHrLcFa5MJ8KEH" } } } } } }
+        }
+    }
+
+    // ---------------------------------------------------------------- connect
+    Component {
+        id: connect
+        RowLayout {
+            spacing: 24
+            Card { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                ColumnLayout { width: parent.width; spacing: 14
+                    RowLayout { spacing: 12
+                        Rectangle { implicitWidth: 48; implicitHeight: 48; radius: 15; color: "#1f7bff"
+                            LogosMark { anchors.centerIn: parent; size: 24; white: true } }
+                        Row { spacing: 4; Repeater { model: 3; Rectangle { width: 5; height: 5; radius: 2.5; color: Theme.text3 } } }
+                        Rectangle { implicitWidth: 48; implicitHeight: 48; radius: 15; color: "#000000"
+                            LogosMark { anchors.centerIn: parent; size: 24; white: true } } }
+                    Txt { text: "Logos Kit Testimonials wants to connect"; font.pixelSize: 20; font.weight: Font.Bold; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.fillWidth: true }
+                    Txt { text: "logos_kit_testimonial · checked by Basecamp"; mono: true; tone: "text3"; font.pixelSize: 12 }
+                    Permissions { Layout.fillWidth: true; privateRead: true }
+                    Txt { text: "Share which accounts?"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.topMargin: 6 }
+                    AccountCard { accountId: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x"; name: "Main"; balance: "1000012480"; checked: true }
+                    AccountCard { accountId: "3ksne6QbqZHhaY3QfWGkjbgDVHWm64y9FNCtEsBDDK9Y"; name: "Savings"; balance: "250000" }
+                    AccountCard { accountId: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R"; name: "Vault"; kind: "private"; balance: "5000" }
+                    CheckRow { text: "Let this app read the private balance of Vault. It still can't spend it."; accent: Theme.priv }
+                    RowLayout { Layout.fillWidth: true; spacing: 10
+                        Btn { text: "Cancel"; Layout.fillWidth: true; large: true }
+                        Btn { text: "Connect 1 account"; tone: "action"; Layout.fillWidth: true; large: true } } } }
+            Card { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                ColumnLayout { width: parent.width; spacing: 14
+                    Label { text: "Approval summary: who gets what, first" }
+                    TxSummary {
+                        Layout.fillWidth: true
+                        outflow: ({ amount: "250", symbol: "KIT", definition: "He3w5dZRHnVUYMgn1xqZmSmij3wA43kHrLcFa5MJ8KEH" })
+                        to: ({ address: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R", kind: "private" })
+                        isPrivate: true
+                        effects: ["Moves 250 KIT into a private account (proved on this device)", "Your public KIT balance drops to 999,490"]
+                        authority: ["This call uses the token's mint authority"]
+                        fee: ({ cap: "134400000" })
+                        program: ({ name: "Token", status: "verified", immutable: true })
+                    } } }
         }
     }
 
@@ -377,14 +419,13 @@ Rectangle {
                                     ColumnLayout { spacing: 1
                                         Txt { text: "Logos Kit Testimonials"; font.pixelSize: 15; font.weight: Font.DemiBold }
                                         Txt { text: "logos_kit_testimonial"; mono: true; tone: "text3"; font.pixelSize: 12 } } }
-                                Rectangle { Layout.fillWidth: true; implicitHeight: 68; radius: Theme.rRow; color: Theme.surface2
-                                    RowLayout { anchors.fill: parent; anchors.margins: 14; spacing: 12
-                                        TokenIcon { size: 38 }
-                                        ColumnLayout { spacing: 0; Layout.fillWidth: true
-                                            Txt { text: "− 1,000 LEZ"; num: true; font.pixelSize: 20; font.weight: Font.Bold }
-                                            Txt { text: "From Main to Savings"; tone: "text2"; font.pixelSize: 12 } } } }
-                                InfoRow { label: "Network fee"; value: "≤ 134,400,000 LEZ" }
-                                InfoRow { label: "Program"; value: "native · verified" }
+                                TxSummary {
+                                    Layout.fillWidth: true
+                                    outflow: ({ amount: "1000", symbol: "LEZ" })
+                                    to: ({ name: "Savings", address: "3ksne6QbqZHhaY3QfWGkjbgDVHWm64y9FNCtEsBDDK9Y", kind: "public" })
+                                    fee: ({ cap: "134400000", payer: "Main" })
+                                    program: ({ name: "Native token", status: "verified", immutable: true })
+                                }
                                 RowLayout { Layout.fillWidth: true; spacing: 10
                                     Btn { text: "Reject"; Layout.fillWidth: true; large: true }
                                     Btn { text: "Approve"; tone: "ink"; Layout.fillWidth: true; large: true } } } }
