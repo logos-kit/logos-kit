@@ -39,6 +39,23 @@ Item {
         border.color: Theme.line
         scale: mouse.pressed ? 0.96 : 1
         Behavior on scale { NumberAnimation { duration: Theme.dPress } }
+        // Hover sheen and a keyboard focus ring (v2).
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: b.tone === "ink" || b.tone === "neutral" || b.tone === "ghost" ? Theme.soft(Theme.dark ? "#ffffff" : "#000000", 0.07) : Theme.soft("#ffffff", 0.14)
+            opacity: mouse.containsMouse && b.enabled && b.armed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.dFast } }
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -3
+            radius: height / 2
+            color: "transparent"
+            border.width: 2
+            border.color: Theme.soft(Theme.action, 0.7)
+            visible: b.activeFocus
+        }
 
         RowLayout {
             id: row
@@ -58,6 +75,7 @@ Item {
         id: mouse
         anchors.fill: parent
         enabled: b.enabled && b.armed && !b.busy
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: b.clicked()
     }

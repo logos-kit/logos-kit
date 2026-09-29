@@ -50,3 +50,4 @@ modules/logos_kit_wallet_ui/dev/__pycache__/
 templates/basecamp-dapp/flake.lock
 .vercel
 .env*
+.21st-inbox/

@@ -13,6 +13,7 @@
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
       "!sdk/qml/**/Tokens.js",
+      "!sdk/qml/**/qrcodegen.js",
       "!modules/*/qml",
       "!templates/*/qml/LogosKit",
       "!templates/*/qml/LogosKitUi",
