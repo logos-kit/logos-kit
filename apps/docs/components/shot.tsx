@@ -43,7 +43,7 @@ export function Shot({
       width={s.width}
       height={s.height}
       priority={priority}
-      sizes={panel ? '(max-width: 640px) 90vw, 380px' : '(max-width: 1024px) 100vw, 1000px'}
+      sizes={panel ? '(max-width: 640px) 180vw, 760px' : '(max-width: 1024px) 200vw, 2000px'}
       className="block h-auto w-full"
     />
   )

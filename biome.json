@@ -21,6 +21,7 @@
       "!packages/qml-bundle/gate/noderun.cjs",
       "!docs/dev/PLAN.md",
       "!assets/logos",
+      "!apps/docs/public/logos",
       "!sdk/qml/LogosKitUi/assets",
       "!protocol/vectors",
       "!docs/protocol/capability-matrix.json",
@@ -138,5 +139,10 @@
         }
       }
     }
-  ]
+  ],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
 }
