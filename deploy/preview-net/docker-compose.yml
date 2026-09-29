@@ -47,6 +47,14 @@ services:
       LK_DRIP_AMOUNT: "1000000000"
       LK_DRIP_EVERY_SECS: "3600"
       LK_DRIP_IP_PER_HOUR: "5"
+      LK_DRIP_MAX_PER_HOUR: "200"
+      LK_DRIP_DATA: /var/lib/drip
+      # The drip has no published port: Traefik is the only way in, and in its
+      # default (non-insecure) mode it drops client-sent X-Forwarded-For /
+      # X-Real-Ip and sets them from the real peer, so they can be trusted.
+      LK_DRIP_TRUST_PROXY: "1"
+    volumes:
+      - lez-preview-drip:/var/lib/drip
     depends_on:
       - sequencer
     mem_limit: 256m
@@ -66,3 +74,4 @@ services:
 
 volumes:
   lez-preview-data:
+  lez-preview-drip:
