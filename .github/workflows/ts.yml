@@ -1,0 +1,32 @@
+name: TypeScript and docs
+
+on:
+  push:
+    branches: [main, "ci/**", "stage/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: build, types, lint, schema, docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          cache: true
+          require-lockfile: true
+      - run: pnpm build
+      - run: pnpm check:types
+      - run: pnpm check:ci
+      - name: Capability matrix is current
+        run: python3 scripts/capability-matrix.py --check
+      - name: Docs site builds
+        run: pnpm build
+        working-directory: apps/docs

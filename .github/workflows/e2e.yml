@@ -1,0 +1,92 @@
+name: E2E (standalone sequencer)
+
+# The prize's "real sequencer E2E in CI": a LEZ v0.3 sequencer built from our
+# pinned source in standalone mode, RISC0_DEV_MODE=1 on sequencer and prover
+# (dev proofs; the nightly real-proof run is separate), then the CLI flows.
+on:
+  push:
+    branches: [main, "ci/**", "stage/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_TERM_COLOR: always
+  R0VM_VERSION: 3.0.5
+
+jobs:
+  e2e:
+    name: CLI flows against a local sequencer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+      - name: System packages
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev clang cmake ninja-build pkg-config libssl-dev unzip
+      - name: Vendor LEZ (pinned rev + our patches)
+        run: scripts/lez-vendor.sh
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: ""
+          cache-shared-key: workspace-debug
+          cache-save-if: false
+      - name: Cache r0vm
+        id: r0vm
+        uses: actions/cache@v6
+        with:
+          path: ~/.risc0
+          key: r0vm-${{ runner.os }}-${{ env.R0VM_VERSION }}
+      - name: Install r0vm ${{ env.R0VM_VERSION }}
+        if: steps.r0vm.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://risczero.com/install | bash
+          ~/.risc0/bin/rzup install r0vm "$R0VM_VERSION"
+      - name: r0vm on PATH
+        # rzup keeps r0vm inside the cargo-risczero extension and links it
+        # into ~/.cargo/bin, which the cache doesn't restore: link it here.
+        run: |
+          bin="$(ls -d ~/.risc0/extensions/v${R0VM_VERSION}-*/r0vm | head -1)"
+          [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
+          ln -sf "$bin" ~/.risc0/bin/r0vm
+          echo "$HOME/.risc0/bin" >> "$GITHUB_PATH"
+          ~/.risc0/bin/r0vm --version
+      - name: Cache the sequencer build
+        id: seq
+        uses: actions/cache@v6
+        with:
+          path: target/lez-sequencer/release/sequencer_service
+          key: sequencer-${{ runner.os }}-${{ hashFiles('crates/xtask/src/main.rs', 'vendor/lez-patches/*.patch') }}
+      - name: Build sequencer_service (standalone)
+        if: steps.seq.outputs.cache-hit != 'true'
+        working-directory: vendor/lez
+        run: CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/lez-sequencer" cargo build --release --features standalone -p sequencer_service
+      - name: Start the sequencer
+        run: e2e/standalone.sh
+      - name: CLI public send + shield
+        run: e2e/cli.sh
+      - name: Testimonial deploy, posts, re-page, evidence
+        run: e2e/testimonial.sh
+      - name: Engine E2E (sync, approvals, stale approval)
+        env:
+          RISC0_DEV_MODE: "1"
+          LK_E2E_SEQUENCER: http://127.0.0.1:3040
+        run: cargo test -p wallet-engine --test e2e_sync --test e2e_service --test authz -- --nocapture --test-threads=1
+      - name: Sequencer log on failure
+        if: failure()
+        run: tail -200 target/e2e-sequencer/sequencer.log || true
+      - name: Stop the sequencer
+        if: always()
+        run: e2e/standalone.sh stop

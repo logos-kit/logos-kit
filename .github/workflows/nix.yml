@@ -1,0 +1,31 @@
+name: Basecamp modules (Nix lgx)
+
+# The portable .lgx builds the catalog ships (mkLogosModule). Heavy, so weekly
+# and on demand; the catalog repo builds the released versions.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  lgx:
+    name: ${{ matrix.module }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [logos_kit_wallet, logos_kit_wallet_ui, logos_kit_testimonial, logos_kit_faucet]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          docker-images: true
+      - uses: cachix/install-nix-action@v31
+      - name: nix build .#lgx-portable
+        working-directory: modules/${{ matrix.module }}
+        run: nix build .#lgx-portable -L --print-out-paths

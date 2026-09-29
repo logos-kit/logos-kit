@@ -1,0 +1,45 @@
+name: Rust
+
+on:
+  push:
+    branches: [main, "ci/**", "stage/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt, clippy, tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk (the LEZ + RISC Zero build is large)
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+      - name: System packages
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev clang cmake ninja-build pkg-config libssl-dev unzip
+      - name: Vendor LEZ (pinned rev + our patches)
+        run: scripts/lez-vendor.sh
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          components: rustfmt, clippy
+          build-warnings: ""
+          cache-shared-key: workspace-debug
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # E2E tests skip themselves without LK_E2E_SEQUENCER (e2e.yml runs them).
+      - run: cargo test --workspace
