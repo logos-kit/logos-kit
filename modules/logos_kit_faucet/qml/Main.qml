@@ -366,6 +366,7 @@ Item {
                                 controlled: true
                                 enabled: root.phase === "idle" || root.phase === "limited" || root.phase === "done" || root.phase === "declined" || root.phase === "failed"
                                 accountId: modelData.address
+                                showId: !!modelData.label
                                 name: root.nameOf(modelData)
                                 kind: modelData.kind === "private" ? "private" : "public"
                                 balance: root.balances[modelData.address] === undefined || root.balances[modelData.address] === null ? "" : String(root.balances[modelData.address])

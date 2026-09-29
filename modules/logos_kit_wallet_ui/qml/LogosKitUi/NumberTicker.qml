@@ -15,6 +15,11 @@ Row {
     property bool masked: false       // "••••" for hidden balances
     readonly property string shown: masked ? "••••••" : value
     readonly property string text: shown      // for tests and accessibility
+    // Roll only when the value changes: a resize (new font size) or a
+    // theme switch must not replay the animation.
+    property bool rolling: false
+    onValueChanged: { rolling = true; settle.restart() }
+    Timer { id: settle; interval: Theme.dNumber + 50; onTriggered: nt.rolling = false }
     Accessible.role: Accessible.StaticText
     Accessible.name: masked ? "Hidden" : value
     spacing: 0
@@ -27,7 +32,7 @@ Row {
             // Each column is as wide as the digit it shows, easing between
             // widths, so a "1" doesn't leave a tabular gap.
             width: digit ? glyph.advanceWidth : other.implicitWidth
-            Behavior on width { enabled: !Theme.reducedMotion; NumberAnimation { duration: Theme.dNumber; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.expoOut } }
+            Behavior on width { enabled: nt.rolling && !Theme.reducedMotion; NumberAnimation { duration: Theme.dNumber; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.expoOut } }
             TextMetrics { id: glyph; font.family: Theme.font; font.pixelSize: nt.pixelSize; font.weight: nt.weight; text: cell.digit ? cell.ch : "0" }
             height: probe.height
             clip: true
@@ -35,7 +40,7 @@ Row {
             Column {
                 visible: cell.digit
                 y: -(cell.digit ? parseInt(cell.ch) : 0) * probe.height
-                Behavior on y { enabled: !Theme.reducedMotion; NumberAnimation { duration: Theme.dNumber; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.expoOut } }
+                Behavior on y { enabled: nt.rolling && !Theme.reducedMotion; NumberAnimation { duration: Theme.dNumber; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.expoOut } }
                 Repeater {
                     model: 10
                     Text {

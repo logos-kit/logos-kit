@@ -16,6 +16,10 @@ Rectangle {
     property bool checked: false
     property bool multi: true             // check box (true) or radio (false)
     property bool controlled: false       // the parent owns `checked` (keep its binding)
+    // Show the short account id under the name. Off when the name already is
+    // the id; never for an app's opaque private handle (pvt_…).
+    property bool showId: true
+    readonly property bool idShown: showId && accountId.indexOf("pvt_") !== 0
     signal toggled(bool checked)
     Layout.fillWidth: true
     implicitHeight: 66
@@ -61,7 +65,10 @@ Rectangle {
                 Badge { text: ac.kind === "private" ? "Private" : "Public"; tone: ac.kind === "private" ? "private" : "neutral"; dot: false; implicitHeight: 20 }
             }
             Txt {
-                text: (ac.balance !== "" ? Units.lez(ac.balance) + " · " : "") + ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
+                text: ac.balance !== "" && ac.idShown ? Units.lez(ac.balance) + " · " + ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
+                    : ac.balance !== "" ? Units.lez(ac.balance)
+                    : ac.idShown ? ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
+                    : ac.kind === "private" ? "Balance stays private" : ""
                 tone: "text2"; num: true; font.pixelSize: 12; Layout.fillWidth: true
             }
         }

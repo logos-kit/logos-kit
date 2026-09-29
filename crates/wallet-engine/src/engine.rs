@@ -551,6 +551,29 @@ impl Engine {
             status.amount = Some(amount.to_string());
             status.to = to.clone();
             status.token = token.clone();
+        } else {
+            // A call (e.g. an app's transfer): the one asset leaving the
+            // signer, and where it goes, from the decoded flows.
+            let from = review.intent.from_account();
+            let outs: Vec<_> = review
+                .summary
+                .outflows
+                .iter()
+                .filter(|f| f.account == from)
+                .collect();
+            if let [out] = outs.as_slice() {
+                status.amount = Some(out.amount.to_string());
+                status.token = match &out.asset {
+                    crate::decode::Asset::Native => None,
+                    crate::decode::Asset::Token { definition, .. } => Some(definition.clone()),
+                };
+                status.to = review
+                    .summary
+                    .inflows
+                    .iter()
+                    .find(|f| f.account != from && f.asset == out.asset)
+                    .map(|f| f.account.clone());
+            }
         }
         state.insert_status(status);
         state.pending = Some(Pending {

@@ -67,9 +67,17 @@ ColumnLayout {
 
     // -- who gets what, first (TxSummary: asset + amount + full destination,
     //    then effects and authority, then fee cap and source) ----------------
+    // The recipient: the engine's own for transfers; for an app's call, the
+    // account the decoded outflow lands in (shown in full, never shortened).
+    readonly property string recipient: {
+        if (review.recipient) return review.recipient
+        var ins = summary.inflows || []
+        for (var i = 0; i < ins.length; i++) if (ins[i].account !== intent.from) return ins[i].account
+        return ""
+    }
     readonly property var ownRecipient: {
         for (var i = 0; i < store.accounts.length; i++)
-            if (store.accounts[i].accountId === review.recipient) return store.accounts[i]
+            if (store.accounts[i].accountId === recipient) return store.accounts[i]
         return null
     }
     readonly property var tokenInfo: {
@@ -84,9 +92,9 @@ ColumnLayout {
         outflow: av.outNative !== "" ? ({ amount: av.outNative, symbol: "LEZ" })
                : av.outToken !== "" ? ({ amount: av.outToken, symbol: av.tokenInfo && av.tokenInfo.name ? av.tokenInfo.name : Fmt.short(av.intent.token), definition: av.intent.token })
                : null
-        to: !av.review.recipient ? null : ({
+        to: av.recipient === "" ? null : ({
             name: av.ownRecipient ? Fmt.accountName(av.ownRecipient) + " (yours)" : "",
-            address: av.review.recipient,
+            address: av.recipient,
             kind: (av.ownRecipient && av.ownRecipient.kind === "private") || (av.intent.toKeys && av.route !== "public") ? "private" : "public"
         })
         effects: av.summary.lines || []
