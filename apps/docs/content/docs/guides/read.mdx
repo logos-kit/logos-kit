@@ -19,7 +19,7 @@ kit.api.getWalletBalance(root.account, tokenDefinition).then(function (b) { … 
 
 | Field | |
 |---|---|
-| `amount` | Base units, as a decimal string |
+| `amount` | The raw integer amount, as a decimal string (native LEZ has no decimals, so this is the LEZ balance) |
 | `asset` | The token definition, or native |
 | `synced` | Private accounts: whether the wallet has caught up with the chain |
 | `asOfBlock` | The block the balance is from |
@@ -54,8 +54,9 @@ See [Follow the network](/docs/guides/follow-network).
 
 ## In TypeScript
 
-The same reads work from Node or a browser against any sequencer (the preview
-network allows browser calls):
+The same reads work from Node against any sequencer. From a browser they work
+only against endpoints that send CORS headers: the preview network does, the
+official testnet does not.
 
 ```ts
 import { createClient, http, nodeActions } from '@logos-kit/client'

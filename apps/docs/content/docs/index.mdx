@@ -10,8 +10,8 @@ Logos Kit is two things that ship together:
   user's own machine, and approvals that show what a transaction really does.
 - **An SDK** your app uses to ask that wallet for things: connect, read
   balances, propose transfers and program calls, and follow them until they
-  land. It runs in Basecamp apps (QML) and in scripts and web apps
-  (TypeScript).
+  land. It runs in Basecamp apps (QML). A TypeScript client covers Node
+  scripts and tools; a web and React Native connect kit is planned.
 
 Keys, accounts and approvals live only in the wallet. Your app asks; the user
 decides.
@@ -31,7 +31,7 @@ decides.
 | **Approvals you can read** | Every request is decoded into effects (who pays whom, which token, which program), with the fee cap and the program's source verification. Calls the wallet can't read are flagged as such. |
 | **Honest outcomes** | LEZ 0.3 includes failed transactions, so "included" isn't "worked". The wallet proves the effect from chain state and reports `success`, `failure` or `unknown`. |
 | **Built for Basecamp** | User-facing steps are Basecamp intents, so the shell attests which app is asking. Reads are plain module calls. |
-| **One API, two runtimes** | The same calls from QML (`LogosKit`) and TypeScript (`@logos-kit/client`), with byte-exact LEZ encoding (`@logos-kit/codec`). |
+| **QML first, TypeScript too** | Apps call the wallet from QML (`LogosKit`). The same client (`@logos-kit/client`, `@logos-kit/codec`, byte-exact LEZ encoding) runs in Node for scripts and tools. Web and React Native connect kits are planned. |
 | **Apps to copy** | A testimonial app, a faucet app and a template, each with loading, pending, error and unconfirmed states. |
 
 ## How the pieces fit

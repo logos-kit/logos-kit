@@ -37,9 +37,11 @@ async function main() {
 ```
 
 <Callout type="warn">
-The LEZ sequencer doesn't send CORS headers, so `http()` works from Node and
-other non-browser runtimes, not from a web page. In Basecamp, read through the
-wallet instead (`readAccount`, `getWalletBalance`).
+The official LEZ sequencer (`testnet.lez.logos.co`) and a default LEZ
+deployment send no CORS headers, so from those `http()` works in Node and other
+non-browser runtimes, not in a web page. The Logos Kit **preview** endpoint
+does send CORS headers and is browser-callable. In Basecamp, read through the
+wallet (`readAccount`, `getWalletBalance`).
 </Callout>
 
 ## Talk to the wallet

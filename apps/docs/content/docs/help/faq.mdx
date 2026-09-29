@@ -38,9 +38,11 @@ will be redeployed there once it runs 0.3.
 </Accordion>
 <Accordion title="Can my web app use it?">
 
-Your web app can read chain data today with `@logos-kit/client` (the preview
-network allows browser calls). Connecting a web app to a wallet (a React
-connect kit and an embedded passkey wallet) is on the roadmap.
+Not yet. Today `@logos-kit/client` is Node and transport tooling: typed chain
+reads, encoding, and the Basecamp module bridge. It has no browser wallet
+connector. It can read the preview network from a browser (that endpoint sends
+CORS headers). A web connect kit (React), React Native, and an embedded passkey
+wallet are planned, not shipped.
 
 </Accordion>
 <Accordion title="Do I need Logos Kit Wallet to build an app?">

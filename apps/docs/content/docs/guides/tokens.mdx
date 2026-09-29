@@ -37,5 +37,6 @@ logos-kit token create --name KIT --supply 1000000 --holder <public account>
 logos-kit token list
 ```
 
-Amounts are base units. `kit.sdk.formatUnits(amount, decimals)` formats them
-when your token has decimals.
+Amounts are raw integers, as strings. Native LEZ has no decimals; if your
+token defines decimals for display, `kit.sdk.formatUnits(amount, decimals)`
+formats them.

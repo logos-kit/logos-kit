@@ -41,7 +41,7 @@ console.log(\`block \${height}\`, formatUnits('1500000', 6)) // "1.5"`
 const stack = [
   { src: '/logos/rust.svg', dark: '/logos/rust_dark.svg', name: 'Rust engine' },
   { src: '/logos/qt.svg', name: 'Qt / QML' },
-  { src: '/logos/typescript.svg', name: 'TypeScript SDK' },
+  { src: '/logos/typescript.svg', name: 'TypeScript client' },
   { src: '/logos/nix.svg', name: 'Nix builds' },
   { src: '/logos/risc0.png', name: 'RISC Zero proofs', mono: true },
 ]
@@ -145,7 +145,6 @@ export default function HomePage() {
               className="mt-9 w-full max-w-xl text-left"
               commands={{
                 'Basecamp app': 'nix flake init -t github:logos-kit/logos-kit#dapp',
-                TypeScript: 'pnpm add @logos-kit/client @logos-kit/codec',
               }}
             />
           </div>
@@ -248,7 +247,7 @@ export default function HomePage() {
       <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-[1fr_1.25fr]">
         <div>
           <div className="font-medium text-[11px] text-fd-muted-foreground uppercase tracking-[0.14em]">
-            One API, two runtimes
+            QML in Basecamp · TypeScript for tools
           </div>
           <h2 className="mt-2 font-semibold text-3xl tracking-tight md:text-4xl">
             Ask, approve, follow
@@ -256,8 +255,9 @@ export default function HomePage() {
           <p className="mt-4 text-fd-muted-foreground leading-relaxed">
             A proposal resolves when the user approves it, with a handle. The transaction proves,
             lands and gets its outcome after that; your app follows the handle and shows each step.
-            The same calls work in QML and TypeScript, with byte-exact LEZ encoding and no{' '}
-            <code>BigInt</code>, so they run inside Basecamp's sandbox.
+            Apps call the wallet from QML. The TypeScript client (Node and transport tooling,
+            byte-exact LEZ encoding, no <code>BigInt</code>) reads the chain from scripts and tools.
+            Web and React Native connect kits are planned.
           </p>
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 font-medium text-sm">
             <Link href="/docs/guides/send" className="text-[var(--lk-action)]">
@@ -271,7 +271,7 @@ export default function HomePage() {
         <CodeShowcase
           files={[
             { name: 'Main.qml', lang: 'qml', code: qml },
-            { name: 'read.ts', lang: 'ts', code: ts },
+            { name: 'read.ts (Node)', lang: 'ts', code: ts },
           ]}
         />
       </section>

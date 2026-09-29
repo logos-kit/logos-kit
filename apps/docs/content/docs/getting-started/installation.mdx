@@ -75,12 +75,22 @@ shell answers `not_declared`.
 </Tab>
 <Tab value="TypeScript">
 
+<Callout type="warn" title="Preview: not on npm yet">
+`@logos-kit/client` and `@logos-kit/codec` aren't published yet. Use them from
+the monorepo:
+</Callout>
+
 ```sh
-pnpm add @logos-kit/client @logos-kit/codec
+git clone https://github.com/logos-kit/logos-kit && cd logos-kit
+pnpm install && pnpm build
+# then work inside the workspace, e.g. add a package under packages/ or a
+# script that imports "@logos-kit/client" (resolved through pnpm workspaces)
 ```
 
-The packages are QML-safe ES2017 (no native `BigInt`), so the same code runs in
-Node, browsers and Basecamp. See [TypeScript client](/docs/sdk/client).
+They're Node and transport tooling (typed chain reads, encoding, the Basecamp
+module bridge), written in QML-safe ES2017 with no native `BigInt`. A browser
+or React Native wallet connector is planned, not shipped. See
+[TypeScript client](/docs/sdk/client).
 
 </Tab>
 </Tabs>

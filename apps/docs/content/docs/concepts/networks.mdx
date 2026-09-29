@@ -26,7 +26,7 @@ wallet uses it by default.
   it (`TESTIMONIAL_PROGRAMS["lez:preview"]`). Posts there are real on-chain
   records, but **the LP-0021 adoption count only includes the official
   testnet**. We redeploy there when it runs 0.3.
-- Browsers can call the RPC directly (CORS is open), so web dApps and the
+- The **preview** endpoint sends CORS headers, so browsers can call it and the
   `@logos-kit/client` examples in these docs work against it.
 - It is a preview: it may be reset, and it will be retired once the official
   testnet runs 0.3. The address stays as it is until then. A real domain will
@@ -39,9 +39,9 @@ wallet uses it by default.
 (`crates/logos-kit-drip`). The wallet's `lez_requestFunds` and the Faucet app
 use it automatically.
 
-- 1 LEZ (1 000 000 000 base units) per request;
+- 1,000,000,000 LEZ per request (native LEZ has no decimals: balances are whole numbers);
 - each account once an hour, each IP five times an hour;
-- a result it can't prove is `outcome_unknown`; it never pays twice.
+- a result it can't prove is `outcome_unknown`. The drip keeps a durable ledger per request key, so asking again with the same key returns that recorded outcome instead of paying again.
 
 ```bash
 curl -s https://lez-drip.84.46.247.92.sslip.io/fund \

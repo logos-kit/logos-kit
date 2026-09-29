@@ -74,15 +74,27 @@ approves, with a **handle**; inclusion comes after.
 
 ```qml
 function onStatus(s) {
-    if (s.lifecycle === "included" || s.lifecycle === "finalized")
-        s.outcome === "failure" ? recheck(s) : done()
-    else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired")
-        recheck(s)
+    if (s.lifecycle === "included" || s.lifecycle === "finalized") {
+        if (s.outcome === "success") done()
+        else if (s.outcome === "failure") recheckAfterReject(s)
+        else confirm()                       // included, outcome unknown: the record decides
+    } else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired") {
+        recheckAfterReject(s)
+    }
+}
+
+// Unknown outcome: read the author's record. Our post there means it landed.
+function confirm() {
+    kit.api.getTestimonial(programId, account).then(function (t) {
+        root.phase = t && t.text === root.text ? "done" : "unconfirmed"
+    }, function () { root.phase = "unconfirmed" })
 }
 ```
 
-A rejected post can still mean it landed (another device posted for this
-account), so the app reads the record again before calling it a failure.
+Only `success`, or the record itself, shows Done. Otherwise the app shows
+**Not confirmed yet** with a re-check, never a second post. A rejected post
+can still mean the account already posted (another device), so the app reads
+the record again before calling it a failure.
 When it's done, the app shows the transaction and block, and
 `kit.api.openExplorer({ txHash })` opens it in the user's browser (the QML
 sandbox can't open links; the wallet builds the URL).

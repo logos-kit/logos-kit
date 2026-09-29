@@ -1,5 +1,5 @@
 ---
-title: 'Worked example: other Logos modules'
+title: 'Pattern: other Logos modules'
 description: 'Pay through the wallet, then save the receipt to Logos Storage with storage_module.'
 ---
 
@@ -9,7 +9,9 @@ This example pays with the wallet, then saves a JSON receipt of the payment to
 **Logos Storage** through `storage_module`, and shows the receipt's CID.
 
 <Callout type="info">
-This is a pattern, not one of the shipped apps. The storage calls follow
+**Not yet run in Basecamp.** This is a pattern, not one of the shipped apps,
+and unlike the testimonial and faucet examples it hasn't been exercised end to
+end. The storage calls follow
 `storage_module` **3.0.0-rc1** (`logos-co/logos-storage-module`,
 `src/storage_module_plugin.h`). Check the header of the version your users
 run: a core module's method names and arguments are its own contract.

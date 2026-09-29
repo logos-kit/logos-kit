@@ -27,9 +27,12 @@ It is two things that ship together:
   accounts, native LEZ and tokens, private transfers proved on your own
   machine, and approvals decoded from the exact message being signed, with
   the program's source verification.
-- **The SDK.** What Basecamp apps (QML) and scripts or web apps (TypeScript)
-  use to ask the wallet for things: connect, read, propose transfers and
-  program calls, and follow them to an outcome.
+- **The SDK.** What Basecamp apps (QML) use to ask the wallet for things:
+  connect, read, propose transfers and program calls, and follow them to an
+  outcome. A TypeScript client (`@logos-kit/client`, `@logos-kit/codec`) does
+  typed chain reads and encoding from Node scripts and tools. It isn't on npm
+  yet; use it from this monorepo. Web (React) and React Native connect kits
+  are planned, not shipped.
 
 Keys, accounts and approvals live only in the wallet. Apps ask; the user decides.
 
@@ -44,7 +47,8 @@ Keys, accounts and approvals live only in the wallet. Apps ask; the user decides
 | Wallet in Basecamp | ✅ `logos_kit_wallet` + `logos_kit_wallet_ui` 0.1.2 in the [catalog](https://github.com/logos-kit/logos-kit-modules); signed; macOS arm64, Linux x86-64 and arm64 |
 | Public, private and token flows | ✅ faucet, public send, shield, private → public, token public and private, on the live preview network with real proofs (`e2e/preview-flows.sh`) |
 | Testimonial and faucet mini-apps | ✅ `logos_kit_testimonial`, `logos_kit_faucet` 0.1.0 in the catalog |
-| QML SDK, TypeScript SDK, dApp template | ✅ `sdk/qml/LogosKit`, `@logos-kit/client`, `@logos-kit/codec`, `nix flake init -t github:logos-kit/logos-kit#dapp` |
+| QML SDK, dApp template | ✅ `sdk/qml/LogosKit`, `nix flake init -t github:logos-kit/logos-kit#dapp` |
+| TypeScript client (Node/transport tooling) | ✅ in the monorepo (`packages/client`, `packages/codec`); ⏳ npm publish |
 | Conformance kit | ✅ fake wallet with 11 scenarios, `just conformance <dapp>` |
 | Testimonial program | ✅ on the preview network (immutable, source-verified); ⏳ official testnet when it runs 0.3 |
 | CI with the real-sequencer E2E | ⏳ S9 |
@@ -61,7 +65,7 @@ Progress in detail: [`PROGRESS.md`](PROGRESS.md) · plan: [`docs/dev/PLAN.md`](d
 2. **Applications → Logos Kit Wallet → Install.** The core module comes with it.
    Logos Kit Testimonials and Logos Kit Faucet are in the same catalog.
 3. Open it: **Create wallet** (write down the recovery phrase; it's shown once)
-   or **Restore from recovery phrase**. **Get test funds** fills a public
+   or **Restore from recovery phrase**. **Add** (test funds) fills a public
    account from the preview network's faucet.
 
 ## Accounts
