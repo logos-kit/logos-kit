@@ -50,7 +50,8 @@ rm -rf "$STATE"
 mkdir -p "$STATE/home"
 cd "$LEZ/lez/sequencer/service"
 RISC0_DEV_MODE=1 RUST_LOG="${RUST_LOG:-info,kameo=warn}" nohup "$BIN" configs/debug/sequencer_config.json \
-  --home "$STATE/home" --listen-address 127.0.0.1 --port "$PORT" >"$STATE/sequencer.log" 2>&1 &
+  --home "$STATE/home" --listen-address 127.0.0.1 --port "$PORT" \
+  --metrics-address "127.0.0.1:${LK_E2E_METRICS_PORT:-$((PORT + 6000))}" >"$STATE/sequencer.log" 2>&1 &
 echo $! >"$STATE/pid"
 
 for _ in $(seq 1 120); do

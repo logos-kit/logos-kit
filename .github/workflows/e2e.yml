@@ -55,9 +55,14 @@ jobs:
           curl -fsSL https://risczero.com/install | bash
           ~/.risc0/bin/rzup install r0vm "$R0VM_VERSION"
       - name: r0vm on PATH
+        # rzup keeps r0vm inside the cargo-risczero extension and links it
+        # into ~/.cargo/bin, which the cache doesn't restore: link it here.
         run: |
+          bin="$(ls -d ~/.risc0/extensions/v${R0VM_VERSION}-*/r0vm | head -1)"
+          [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
+          ln -sf "$bin" ~/.risc0/bin/r0vm
           echo "$HOME/.risc0/bin" >> "$GITHUB_PATH"
-          ls ~/.risc0/extensions/ | grep -q "v${R0VM_VERSION}-r0vm" || { echo "r0vm $R0VM_VERSION missing"; exit 1; }
+          ~/.risc0/bin/r0vm --version
       - name: Cache the sequencer build
         id: seq
         uses: actions/cache@v6
