@@ -32,7 +32,7 @@ if ! command -v r0vm >/dev/null; then
   exit 1
 fi
 
-[[ -d "$LEZ/.git" ]] || cargo xtask lez-vendor
+[[ -d "$LEZ/.git" ]] || "$ROOT/scripts/lez-vendor.sh"
 if [[ ! -x "$BIN" ]]; then
   echo "building sequencer_service (standalone) from vendor/lez…"
   (cd "$LEZ" && CARGO_TARGET_DIR="$TARGET" cargo build --release --features standalone -p sequencer_service)
