@@ -33,7 +33,7 @@ jobs:
           cache: true
           require-lockfile: true
       - uses: extractions/setup-just@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - name: Build the QML SDK and re-vendor it
         run: |
           just qml-sdk
