@@ -8,6 +8,8 @@ testimonial to a LEZ program that stores it on chain, and shows what others
 wrote. It's the SDK's reference integration: every step of connect → account
 selection → approval → transaction, with the states around it.
 
+<Shot name="testimonial-basecamp" caption="Logos Kit Testimonials in Basecamp, after a post landed." />
+
 ## The program
 
 A standard LEZ program (`programs/testimonial`) keeps one record per
@@ -43,6 +45,8 @@ That decides the state: **already posted** (show it), **no funds** (offer test
 funds in place: `kit.api.requestFunds(account)`), a **fresh account** (a gentle
 nudge: posts from accounts with real use count for more), or the composer.
 
+<Shot name="testimonial-no-funds" caption="A fresh account gets test funds without leaving the app." />
+
 ## 3. Compose, and validate like the chain does
 
 The app checks what the program would refuse, before the user approves
@@ -64,22 +68,41 @@ shows the approval: the program (with its source-verification and upgrade
 status), the fee, and the decoded post. The promise resolves once the user
 approves, with a **handle**; inclusion comes after.
 
+<Shot name="wallet-approval" caption="What the user approves: the post, decoded from the exact message, with the fee cap." />
+
 ## 5. Follow the transaction
 
 ```qml
 function onStatus(s) {
-    if (s.lifecycle === "included" || s.lifecycle === "finalized")
-        s.outcome === "failure" ? recheck(s) : done()
-    else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired")
-        recheck(s)
+    if (s.lifecycle === "included" || s.lifecycle === "finalized") {
+        if (s.outcome === "success") done()
+        else if (s.outcome === "failure") recheckAfterReject(s)
+        else confirm()                       // included, outcome unknown: the record decides
+    } else if (s.lifecycle === "rejected" || s.lifecycle === "dropped" || s.lifecycle === "expired") {
+        recheckAfterReject(s)
+    }
+}
+
+// Unknown outcome: read the author's record. Our post there means it landed.
+function confirm() {
+    kit.api.getTestimonial(programId, account).then(function (t) {
+        root.phase = t && t.text === root.text ? "done" : "unconfirmed"
+    }, function () { root.phase = "unconfirmed" })
 }
 ```
 
-A rejected post can still mean it landed (another device posted for this
-account), so the app reads the record again before calling it a failure.
+Only `success`, or the record itself, shows Done. Otherwise the app shows
+**Not confirmed yet** with a re-check, never a second post. A rejected post
+can still mean the account already posted (another device), so the app reads
+the record again before calling it a failure.
 When it's done, the app shows the transaction and block, and
 `kit.api.openExplorer({ txHash })` opens it in the user's browser (the QML
 sandbox can't open links; the wallet builds the URL).
+
+<div className="grid gap-4 sm:grid-cols-2">
+<Shot name="testimonial-pending" caption="On its way to a block." />
+<Shot name="testimonial-done" caption="Included, and confirmed from the on-chain record." />
+</div>
 
 ## The feed
 

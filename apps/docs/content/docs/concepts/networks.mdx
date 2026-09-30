@@ -1,0 +1,60 @@
+---
+title: Networks
+description: 'Which LEZ network Logos Kit talks to, and why there is a preview network.'
+---
+
+Logos Kit is built on **LEZ 0.3** (`v0.3.0-rc1`). The official testnet at
+`testnet.lez.logos.co` still runs 0.2, whose blocks a 0.3 wallet can't read.
+Until it moves to 0.3, Logos Kit runs a public 0.3 network of its own, and the
+wallet uses it by default.
+
+| Network | Chain id | Sequencer | Faucet |
+|---|---|---|---|
+| **Preview** (default) | `lez:preview` | `https://lez.84.46.247.92.sslip.io` | built in (drip, below) |
+| Official testnet | `lez:testnet` | `https://testnet.lez.logos.co` | official, once it runs 0.3 |
+| Local | `lez:local` | `http://127.0.0.1:3040` | the debug genesis key |
+
+<Shot name="wallet-welcome" caption="A fresh wallet opens on the preview network." />
+
+## The preview network
+
+- The same LEZ release candidate the official 0.3 launch will run, in
+  standalone mode. Proofs are verified for real: private transactions take the
+  same few minutes to prove as they will on the testnet.
+- The testimonial program is deployed there as an immutable program,
+  `4vjENywUCfC3h85mjNGFPV7R9DqvUjV2xhMkCZbJR8XK`, and the wallet and SDK know
+  it (`TESTIMONIAL_PROGRAMS["lez:preview"]`). Posts there are real on-chain
+  records, but **the LP-0021 adoption count only includes the official
+  testnet**. We redeploy there when it runs 0.3.
+- The **preview** endpoint sends CORS headers, so browsers can call it and the
+  `@logos-kit/client` examples in these docs work against it.
+- It is a preview: it may be reset, and it will be retired once the official
+  testnet runs 0.3. The address stays as it is until then. A real domain will
+  be added as a second name, never a replacement, because a wallet refuses a
+  saved network whose address changed.
+
+### Faucet
+
+`https://lez-drip.84.46.247.92.sslip.io` runs `logos-kit-drip`
+(`crates/logos-kit-drip`). The wallet's `lez_requestFunds` and the Faucet app
+use it automatically.
+
+- 1,000,000,000 LEZ per request (native LEZ has no decimals: balances are whole numbers);
+- each account once an hour, each IP five times an hour;
+- a result it can't prove is `outcome_unknown`. The drip keeps a durable ledger per request key, so asking again with the same key returns that recorded outcome instead of paying again.
+
+```bash
+curl -s https://lez-drip.84.46.247.92.sslip.io/fund \
+  -H 'content-type: application/json' \
+  -d '{"account":"<public account id>","requestKey":"any-unique-string"}'
+```
+
+Anyone can run the same faucet for another network: `LK_DRIP_KEY=<funded key>
+LK_DRIP_SEQUENCER=<url> logos-kit-drip`. The deployment files are in
+`deploy/preview-net/`.
+
+## Switching networks
+
+In the wallet: **Settings → Network**. From the CLI: `--zone lez-testnet`
+(or `LOGOS_KIT_ZONE`). Apps built on the SDK follow the wallet's network
+(`lez_chainId`) and reset when it changes.

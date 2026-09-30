@@ -1,0 +1,72 @@
+---
+title: 'Send a transaction'
+description: 'Propose a transfer or program call, follow it, and show the right ending.'
+---
+
+Sending has two halves: the user **approves** in the wallet, then the
+transaction **lands**. Your app sees both.
+
+<Steps>
+<Step>
+
+### Propose
+
+```qml
+kit.api.transfer(root.account, to, "42").then(function (r) {
+    root.follow(r.handle)             // resolves once approved, before it lands
+}, function (e) {
+    if (e.code === kit.sdk.ErrorCode.Timeout) root.phase = "waiting"   // see late results
+    else if (!kit.sdk.isUserRejection(e)) root.error = e.message
+})
+```
+
+`transfer(from, to, amount, token?)` covers native LEZ and tokens. For any
+other program, build a call and use `sendCall`:
+
+```qml
+var call = kit.sdk.nativeTransfer(from, to, "42")      // or your own ProgramCall
+kit.api.sendCall(from, call).then(function (r) { root.follow(r.handle) })
+```
+
+</Step>
+<Step>
+
+### Follow
+
+```qml
+function follow(handle) {
+    root.phase = "sending"
+    root.watcher = kit.api.watchTransaction(handle, function (s) {
+        root.status = s               // lifecycle, block, txHash, proving, outcome…
+        if (s.lifecycle === "included") {
+            root.phase = s.outcome === "success" ? "done"
+                       : s.outcome === "failure" ? "failed"
+                       : "unconfirmed"
+        } else if (["rejected", "dropped", "expired"].indexOf(s.lifecycle) >= 0) {
+            root.phase = "failed"
+        }
+    })
+}
+```
+
+The watcher stops by itself at the first final lifecycle. Call
+`root.watcher.stop()` if the user leaves.
+
+</Step>
+<Step>
+
+### Show the ending
+
+| Ending | Show |
+|---|---|
+| `included` + `success` | Done: the receipt, and an explorer link (`kit.api.openExplorer({ txHash })`) |
+| `included` + `failure` | It was refused on chain; the fee was charged. Offer a retry. |
+| `included` + `unknown` | "Included, not confirmed yet". Re-read the balance or record you expected to change. |
+| `rejected` / `dropped` / `expired` | It didn't happen; `status.error` says why |
+
+</Step>
+</Steps>
+
+<Shot name="template-receipt" caption="The template's receipt: the amount, the block, and an explorer link." />
+
+The full lifecycle and outcome rules are in [Transactions](/docs/concepts/transactions).

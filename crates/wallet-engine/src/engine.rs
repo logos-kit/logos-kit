@@ -101,6 +101,14 @@ pub struct TxStatus {
     /// The wallet account it spends from or signs with.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+    /// For a transfer: its amount (base units), recipient and token (none =
+    /// native). Lets the UI show real activity amounts and private buckets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
     #[serde(skip)]
     requester: Option<String>,
 }
@@ -121,6 +129,9 @@ impl TxStatus {
             title: None,
             route: None,
             from: None,
+            amount: None,
+            to: None,
+            token: None,
             requester,
         }
     }
@@ -533,6 +544,37 @@ impl Engine {
         status.title = Some(review.summary.title.clone());
         status.route = review.route;
         status.from = Some(review.intent.from_account().to_owned());
+        if let tx::Intent::Transfer {
+            to, amount, token, ..
+        } = &review.intent
+        {
+            status.amount = Some(amount.to_string());
+            status.to = to.clone();
+            status.token = token.clone();
+        } else {
+            // A call (e.g. an app's transfer): the one asset leaving the
+            // signer, and where it goes, from the decoded flows.
+            let from = review.intent.from_account();
+            let outs: Vec<_> = review
+                .summary
+                .outflows
+                .iter()
+                .filter(|f| f.account == from)
+                .collect();
+            if let [out] = outs.as_slice() {
+                status.amount = Some(out.amount.to_string());
+                status.token = match &out.asset {
+                    crate::decode::Asset::Native => None,
+                    crate::decode::Asset::Token { definition, .. } => Some(definition.clone()),
+                };
+                status.to = review
+                    .summary
+                    .inflows
+                    .iter()
+                    .find(|f| f.account != from && f.asset == out.asset)
+                    .map(|f| f.account.clone());
+            }
+        }
         state.insert_status(status);
         state.pending = Some(Pending {
             handle,

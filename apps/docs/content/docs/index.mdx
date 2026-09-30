@@ -1,42 +1,65 @@
 ---
-title: 'Introduction'
-description: 'A wallet and a wallet SDK for the Logos Execution Zone.'
+title: 'Why Logos Kit'
+description: 'A wallet and an app SDK for the Logos Execution Zone: public and private accounts, approvals people can read, and the calls your Basecamp app needs.'
 ---
 
-Logos Kit is a wallet for the **Logos Execution Zone (LEZ)** and the SDK apps use
-to talk to it. Keys, accounts and approvals live in the wallet. Apps ask; the
-user decides.
+Logos Kit is two things that ship together:
+
+- **A wallet** for the [Logos Execution Zone](https://logos.co) (LEZ): public and
+  private accounts, native LEZ and tokens, private transfers proved on the
+  user's own machine, and approvals that show what a transaction really does.
+- **An SDK** your app uses to ask that wallet for things: connect, read
+  balances, propose transfers and program calls, and follow them until they
+  land. It runs in Basecamp apps (QML). A TypeScript client covers Node
+  scripts and tools; a web and React Native connect kit is planned.
+
+Keys, accounts and approvals live only in the wallet. Your app asks; the user
+decides.
 
 <Cards>
-  <Card title="Build a Basecamp app" href="/docs/quickstart" description="A working app from a template in five minutes." />
-  <Card title="Worked example: testimonials" href="/docs/guides/testimonial" description="Connect → pick an account → approve → on chain." />
-  <Card title="Worked example: faucet" href="/docs/guides/faucet" description="Test funds into any account, rate limits and all." />
-  <Card title="Wallet methods" href="/docs/reference/methods" description="Every call the wallet answers, generated from the protocol." />
+  <Card title="Quickstart" href="/docs/getting-started/quickstart" description="From template to an installed Basecamp app that sends LEZ, in about ten minutes." />
+  <Card title="Install the wallet" href="/docs/getting-started/installation" description="From the Logos Kit catalog in Basecamp, or with the CLI." />
+  <Card title="Worked example: testimonials" href="/docs/guides/testimonial" description="Connect, pick an account, approve, land on chain: a complete app." />
+  <Card title="Worked example: faucet" href="/docs/guides/faucet" description="Test funds into any account, with rate limits and private accounts." />
 </Cards>
 
-## What's in the box
+## What you get
 
-| Piece | What it is |
+| | |
 |---|---|
-| **Logos Kit Wallet** | A Basecamp app (`logos_kit_wallet_ui`) over a core module (`logos_kit_wallet`): public and private accounts, sends, tokens, proofs on your machine, approvals. |
-| **QML SDK** (`LogosKit/`) | What a Basecamp app copies in to connect, read balances and chain data, propose transactions and follow them. |
-| **UI kit** (`LogosKitUi/`) | The wallet's look (Tray) as QML components, for apps that want it. |
-| **TypeScript SDK** (`@logos-kit/client`, `@logos-kit/codec`) | The same calls for scripts and web apps; byte-exact LEZ encoding. |
-| **CLI** (`logos-kit`) | The wallet from a terminal, and the testimonial program's deploy and evidence tools. |
-| **LWS-0** | The small protocol between apps and wallets: [methods](/docs/reference/methods) and [intents](/docs/reference/intents). |
+| **Private by default** | Public and private accounts side by side. Private transfers are proved locally with RISC Zero: minutes on a laptop, and the app never sees a key. |
+| **Approvals you can read** | Every request is decoded into effects (who pays whom, which token, which program), with the fee cap and the program's source verification. Calls the wallet can't read are flagged as such. |
+| **Honest outcomes** | LEZ 0.3 includes failed transactions, so "included" isn't "worked". The wallet proves the effect from chain state and reports `success`, `failure` or `unknown`. |
+| **Built for Basecamp** | User-facing steps are Basecamp intents, so the shell attests which app is asking. Reads are plain module calls. |
+| **QML first, TypeScript too** | Apps call the wallet from QML (`LogosKit`). The same client (`@logos-kit/client`, `@logos-kit/codec`, byte-exact LEZ encoding) runs in Node for scripts and tools. Web and React Native connect kits are planned. |
+| **Apps to copy** | A testimonial app, a faucet app and a template, each with loading, pending, error and unconfirmed states. |
 
-## How an app talks to the wallet
+## How the pieces fit
 
 ```
-your app ──intent──▶ Basecamp shell ──▶ wallet sheet (the user approves)
-    │                                          │
-    └──module call (reads, status)──▶ logos_kit_wallet (keys never leave)
+┌─────────────┐   intent (connect, send, sign, funds)   ┌──────────────────┐
+│  your app   │ ─────────────────────────────────────▶ │  Basecamp shell  │
+│ (LogosKit)  │                                         └────────┬─────────┘
+│             │                                                  ▼
+│             │   module call (reads, status)          ┌──────────────────┐
+│             │ ─────────────────────────────────────▶ │  Logos Kit wallet│
+└─────────────┘                                         │  keys · approvals│
+                                                        │  proving · policy│
+                                                        └────────┬─────────┘
+                                                                 ▼
+                                                     LEZ sequencer (zone)
 ```
 
-User-facing steps (connect, send, sign, get funds) are Basecamp **intents**:
-the shell routes them to the wallet, which shows its own sheet. Reads and
-status are plain module calls. An app never sees a key and never signs.
+| Piece | Where |
+|---|---|
+| Wallet (Basecamp) | `logos_kit_wallet_ui` over the core module `logos_kit_wallet`, from the [Logos Kit catalog](/docs/wallet/install) |
+| Wallet (terminal) | [`logos-kit` CLI](/docs/wallet/cli), same engine and policy |
+| QML SDK and UI kit | `sdk/qml/LogosKit/`, `sdk/qml/LogosKitUi/` ([QML SDK](/docs/sdk/qml)) |
+| TypeScript SDK | `@logos-kit/client`, `@logos-kit/codec` ([client](/docs/sdk/client)) |
+| Protocol | LWS-0: [methods](/docs/reference/methods) and [intents](/docs/reference/intents) |
 
-<Callout type="warn">
-Logos Kit targets testnets and is unaudited. Don't use it with anything of value.
+<Callout type="warn" title="Testnets only">
+Logos Kit runs on LEZ testnets and is unaudited. Don't use it with anything of
+value. Today the wallet defaults to the Logos Kit [preview network](/docs/concepts/networks),
+because the official testnet still runs LEZ 0.2.
 </Callout>

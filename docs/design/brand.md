@@ -20,8 +20,8 @@ Chosen from three working prototypes (`apps/design-lab`, published for review). 
 | `surface2` | `#F3F3F6` | `#202023` | secondary buttons, rows, keypad |
 | `line` | `rgba(14,14,18,.07)` | `rgba(255,255,255,.07)` | hairlines |
 | `text` | `#0E0E12` | `#F4F4F6` | primary text; also the "ink" primary button |
-| `text2` | `#6C6C78` | `#9A9AA5` | secondary text, units |
-| `text3` | `#A2A2AD` | `#5F5F69` | hints |
+| `text2` | `#575763` | `#9A9AA5` | secondary text, units |
+| `text3` | `#666672` | `#8A8A95` | hints, captions (≥ 4.5:1 on `bg`, `surface` and `surface2` in both themes; raised 2026-09-29 after the Codex review measured 2.5–2.9:1) |
 | `private` | `#6B5FFF` | `#7A70FF` | **only** private state: badges, proof progress, private totals |
 | `action` | `#1F7BFF` | `#3898FF` | public and neutral actions (connect, links) |
 | `ok` / `warn` / `danger` | `#12A150` / `#D49A00` / `#E5484D` | `#4BD166` / `#FFD641` / `#FF6257` | status only |

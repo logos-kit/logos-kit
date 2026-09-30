@@ -1,0 +1,46 @@
+---
+title: 'How apps talk to the wallet'
+description: 'Intents for anything the user sees, module calls for reads.'
+---
+
+A Basecamp app reaches the wallet two ways.
+
+| | Intents | Module calls |
+|---|---|---|
+| For | Connect, send, sign, get funds | Balances, accounts, status, chain reads |
+| Opens | The wallet's own sheet, via the Basecamp shell | Nothing: returns data |
+| Identity | The shell attests the requesting app | Basecamp attests the calling module |
+| In `metadata.json` | Listed under `uses` | `logos_kit_wallet` under `dependencies` |
+
+```
+your app ──intent──▶ Basecamp shell ──▶ wallet chooser ──▶ Logos Kit sheet
+   │                                                          │ user approves
+   └────────── module call ──────────▶ logos_kit_wallet ◀─────┘
+```
+
+The SDK hides the difference: `kit.api.transfer(…)` opens the intent,
+`kit.api.getWalletBalance(…)` makes the call. Both return promises.
+
+## Intents Logos Kit provides
+
+| Intent | SDK call |
+|---|---|
+| `lez.wallet.connect` | `connect()` |
+| `lez.transaction.send` | `transfer()`, `sendCall()`, `sendTransaction()`, `postTestimonial()` |
+| `lez.message.sign` | `signMessage()` |
+| `lez.wallet.sign_in` | `signIn()` |
+| `lez.wallet.request_funds` | `requestFunds()` |
+
+If more than one wallet provides an intent, Basecamp asks the user which to
+use. The full list is in [Intents](/docs/reference/intents).
+
+## The sandbox
+
+Basecamp runs `ui_qml` apps in a sandbox. Plan for it:
+
+- no network access from QML, and no remote or `data:` images;
+- `Qt.openUrlExternally` is blocked (use `kit.api.openExplorer`);
+- only files inside your module's folder load;
+- Qt 6.9's JavaScript engine: no `BigInt`, no `Intl`.
+
+Amounts are strings everywhere in the SDK for that reason.

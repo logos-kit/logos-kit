@@ -1,0 +1,87 @@
+---
+title: 'Troubleshooting'
+description: 'Symptoms, causes and fixes for the problems people actually hit.'
+---
+
+<Accordions>
+<Accordion title="My app's connect fails with not_declared">
+
+The intent isn't listed in your `metadata.json` `uses`. Each entry must be an
+object: `{ "intent": "lez.wallet.connect" }`, not a bare string. Rebuild and
+reinstall the module.
+
+</Accordion>
+<Accordion title="Every call rejects with 6107 RequestPending">
+
+A wallet sheet is still open for your app, or an earlier request timed out
+and the wallet hasn't answered yet. Finish or cancel it in the wallet. Handle
+the late answer with `onLateResult` ([guide](/docs/guides/late-results)).
+
+</Accordion>
+<Accordion title="kit.api is null">
+
+The SDK isn't ready yet, or it's being rebuilt after a network switch. Start
+work in `onApiChanged: if (api) …`, and read `kit.api` fresh each time.
+
+</Accordion>
+<Accordion title="4900 Disconnected">
+
+The wallet is locked, or not set up. Ask the user to open Logos Kit Wallet and
+unlock it.
+
+</Accordion>
+<Accordion title="4902 UnknownChain">
+
+Your proposal names a network the wallet isn't on. With `followWallet` (the
+default) this only happens during a switch: retry after `onApiChanged`.
+
+</Accordion>
+<Accordion title="A private send is stuck on proving">
+
+It isn't stuck: a private proof takes about 4–7 minutes on an M-series Mac and
+needs ~4.3 GB of free memory. Only one proof runs at a time. The status shows
+`proving.phase` and `proving.progress`; the user can close the sheet.
+
+</Accordion>
+<Accordion title="Included, but the outcome is unknown">
+
+LEZ 0.3 includes failed transactions, so the wallet only says `success` when it
+can prove the effect. Re-read the balance or record you expected to change,
+and show "not confirmed yet" until then ([Transactions](/docs/concepts/transactions)).
+
+</Accordion>
+<Accordion title="The faucet says rate_limited">
+
+The preview faucet gives each account one drop an hour, and each IP five an
+hour. The result carries `retryAfterSeconds`; show a countdown.
+
+</Accordion>
+<Accordion title="The wallet can't reach the official testnet">
+
+`testnet.lez.logos.co` still runs LEZ 0.2, whose blocks a 0.3 wallet can't
+read. Use the preview network until it moves to 0.3 ([Networks](/docs/concepts/networks)).
+
+</Accordion>
+<Accordion title="Images don't show in my Basecamp app">
+
+The sandbox blocks remote and `data:` images and anything outside your
+module's folder. Bundle assets in the module and load them with
+`Qt.resolvedUrl("…")` from inside components.
+
+</Accordion>
+<Accordion title="QML errors about a reserved word or regex">
+
+Basecamp runs Qt 6.9's JavaScript engine: `short` is reserved, and there is no
+`BigInt`, `Intl`, regex lookbehind or named groups. Keep amounts as strings and
+use `kit.sdk.parseUnits` and `kit.sdk.formatUnits`.
+
+</Accordion>
+<Accordion title="My dev-installed app shows two-letter initials in the sidebar">
+
+Basecamp shows initials for modules installed with `lgpm` during development.
+Check the icon after a catalog install before changing anything.
+
+</Accordion>
+</Accordions>
+
+Still stuck? [Open an issue](https://github.com/logos-kit/logos-kit/issues).

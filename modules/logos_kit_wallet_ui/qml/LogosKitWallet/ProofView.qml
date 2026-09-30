@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
@@ -18,9 +19,8 @@ ColumnLayout {
     readonly property bool final_: Fmt.isFinal(s)
     readonly property bool failed: s.lifecycle === "dropped" || s.lifecycle === "expired" || s.lifecycle === "rejected"
                                    || (s.lifecycle === "included" && s.outcome === "failure")
-    readonly property int pct: Math.round(Fmt.proofProgress(s) * 100)
     readonly property var phases: pv.priv ? ["building", "proving", "signing", "submitted"] : ["signing", "submitted"]
-    readonly property var labels: ({ "building": "Preparing", "proving": "Generating proof", "signing": "Submitting", "submitted": "Waiting for block" })
+    readonly property var labels: ({ "building": "Preparing", "proving": "Proving on this device", "signing": "Signing and sending", "submitted": "Waiting for a block" })
 
     // -- in progress -------------------------------------------------------------
     ColumnLayout {
@@ -30,42 +30,29 @@ ColumnLayout {
         Txt { Layout.fillWidth: true; text: pv.priv ? "Sending privately" : "Sending"; font.pixelSize: 20; font.weight: Font.DemiBold }
         Txt { Layout.fillWidth: true; text: pv.s.title || ""; tone: "text2"; font.pixelSize: 13; wrapMode: Text.Wrap }
 
-        Item {
-            visible: pv.priv
-            Layout.alignment: Qt.AlignHCenter
-            implicitWidth: 150; implicitHeight: 150
-            Ring { anchors.centerIn: parent; value: pv.pct / 100; size: 148; thickness: 10 }
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 0
-                Txt { Layout.alignment: Qt.AlignHCenter; text: pv.pct + "%"; font.pixelSize: 30; font.weight: Font.Bold; num: true }
-                Txt {
-                    Layout.alignment: Qt.AlignHCenter
-                    tone: "text2"; font.pixelSize: 12
-                    text: pv.s.lifecycle === "proving" ? (pv.s.etaSeconds > 0 ? "about " + Fmt.mmss(pv.s.etaSeconds) + " left" : "Taking longer than usual…") : ""
+        Pipeline {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            accent: pv.priv ? Theme.priv : Theme.action
+            stages: {
+                var at = pv.phases.indexOf(pv.s.lifecycle)
+                var out = [{ label: "Approved", status: "done" }]
+                for (var i = 0; i < pv.phases.length; i++) {
+                    var ph = pv.phases[i]
+                    var st = at > i ? "done" : at === i ? "active" : "pending"
+                    var o = { label: pv.labels[ph], status: st }
+                    if (st === "active") {
+                        o.elapsed = Fmt.mmss(Math.max(0, ((pv.s.nowMs || Date.now()) - pv.s.phaseStartedMs) / 1000))
+                        o.progress = -1
+                        if (ph === "proving") {
+                            o.detail = "Keeps the amount and recipient private. You can close this."
+                            o.estimate = pv.s.etaSeconds > 0 ? "About " + Fmt.mmss(pv.s.etaSeconds) + " left" : "Taking longer than usual"
+                        }
+                    }
+                    out.push(o)
                 }
-            }
-        }
-        Spinner { visible: !pv.priv; Layout.alignment: Qt.AlignHCenter; size: 36; color: Theme.action }
-
-        Repeater {
-            model: pv.phases
-            RowLayout {
-                spacing: 10
-                readonly property int at: pv.phases.indexOf(pv.s.lifecycle)
-                readonly property string st: at > index ? "done" : at === index ? "now" : "todo"
-                Rectangle {
-                    implicitWidth: 20; implicitHeight: 20; radius: 10
-                    color: parent.st === "done" ? Theme.soft(Theme.ok, 0.18) : parent.st === "now" ? Theme.priv : Theme.surface2
-                    Glyph { anchors.centerIn: parent; visible: parent.parent.st === "done"; name: "check"; color: Theme.ok; width: 12; height: 12; stroke: 2.6 }
-                    Rectangle { anchors.centerIn: parent; visible: parent.parent.st === "now"; width: 6; height: 6; radius: 3; color: "#ffffff" }
-                }
-                Txt {
-                    text: pv.labels[modelData]
-                    tone: parent.st === "todo" ? "text3" : "text"
-                    font.pixelSize: 13
-                    font.weight: parent.st === "now" ? Font.DemiBold : Font.Normal
-                }
+                out.push({ label: "Included in a block", status: "pending" })
+                return out
             }
         }
         Notice {
@@ -92,7 +79,9 @@ ColumnLayout {
         visible: pv.final_
         Layout.fillWidth: true
         spacing: 10
+        SuccessCheck { visible: pv.final_ && !pv.failed && pv.s.outcome === "success"; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; size: 72; color: pv.priv ? Theme.priv : Theme.ok }
         Rectangle {
+            visible: !(pv.final_ && !pv.failed && pv.s.outcome === "success")
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 8
             implicitWidth: 64; implicitHeight: 64; radius: 32
@@ -100,7 +89,7 @@ ColumnLayout {
             color: Theme.soft(c, 0.16)
             Glyph { anchors.centerIn: parent; name: pv.failed ? "x" : pv.s.outcome === "success" ? "check" : "info"; color: parent.c; width: 30; height: 30; stroke: 2.4 }
             scale: pv.final_ ? 1 : 0.4
-            Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutBack } }
+            Behavior on scale { enabled: !Theme.reducedMotion; NumberAnimation { duration: 350; easing.type: Easing.OutBack } }
         }
         Txt {
             objectName: "outcomeTitle"
@@ -134,7 +123,7 @@ ColumnLayout {
                 anchors.leftMargin: 14
                 anchors.rightMargin: 6
                 Txt { Layout.fillWidth: true; text: Fmt.shortHash(pv.s.txHash); mono: true; font.pixelSize: 12; tone: "text2" }
-                IconBtn { icon: "copy"; label: "Copy transaction hash"; onClicked: pv.store.copy(pv.s.txHash) }
+                IconButton { glyph: "copy"; label: "Copy transaction hash"; onClicked: pv.store.copy(pv.s.txHash) }
             }
         }
         Btn { objectName: "proofDone"; Layout.fillWidth: true; large: true; text: "Done"; onClicked: pv.close() }

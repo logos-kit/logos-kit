@@ -1,0 +1,226 @@
+{
+  "wallet-welcome": {
+    "kind": "window",
+    "light": false,
+    "width": 2000,
+    "height": 1089,
+    "alt": "Logos Kit Wallet opening in Basecamp after a catalog install, on the preview network",
+    "src": "docs/reviews/s7/catalog/06-wallet-opens.png"
+  },
+  "wallet-home-private": {
+    "kind": "panel",
+    "light": false,
+    "width": 896,
+    "height": 1268,
+    "alt": "Wallet home showing a private balance only the owner can see",
+    "src": "docs/reviews/s7/07-home-private-480.png"
+  },
+  "wallet-home-public": {
+    "kind": "panel",
+    "light": false,
+    "width": 896,
+    "height": 1268,
+    "alt": "Wallet home for a public account",
+    "src": "docs/reviews/s7/10-home-public-480.png"
+  },
+  "wallet-home-light": {
+    "kind": "panel",
+    "light": true,
+    "width": 908,
+    "height": 1268,
+    "alt": "Wallet home in the light theme",
+    "src": "docs/reviews/s7/43-home-light-480.png"
+  },
+  "wallet-send-review": {
+    "kind": "panel",
+    "light": false,
+    "width": 920,
+    "height": 1360,
+    "alt": "Reviewing a send before approving it",
+    "src": "docs/reviews/s7/13-send-review-480.png"
+  },
+  "wallet-proving": {
+    "kind": "panel",
+    "light": false,
+    "width": 920,
+    "height": 1248,
+    "alt": "A private send proving on the device, with its steps",
+    "src": "docs/reviews/s7/14-send-proving-480.png"
+  },
+  "wallet-private-review": {
+    "kind": "panel",
+    "light": false,
+    "width": 920,
+    "height": 1360,
+    "alt": "Reviewing a private transfer",
+    "src": "docs/reviews/s7/40-private-review-480.png"
+  },
+  "wallet-accounts": {
+    "kind": "panel",
+    "light": false,
+    "width": 896,
+    "height": 1268,
+    "alt": "Public and private accounts in the wallet",
+    "src": "docs/reviews/s7/17-accounts-480.png"
+  },
+  "wallet-settings": {
+    "kind": "panel",
+    "light": false,
+    "width": 896,
+    "height": 1268,
+    "alt": "Wallet settings: network, auto-lock, connected apps",
+    "src": "docs/reviews/s7/18-settings-480.png"
+  },
+  "wallet-phrase": {
+    "kind": "panel",
+    "light": false,
+    "width": 880,
+    "height": 1316,
+    "alt": "The recovery phrase shown once at wallet creation",
+    "src": "docs/reviews/s7/04-phrase-480.png"
+  },
+  "wallet-connect": {
+    "kind": "panel",
+    "light": false,
+    "width": 840,
+    "height": 1268,
+    "alt": "An app asking to connect: the accounts to share and what it may do",
+    "src": "docs/reviews/s8/testimonial/02-wallet-connect-440.png"
+  },
+  "wallet-approval": {
+    "kind": "panel",
+    "light": false,
+    "width": 840,
+    "height": 1276,
+    "alt": "Approving a testimonial post: decoded, source-verified, with the fee cap",
+    "src": "docs/reviews/s8/testimonial/09-wallet-approval-440.png"
+  },
+  "wallet-sign-message": {
+    "kind": "panel",
+    "light": false,
+    "width": 920,
+    "height": 1268,
+    "alt": "Signing a message for an app",
+    "src": "docs/reviews/s7/23-sign-message-480.png"
+  },
+  "wallet-shield": {
+    "kind": "panel",
+    "light": false,
+    "width": 840,
+    "height": 1360,
+    "alt": "Approving a shield into a private account",
+    "src": "docs/reviews/s8/faucet/08-wallet-shield-440.png"
+  },
+  "testimonial-compose": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1304,
+    "alt": "The testimonial app: composing a post that names the wallet",
+    "src": "docs/reviews/s8/testimonial/07-compose-520.png"
+  },
+  "testimonial-no-funds": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1304,
+    "alt": "A fresh account with no funds, offered test funds in-flow",
+    "src": "docs/reviews/s8/testimonial/03-no-funds-520.png"
+  },
+  "testimonial-pending": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1074,
+    "alt": "A testimonial post on its way to a block",
+    "src": "docs/reviews/s8/testimonial/10-pending-520.png"
+  },
+  "testimonial-done": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1304,
+    "alt": "A testimonial post included and confirmed from its on-chain record",
+    "src": "docs/reviews/s8/testimonial/11-done-520.png"
+  },
+  "testimonial-basecamp": {
+    "kind": "window",
+    "light": false,
+    "width": 2000,
+    "height": 1089,
+    "alt": "The testimonial app in Basecamp after a post landed",
+    "src": "docs/reviews/s8/basecamp/12-testimonial-done.png"
+  },
+  "faucet-accounts": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 981,
+    "alt": "The faucet app: picking a public or private account",
+    "src": "docs/reviews/s8/faucet/02-accounts-520.png"
+  },
+  "faucet-funded": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1296,
+    "alt": "Test funds arrived",
+    "src": "docs/reviews/s8/faucet/03-funded-520.png"
+  },
+  "faucet-rate-limited": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1296,
+    "alt": "Rate limited, with a countdown",
+    "src": "docs/reviews/s8/faucet/04-rate-limited-520.png"
+  },
+  "faucet-proving": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1297,
+    "alt": "Moving test funds into a private account: proving",
+    "src": "docs/reviews/s8/faucet/09-shield-proving-520.png"
+  },
+  "faucet-private-funded": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1296,
+    "alt": "Test funds arrived in a private account",
+    "src": "docs/reviews/s8/faucet/10-private-funded-520.png"
+  },
+  "faucet-unconfirmed": {
+    "kind": "panel",
+    "light": false,
+    "width": 960,
+    "height": 1296,
+    "alt": "Outcome not confirmed yet, with a safe re-check",
+    "src": "docs/reviews/s8/faucet/11-unconfirmed-520.png"
+  },
+  "template-receipt": {
+    "kind": "panel",
+    "light": false,
+    "width": 896,
+    "height": 1332,
+    "alt": "The dApp template showing a transaction receipt",
+    "src": "docs/reviews/s8/template/05-receipt-480.png"
+  },
+  "catalog-add": {
+    "kind": "window",
+    "light": false,
+    "width": 2000,
+    "height": 1121,
+    "alt": "Adding the Logos Kit catalog in Basecamp settings",
+    "src": "docs/reviews/s7/catalog/01-add-repository.png"
+  },
+  "catalog-install": {
+    "kind": "window",
+    "light": false,
+    "width": 2000,
+    "height": 1121,
+    "alt": "Installing Logos Kit Wallet from the catalog",
+    "src": "docs/reviews/s7/catalog/04-install-dialog.png"
+  }
+}

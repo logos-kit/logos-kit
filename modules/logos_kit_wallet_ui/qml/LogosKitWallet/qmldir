@@ -1,24 +1,11 @@
 module LogosKitWallet
-singleton Theme 1.0 Theme.qml
 Store 1.0 Store.qml
-Txt 1.0 Txt.qml
-Btn 1.0 Btn.qml
-IconBtn 1.0 IconBtn.qml
-Tag 1.0 Tag.qml
-Card 1.0 Card.qml
-Identicon 1.0 Identicon.qml
-LezToken 1.0 LezToken.qml
-LogosMark 1.0 LogosMark.qml
-Field 1.0 Field.qml
-Spinner 1.0 Spinner.qml
+TraySheet 1.0 TraySheet.qml
+TxRow 1.0 TxRow.qml
 Ring 1.0 Ring.qml
-QrCode 1.0 QrCode.qml
-Glyph 1.0 Glyph.qml
-Sheet 1.0 Sheet.qml
-InfoRow 1.0 InfoRow.qml
-Notice 1.0 Notice.qml
-ActivityRow 1.0 ActivityRow.qml
+Island 1.0 Island.qml
 AccountChip 1.0 AccountChip.qml
+AppAvatar 1.0 AppAvatar.qml
 Onboarding 1.0 Onboarding.qml
 Home 1.0 Home.qml
 SendFlow 1.0 SendFlow.qml
@@ -27,6 +14,4 @@ ApprovalView 1.0 ApprovalView.qml
 ProofView 1.0 ProofView.qml
 AccountsView 1.0 AccountsView.qml
 SettingsView 1.0 SettingsView.qml
-Island 1.0 Island.qml
 IntentView 1.0 IntentView.qml
-AppAvatar 1.0 AppAvatar.qml

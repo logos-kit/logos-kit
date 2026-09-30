@@ -1,0 +1,34 @@
+---
+title: 'Handle errors'
+description: 'Which errors to show, which to ignore, and how to recover.'
+---
+
+Every rejection is a `LezError`: `{ code, message, data? }`. Most need one of
+four responses.
+
+| Situation | Codes | Do |
+|---|---|---|
+| The user said no | `4001` | Show nothing. `kit.sdk.isUserRejection(e)` |
+| The wallet is still busy | `6107`, `6108` | Say "Waiting for your wallet"; see [slow approvals](/docs/guides/late-results) |
+| Access changed | `4100`, `4900`, `4902` | Ask to connect again, unlock, or switch network |
+| The chain moved or refused | `6106`, `6102`, `6103` | Propose again (fresh state) |
+
+```qml
+function show(e) {
+    if (kit.sdk.isUserRejection(e)) return
+    switch (e.code) {
+    case kit.sdk.ErrorCode.Timeout:      root.phase = "waiting"; return
+    case kit.sdk.ErrorCode.Unauthorized: root.session = null; root.hint = "Connect again"; return
+    default:                             root.error = e.message
+    }
+}
+```
+
+Show the wallet's `message` as plain text (`textFormat: Text.PlainText`).
+The UI kit's `Txt` does that by default.
+
+A transaction that **lands but fails** isn't a rejection: it resolves, then
+its status ends `included` with `outcome: "failure"`. See
+[Send a transaction](/docs/guides/send).
+
+Every code is listed in [Error codes](/docs/reference/errors).

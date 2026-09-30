@@ -8,6 +8,8 @@ account the user shares. It gives each faucet outcome its own state, including
 the ones where it can't tell yet, and the private path, where funds arrive with
 a proof.
 
+<Shot name="faucet-accounts" caption="The faucet app: any shared account, public or private." />
+
 ## 1. Connect, both kinds
 
 ```qml
@@ -54,6 +56,11 @@ user's public accounts. The app watches that account and says so ("The
 faucet paid Public account 1"). If the funds turn up there, the user can move
 them into the private account from the wallet.
 
+<div className="grid gap-4 sm:grid-cols-2">
+<Shot name="faucet-rate-limited" caption="Rate limited, with a countdown." />
+<Shot name="faucet-unconfirmed" caption="Not confirmed yet: a safe re-check, never a second claim." />
+</div>
+
 ## 3. The private path
 
 The faucet only pays public accounts. For a private target the wallet funds
@@ -77,6 +84,11 @@ gets its own **Included, outcome unconfirmed** state, which says the funds are
 either in the private account or still on the public one, and offers a balance
 check. If the user declines the move, the app says plainly that the funds stay
 on the public account.
+
+<div className="grid gap-4 sm:grid-cols-2">
+<Shot name="faucet-proving" caption="Moving the funds into the private account: proving." />
+<Shot name="faucet-private-funded" caption="Arrived, privately." />
+</div>
 
 ## Run it yourself
 

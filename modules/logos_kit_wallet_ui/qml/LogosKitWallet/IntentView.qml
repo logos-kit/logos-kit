@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
@@ -233,8 +234,10 @@ ColumnLayout {
     }
     Txt {
         visible: iv.requester !== "" && iv.kind !== "lez.transaction.send"
-        text: "Requested by " + iv.requester
+        Layout.fillWidth: true
+        text: "Module " + iv.requester + " · name checked by Basecamp"
         mono: true; tone: "text3"; font.pixelSize: 12
+        wrapMode: Text.WrapAnywhere; elide: Text.ElideNone
     }
     Notice { visible: iv.requester !== "" && iv.kind === "lez.wallet.connect"; tone: "warn"; text: "Unsigned app: Basecamp can't confirm who published it." }
 
@@ -252,76 +255,35 @@ ColumnLayout {
         visible: iv.kind === "lez.wallet.connect" && !iv.blocked
         Layout.fillWidth: true
         spacing: 8
-        Repeater {
-            model: ["See the accounts you choose and their balances", "Ask you to approve transactions"]
-            RowLayout { spacing: 8; Glyph { name: "check"; color: Theme.ok; implicitWidth: 14; implicitHeight: 14 } Txt { text: modelData; font.pixelSize: 13 } }
-        }
-        RowLayout { spacing: 8; Glyph { name: "lock"; color: Theme.text2; implicitWidth: 14; implicitHeight: 14 } Txt { text: "It can never move funds without you"; tone: "text2"; font.pixelSize: 13 } }
-        Txt { text: "Share which accounts?"; font.weight: Font.DemiBold; Layout.topMargin: 6 }
+        Permissions { Layout.fillWidth: true; privateRead: iv.wantsPrivate }
+        Txt { text: "Share which accounts?"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.topMargin: 8 }
         Repeater {
             model: iv.wantsPrivate ? iv.publicAccounts.concat(iv.privateAccounts) : iv.publicAccounts
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 56
-                radius: Theme.rRow
-                readonly property bool on: iv.picked.indexOf(modelData.accountId) >= 0
-                color: on ? Theme.surface2 : "transparent"
-                border.width: on ? 2 : 1
-                border.color: on ? Theme.action : Theme.line
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
-                    Identicon { seed: modelData.accountId; size: 32 }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 1
-                        Txt { text: Fmt.accountName(modelData); font.weight: Font.DemiBold }
-                        Txt { text: modelData.kind === "private" ? "Private · needs its own consent" : Fmt.short(modelData.accountId) + " · " + Fmt.amount(modelData.native, 0) + " LEZ"; tone: "text2"; font.pixelSize: 12 }
-                    }
-                    Rectangle {
-                        implicitWidth: 20; implicitHeight: 20; radius: 10
-                        color: parent.parent.on ? Theme.action : "transparent"
-                        border.width: parent.parent.on ? 0 : 1.5
-                        border.color: Theme.text3
-                        Glyph { anchors.centerIn: parent; visible: parent.parent.parent.on; name: "check"; color: "#ffffff"; width: 12; height: 12; stroke: 2.6 }
-                    }
-                }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: iv.toggle(modelData.accountId) }
+            AccountCard {
+                controlled: true
+                accountId: modelData.accountId
+                name: Fmt.accountName(modelData)
+                kind: modelData.kind
+                balance: modelData.kind === "private" || modelData.native === null || modelData.native === undefined ? "" : String(modelData.native)
+                checked: iv.picked.indexOf(modelData.accountId) >= 0
+                onToggled: iv.toggle(modelData.accountId)
             }
         }
-        RowLayout {
+        CheckRow {
             visible: iv.pickedPrivate
-            Layout.fillWidth: true
-            spacing: 10
-            Rectangle {
-                implicitWidth: 22; implicitHeight: 22; radius: 7
-                color: iv.privConsent ? Theme.priv : "transparent"
-                border.width: iv.privConsent ? 0 : 2
-                border.color: Theme.text3
-                Glyph { anchors.centerIn: parent; visible: iv.privConsent; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: iv.privConsent = !iv.privConsent }
-            }
-            Txt { Layout.fillWidth: true; text: "Let this app see this private account's balance."; font.pixelSize: 13; wrapMode: Text.Wrap }
+            controlled: true
+            checked: iv.privConsent
+            accent: Theme.priv
+            text: "Let this app read the balance of the private accounts I ticked. It still can't spend from them."
+            onToggled: function (c) { iv.privConsent = c }
         }
-        RowLayout {
+        CheckRow {
+            id: connectSiteAck
             visible: !!iv.p.signIn
-            Layout.fillWidth: true
-            spacing: 10
-            Rectangle {
-                id: connectSiteAck
-                property bool checked: false
-                implicitWidth: 22; implicitHeight: 22; radius: 7
-                color: checked ? Theme.action : "transparent"
-                border.width: checked ? 0 : 2
-                border.color: Theme.text3
-                Glyph { anchors.centerIn: parent; visible: connectSiteAck.checked; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: connectSiteAck.checked = !connectSiteAck.checked }
-            }
-            Txt { Layout.fillWidth: true; text: "Also sign in to " + (iv.p.signIn ? iv.p.signIn.domain : "") + ": I started this from that site."; font.pixelSize: 13; wrapMode: Text.Wrap }
+            text: "Also sign in to " + (iv.p.signIn ? iv.p.signIn.domain : "") + ": I started this from that site."
         }
-        Field { id: cpw; objectName: "connectPassword"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password"; onAccepted: connectBtn.clicked() }
-        Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+        Field { id: cpw; objectName: "connectPassword"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Your wallet password"; onAccepted: connectBtn.clicked() }
+        Notice { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger" }
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -374,7 +336,7 @@ ColumnLayout {
             Txt { id: msg; x: 12; y: 12; width: parent.width - 24; text: iv.kind === "lez.message.sign" ? iv.decodeMessage(iv.p.message || "") : ""; font.pixelSize: 13; wrapMode: Text.WrapAnywhere; elide: Text.ElideNone }
         }
         Notice { text: "Signing proves you own this account. It can't move funds or approve a transaction." }
-        Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+        Notice { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger" }
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -406,42 +368,23 @@ ColumnLayout {
         Txt { text: "Sign in with"; tone: "text2"; font.pixelSize: 13 }
         Repeater {
             model: iv.publicAccounts
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 48
-                radius: Theme.rRow
-                readonly property bool on: iv.picked.indexOf(modelData.accountId) >= 0
-                color: on ? Theme.surface2 : "transparent"
-                border.width: on ? 2 : 1
-                border.color: on ? Theme.action : Theme.line
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 10
-                    Identicon { seed: modelData.accountId; size: 28 }
-                    Txt { Layout.fillWidth: true; text: Fmt.accountName(modelData); font.weight: Font.DemiBold }
-                }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: iv.picked = [modelData.accountId] }
+            AccountCard {
+                multi: false
+                controlled: true
+                accountId: modelData.accountId
+                name: Fmt.accountName(modelData)
+                kind: modelData.kind
+                checked: iv.picked.indexOf(modelData.accountId) >= 0
+                onToggled: iv.picked = [modelData.accountId]
             }
         }
         Notice { tone: "warn"; text: "Basecamp can't verify the site name an app gives. Sign in only if you started this from that site." }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Rectangle {
-                id: siteAck
-                objectName: "signInAck"
-                property bool checked: false
-                implicitWidth: 22; implicitHeight: 22; radius: 7
-                color: checked ? Theme.action : "transparent"
-                border.width: checked ? 0 : 2
-                border.color: Theme.text3
-                Glyph { anchors.centerIn: parent; visible: siteAck.checked; name: "check"; color: "#ffffff"; width: 14; height: 14; stroke: 2.6 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: siteAck.checked = !siteAck.checked }
-            }
-            Txt { Layout.fillWidth: true; text: "I started this sign-in from " + (iv.p.domain || "that site") + "."; font.pixelSize: 13; wrapMode: Text.Wrap }
+        CheckRow {
+            id: siteAck
+            objectName: "signInAck"
+            text: "I started this sign-in from " + (iv.p.domain || "that site") + "."
         }
-        Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+        Notice { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger" }
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -476,9 +419,9 @@ ColumnLayout {
         }
         RowLayout {
             visible: iv.job !== "" && iv.fundResult === null
-            spacing: 8
-            Spinner { size: 18 }
-            Txt { text: "Requesting from the faucet…"; tone: "text2"; font.pixelSize: 13 }
+            spacing: 10
+            Dots { color: Theme.action }
+            ShimmerText { text: "Asking the faucet and waiting for the block"; pixelSize: 13 }
         }
         Notice {
             visible: iv.fundResult !== null && iv.fundResult.state === "done"
@@ -486,13 +429,13 @@ ColumnLayout {
             text: {
                 var r = iv.fundResult && iv.fundResult.result
                 if (!r) return ""
-                if (r.status === "funded") return "+" + Fmt.amount(r.amount, 0) + " LEZ" + (r.shield ? ". Approve moving it into your private account next." : ".")
+                if (r.status === "funded") return "+" + Fmt.amount(r.amount, 0) + " LEZ arrived" + (r.shield ? ". Approve moving it into your private account next." : ".")
                 if (r.status === "rate_limited") return "You can claim again in " + Fmt.mmss(r.retryAfterSeconds) + "."
                 if (r.status === "outcome_unknown") return "Checking whether funds arrived… " + (r.reason || "")
                 return r.reason || "The faucet declined."
             }
         }
-        Txt { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger"; font.pixelSize: 13; wrapMode: Text.Wrap }
+        Notice { visible: iv.problem !== ""; Layout.fillWidth: true; text: iv.problem; tone: "danger" }
         RowLayout {
             visible: iv.fundResult === null
             Layout.fillWidth: true
@@ -500,7 +443,7 @@ ColumnLayout {
             Btn { Layout.fillWidth: true; large: true; text: "Cancel"; enabled: iv.job === ""; onClicked: iv.cancel() }
             Btn {
                 objectName: "fundsApprove"
-                Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test funds"; busy: iv.job !== ""
+                Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LEZ"; busy: iv.job !== ""
                 onClicked: {
                     iv.busy = true
                     iv.store.call("requestFunds", { account: iv.p.account, requester: iv.requester }, function (v, e) {

@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
@@ -39,8 +40,8 @@ ColumnLayout {
     Item {
         Layout.alignment: Qt.AlignHCenter
         implicitWidth: 240; implicitHeight: 240
-        QrCode { anchors.centerIn: parent; visible: rv.payload !== ""; text: rv.payload; low: rv.priv; size: 240 }
-        Spinner { anchors.centerIn: parent; visible: rv.payload === "" && rv.problem === ""; size: 28 }
+        QrCard { anchors.centerIn: parent; visible: rv.payload !== ""; text: rv.payload; low: rv.priv; size: 240 }
+        Skeleton { anchors.fill: parent; radius: 24; visible: rv.payload === "" && rv.problem === "" }
     }
     RowLayout {
         visible: rv.priv && !!rv.info
@@ -59,10 +60,11 @@ ColumnLayout {
             anchors.fill: parent
             anchors.leftMargin: 14
             anchors.rightMargin: 6
-            Txt { Layout.fillWidth: true; text: rv.priv ? rv.payload.substring(0, 36) + "…" : rv.payload; mono: true; font.pixelSize: 12; tone: "text2"; elide: Text.ElideMiddle }
-            IconBtn { objectName: "copyReceive"; icon: "copy"; label: "Copy"; onClicked: rv.store.copy(rv.payload) }
+            Identicon { visible: !rv.priv; seed: rv.payload; size: 24 }
+            Txt { Layout.fillWidth: true; text: rv.payload; mono: true; font.pixelSize: 12; tone: "text2"; elide: Text.ElideMiddle }
+            IconButton { objectName: "copyReceive"; glyph: "copy"; label: "Copy"; onClicked: rv.store.copy(rv.payload) }
         }
     }
     Btn { visible: rv.payload !== ""; Layout.fillWidth: true; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
-    Txt { visible: rv.problem !== ""; Layout.fillWidth: true; text: rv.problem; tone: "danger"; wrapMode: Text.Wrap; font.pixelSize: 13 }
+    ErrorCard { visible: rv.problem !== ""; title: "Couldn't load your receive details"; body: rv.problem; onRetry: rv.load() }
 }

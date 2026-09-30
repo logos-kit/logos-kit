@@ -1,0 +1,31 @@
+---
+title: 'Slow approvals'
+description: 'When the user takes more than 45 seconds, the answer still arrives.'
+---
+
+A user-facing call waits 45 seconds for the wallet. Then it rejects with
+`6108 Timeout`, but **the wallet may still be showing the request**. The
+user can still approve it, so a timeout doesn't mean nothing was sent.
+
+The SDK keeps new requests blocked (`6107 RequestPending`) until the wallet
+really answers, and delivers that answer on `lateResult`:
+
+```qml
+LogosKit {
+    id: kit
+    onLateResult: function (intent, ok, data) {
+        if (intent !== kit.sdk.INTENTS.sendTransaction || root.phase !== "waiting") return
+        if (ok) root.follow(data.handle)       // the same path as an on-time approval
+        else if (!kit.sdk.isUserRejection(data)) root.error = data.message
+    }
+}
+
+function send() {
+    kit.api.transfer(from, to, amount).then(function (r) { root.follow(r.handle) }, function (e) {
+        if (e.code === kit.sdk.ErrorCode.Timeout) root.phase = "waiting"   // not an error
+        else if (!kit.sdk.isUserRejection(e)) root.error = e.message
+    })
+}
+```
+
+Show "Waiting for your wallet" in the `waiting` state, not an error.

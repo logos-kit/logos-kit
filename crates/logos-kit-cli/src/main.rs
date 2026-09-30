@@ -179,7 +179,7 @@ struct SendArgs {
     to_npk: Option<String>,
     #[arg(long, requires = "to_npk")]
     to_vpk: Option<String>,
-    /// Keys file from `wallet account show-keys` (npk, vpk lines).
+    /// Keys file from `logos-kit account keys` (npk, vpk lines).
     #[arg(long, conflicts_with_all = ["to_npk", "to_vpk"])]
     to_keys: Option<PathBuf>,
     #[arg(long)]

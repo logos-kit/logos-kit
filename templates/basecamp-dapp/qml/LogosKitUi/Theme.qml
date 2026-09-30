@@ -46,6 +46,23 @@ QtObject {
     readonly property int dPress: reducedMotion ? 0 : 120
     readonly property var overshoot: [0.15, 1.15, 0.6, 1, 1, 1]
     readonly property var calm: [0.25, 0.1, 0.25, 1, 1, 1]
+    // v2 motion (ported from the 21st.dev sources named in each component):
+    // emphasized for state changes, expo-out for numbers and entrances,
+    // Sonner's curve for the toast stack.
+    readonly property var emph: [0.2, 0, 0, 1, 1, 1]
+    readonly property var expoOut: [0.16, 1, 0.3, 1, 1, 1]
+    readonly property var sonner: [0.22, 1, 0.36, 1, 1, 1]
+    readonly property int dFast: reducedMotion ? 0 : 150
+    readonly property int dBase: reducedMotion ? 0 : 260
+    readonly property int dSlow: reducedMotion ? 0 : 500
+    readonly property int dNumber: reducedMotion ? 0 : 900
+
+    // Elevation without effects (the sandbox has no MultiEffect guarantee):
+    // stacked translucent rings, see Shadow.qml.
+    readonly property color shadow: dark ? "#000000" : "#0b1220"
+    readonly property real shadowStrength: dark ? 0.5 : 0.12
+    // A second, raised surface for popovers and toasts.
+    readonly property color raised: dark ? Qt.lighter(t.surface, 1.18) : "#ffffff"
 
     function soft(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 }

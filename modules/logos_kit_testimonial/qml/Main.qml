@@ -299,22 +299,12 @@ Item {
                 spacing: 10
                 LogosMark { size: 22; white: Theme.dark }
                 Txt { text: "Testimonials"; font.pixelSize: 20; font.weight: Font.DemiBold }
-                Tag { text: root.chain.replace("lez:", ""); tone: "pending" }
+                Badge { text: root.chain === "lez:preview" ? "LEZ preview" : root.chain === "lez:testnet" ? "LEZ testnet" : root.chain.replace("lez:", "LEZ "); tone: "ok"; live: true }
                 Item { Layout.fillWidth: true }
-                Rectangle {
+                AddressChip {
                     objectName: "tmAccount"
                     visible: root.account !== ""
-                    implicitHeight: 36
-                    implicitWidth: accRow.implicitWidth + 20
-                    radius: 18
-                    color: Theme.surface
-                    RowLayout {
-                        id: accRow
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Identicon { seed: root.account; size: 22 }
-                        Txt { text: root.shortId(root.account); mono: true; font.pixelSize: 12 }
-                    }
+                    address: root.account
                 }
                 Btn {
                     objectName: "tmConnectTop"
@@ -460,33 +450,22 @@ Item {
 
                         Txt { text: "Say what you use it for"; font.pixelSize: 18; font.weight: Font.DemiBold }
 
-                        // Several shared accounts: pick one.
-                        Flow {
-                            visible: root.accounts.length > 1
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Repeater {
-                                model: root.accounts
-                                Rectangle {
-                                    implicitHeight: 34
-                                    implicitWidth: r.implicitWidth + 18
-                                    radius: 17
-                                    color: modelData.address === root.account ? Theme.surface2 : "transparent"
-                                    border.width: 1
-                                    border.color: modelData.address === root.account ? Theme.text : Theme.line
-                                    RowLayout {
-                                        id: r
-                                        anchors.centerIn: parent
-                                        spacing: 6
-                                        Identicon { seed: modelData.address; size: 18 }
-                                        Txt { text: modelData.label || root.shortId(modelData.address); font.pixelSize: 12 }
-                                    }
-                                    opacity: root.busy && modelData.address !== root.account ? 0.4 : 1
-                                    MouseArea { anchors.fill: parent; enabled: !root.busy; cursorShape: Qt.PointingHandCursor; onClicked: root.selectAccount(modelData.address) }
-                                }
+                        // Several shared accounts: pick one (locked while a post is in flight).
+                        Txt { visible: root.accounts.length > 1; text: "Post from"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Repeater {
+                            model: root.accounts.length > 1 ? root.accounts : []
+                            AccountCard {
+                                multi: false
+                                controlled: true
+                                enabled: !root.busy
+                                opacity: root.busy && modelData.address !== root.account ? 0.4 : 1
+                                accountId: modelData.address
+                                name: modelData.label || root.shortId(modelData.address)
+                                kind: "public"
+                                checked: modelData.address === root.account
+                                onToggled: if (!root.busy) root.selectAccount(modelData.address)
                             }
                         }
-
                         Notice {
                             objectName: "tmNoFunds"
                             visible: root.balance === "0"
@@ -507,14 +486,16 @@ Item {
                             text: "This account hasn't sent anything yet. Posts from accounts with real use count for more: try a transfer first if you can."
                         }
 
+                        Txt { text: "Name (optional, shown publicly)"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 4 }
                         Field {
                             id: nameField
                             objectName: "tmName"
                             Layout.fillWidth: true
-                            placeholderText: "Name (optional)"
+                            placeholderText: "e.g. your handle"
                             maximumLength: 64
                             invalid: root.nameProblem(text) !== ""
                         }
+                        Txt { text: "Your testimonial (must mention Logos Kit)"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 4 }
                         TextBox {
                             id: composer
                             objectName: "tmText"
@@ -531,30 +512,45 @@ Item {
                             spacing: 6
                             Repeater {
                                 model: ["send private payments", "use Basecamp apps", "hold test tokens", "build on LEZ"]
-                                Rectangle {
-                                    implicitHeight: 28
-                                    implicitWidth: s.implicitWidth + 20
-                                    radius: 14
-                                    color: Theme.surface2
-                                    Txt { id: s; anchors.centerIn: parent; text: modelData; tone: "text2"; font.pixelSize: 12 }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: { composer.text = "I use the Logos Kit wallet on LEZ to " + modelData + "."; composer.dirty = true }
-                                    }
+                                Btn {
+                                    text: modelData
+                                    icon: "plus"
+                                    implicitHeight: 32
+                                    onClicked: { composer.text = "I use the Logos Kit wallet on LEZ to " + modelData + "."; composer.dirty = true }
                                 }
                             }
                         }
-                        Txt {
+                        // What it will look like on chain.
+                        Rectangle {
+                            visible: root.textProblem(composer.text) === ""
+                            Layout.fillWidth: true
+                            implicitHeight: pv.implicitHeight + 28
+                            radius: Theme.rRow
+                            color: Theme.surface2
+                            border.width: 1
+                            border.color: Theme.line
+                            ColumnLayout {
+                                id: pv
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                                anchors.margins: 14
+                                spacing: 6
+                                Txt { text: "Preview"; tone: "text3"; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.8 }
+                                RowLayout {
+                                    spacing: 8
+                                    Identicon { seed: root.account; size: 22 }
+                                    Txt { text: nameField.text || root.shortId(root.account); font.pixelSize: 13; font.weight: Font.DemiBold; mono: nameField.text === "" }
+                                    Txt { text: "· now"; tone: "text3"; font.pixelSize: 12 }
+                                }
+                                Txt { Layout.fillWidth: true; text: composer.text; font.pixelSize: 14; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.2 }
+                            }
+                        }
+                        Notice {
                             objectName: "tmProblem"
                             readonly property string problem: root.nameProblem(nameField.text) || (composer.dirty ? root.textProblem(composer.text) : "")
                             visible: problem !== ""
                             Layout.fillWidth: true
                             text: problem
                             tone: "danger"
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                            elide: Text.ElideNone
                         }
                         Txt {
                             visible: root.note !== ""
@@ -575,12 +571,10 @@ Item {
                             enabled: root.textProblem(composer.text) === "" && root.nameProblem(nameField.text) === "" && root.balance !== "0" && !root.checking
                             onClicked: { composer.dirty = true; root.post() }
                         }
-                        Txt {
+                        Notice {
                             Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                            text: "Public and permanent. One per account."
-                            tone: "text3"
-                            font.pixelSize: 12
+                            icon: "info"
+                            text: "Public forever: it's written on chain with this account as the author, and can't be edited or deleted. One per account. Your wallet shows the network fee before you approve."
                         }
                     }
 
@@ -590,27 +584,18 @@ Item {
                         visible: root.phase === "pending"
                         Layout.fillWidth: true
                         spacing: 12
-                        Txt { text: "Posting…"; font.pixelSize: 18; font.weight: Font.DemiBold }
-                        Repeater {
-                            model: [
-                                { label: "Approved in your wallet", at: 0 },
-                                { label: "Signed and sent to the network", at: 1 },
-                                { label: "Included in a block", at: 2 }
-                            ]
-                            RowLayout {
-                                readonly property int reached: {
-                                    var lc = root.status ? root.status.lifecycle : ""
-                                    return lc === "included" || lc === "finalized" ? 3 : lc === "submitted" ? 2 : 1
-                                }
-                                spacing: 10
-                                Item {
-                                    implicitWidth: 22; implicitHeight: 22
-                                    Rectangle { anchors.fill: parent; radius: 11; visible: parent.parent.reached > modelData.at; color: Theme.soft(Theme.ok, 0.16) }
-                                    Glyph { anchors.centerIn: parent; visible: parent.parent.reached > modelData.at; name: "check"; color: Theme.ok; width: 13; height: 13; stroke: 2.6 }
-                                    Spinner { anchors.centerIn: parent; visible: parent.parent.reached === modelData.at; size: 18 }
-                                    Rectangle { anchors.centerIn: parent; visible: parent.parent.reached < modelData.at; width: 8; height: 8; radius: 4; color: Theme.text3 }
-                                }
-                                Txt { text: modelData.label; tone: parent.reached >= modelData.at ? "text" : "text3" }
+                        Txt { text: "Posting your testimonial"; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        Pipeline {
+                            Layout.fillWidth: true
+                            stages: {
+                                var lc = root.status ? root.status.lifecycle : ""
+                                var reached = lc === "included" || lc === "finalized" ? 3 : lc === "submitted" ? 2 : 1
+                                function st(at) { return reached > at ? "done" : reached === at ? "active" : "pending" }
+                                return [
+                                    { label: "Approved in your wallet", status: "done" },
+                                    { label: "Signed and sent to the network", status: st(1), progress: reached === 1 ? -1 : undefined },
+                                    { label: "Included in a block", status: st(2), progress: reached === 2 ? -1 : undefined, estimate: "Usually a few seconds" }
+                                ]
                             }
                         }
                         Txt { text: "Usually a few seconds. You can leave this screen."; tone: "text3"; font.pixelSize: 12 }
@@ -622,11 +607,7 @@ Item {
                         visible: root.phase === "done"
                         Layout.fillWidth: true
                         spacing: 12
-                        Rectangle {
-                            implicitWidth: 48; implicitHeight: 48; radius: 24
-                            color: Theme.soft(Theme.ok, 0.16)
-                            Glyph { anchors.centerIn: parent; name: "check"; color: Theme.ok; width: 24; height: 24; stroke: 2.6 }
-                        }
+                        SuccessCheck { size: 60 }
                         Txt { text: "Posted on LEZ"; font.pixelSize: 20; font.weight: Font.DemiBold }
                         Txt {
                             Layout.fillWidth: true
@@ -696,12 +677,7 @@ Item {
                         visible: root.phase === "failed"
                         Layout.fillWidth: true
                         spacing: 12
-                        Txt { text: "Not posted"; font.pixelSize: 18; font.weight: Font.DemiBold }
-                        Notice { tone: "danger"; text: root.failure }
-                        RowLayout {
-                            spacing: 8
-                            Btn { objectName: "tmRetry"; text: "Try again"; tone: "ink"; onClicked: { root.phase = "compose"; root.refreshAccount() } }
-                        }
+                        ErrorCard { objectName: "tmRetry"; title: "The testimonial wasn't posted"; body: root.failure; retryText: "Try again"; onRetry: { root.phase = "compose"; root.refreshAccount() } }
                     }
                 }
             }

@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
@@ -33,44 +34,28 @@ ColumnLayout {
         return order.map(function (k) { return byApp[k] })
     }
 
-    component Section: Txt { tone: "text3"; font.pixelSize: 12; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.8; Layout.topMargin: 8 }
+    component Section: Txt { tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.8; Layout.topMargin: 12 }
 
-    Txt { text: "Settings"; font.pixelSize: 20; font.weight: Font.DemiBold }
+    Txt { text: "Settings"; font.pixelSize: 20; font.weight: Font.Bold }
 
     // -- network ----------------------------------------------------------------------
     Section { text: "Network" }
     Repeater {
         model: st.store.state.zones || []
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 56
-            radius: Theme.rRow
+        SettingsRow {
             readonly property bool on: modelData.id === st.store.zone.id
-            color: on ? Theme.surface2 : "transparent"
-            border.width: 1
-            border.color: on ? Theme.text3 : Theme.line
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 10
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 1
-                    Txt { text: modelData.chain + (parent.parent.parent.on ? " · in use" : ""); font.weight: Font.DemiBold }
-                    Txt { Layout.fillWidth: true; text: modelData.sequencer; mono: true; font.pixelSize: 11; tone: "text2" }
-                }
-                Btn {
-                    visible: !parent.parent.on
-                    text: "Switch"
-                    onClicked: st.switchTo = modelData.id
-                }
-                Btn {
-                    visible: parent.parent.on
-                    text: "Test"
-                    onClicked: st.store.call("testZone", {}, function (v, e) {
-                        st.note = e ? Fmt.errorText(e) : "Connected. Latest block " + Fmt.amount(String(v.tip), 0) + "."
+            glyph: "link"
+            title: (modelData.chain === "lez:preview" ? "LEZ preview" : modelData.chain === "lez:testnet" ? "LEZ testnet" : modelData.chain === "lez:local" ? "Local network" : modelData.chain) + (on ? " · in use" : "")
+            description: modelData.sequencer
+            chevron: false
+            Btn {
+                text: parent.on ? "Test" : "Switch"
+                onClicked: parent.on
+                    ? st.store.call("testZone", {}, function (v, e) {
+                        st.note = e ? "" : "Connected. Latest block " + Fmt.amount(String(v.tip), 0) + "."
+                        st.problem = e ? Fmt.errorText(e) : ""
                     })
-                }
+                    : st.switchTo = modelData.id
             }
         }
     }
@@ -92,6 +77,38 @@ ColumnLayout {
         }
     }
 
+    // -- appearance ---------------------------------------------------------------------
+    Section { text: "Appearance" }
+    SettingsRow {
+        glyph: Theme.dark ? "moon" : "sun"
+        title: "Theme"
+        chevron: false
+        SegmentedControl {
+            options: ["Dark", "Light"]
+            currentIndex: Theme.dark ? 0 : 1
+            onActivated: function (i) {
+                Theme.dark = i === 0
+                st.store.call("setPrefs", { theme: Theme.dark ? "dark" : "light" }, null)
+            }
+        }
+    }
+    SettingsRow {
+        glyph: "zap"
+        title: "Motion"
+        description: (st.store.state.motion || "system") === "system"
+            ? "Following your computer" + (st.store.state.systemReducedMotion ? " (reduced)" : "")
+            : st.store.state.motion === "reduce" ? "Animations are off; changes appear at once" : "All animations on"
+        chevron: false
+        SegmentedControl {
+            readonly property var values: ["system", "reduce", "full"]
+            options: ["System", "Reduce", "Full"]
+            currentIndex: Math.max(0, values.indexOf(st.store.state.motion || "system"))
+            onActivated: function (i) {
+                st.store.call("setPrefs", { motion: values[i] }, function () { st.store.refreshState() })
+            }
+        }
+    }
+
     // -- privacy --------------------------------------------------------------------------
     Section { text: "Privacy" }
     Notice { tone: "private"; text: "Logos Kit makes no analytics or third-party calls. It talks only to the endpoints below." }
@@ -101,29 +118,32 @@ ColumnLayout {
 
     // -- security ----------------------------------------------------------------------------
     Section { text: "Security" }
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-        Txt { text: "Auto-lock"; tone: "text2"; font.pixelSize: 13; Layout.fillWidth: true }
-        Repeater {
-            model: [[300, "5 min"], [900, "15 min"], [3600, "1 h"]]
-            Rectangle {
-                implicitHeight: 30
-                implicitWidth: al.implicitWidth + 20
-                radius: 15
-                readonly property bool on: !!st.store.state.status && st.store.state.status.autoLockSecs === modelData[0]
-                color: on ? Theme.text : Theme.surface2
-                Txt { id: al; anchors.centerIn: parent; text: modelData[1]; font.pixelSize: 12; font.weight: Font.DemiBold; color: parent.on ? Theme.bg : Theme.text }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: st.store.call("setAutoLock", { secs: modelData[0] }, function () { st.store.refreshState() }) }
-            }
+    SettingsRow {
+        glyph: "clock"
+        title: "Auto-lock"
+        description: "Lock the wallet after this long without use"
+        chevron: false
+        SegmentedControl {
+            readonly property var secs: [300, 900, 3600]
+            options: ["5 min", "15 min", "1 h"]
+            currentIndex: Math.max(0, secs.indexOf(st.store.state.status ? st.store.state.status.autoLockSecs : 900))
+            onActivated: function (i) { st.store.call("setAutoLock", { secs: secs[i] }, function () { st.store.refreshState() }) }
         }
     }
+    SettingsRow {
+        glyph: "key"
+        title: "Recovery phrase"
+        description: "Shown after your password, never copied anywhere"
+        chevron: false
+    }
     RowLayout {
+        visible: st.words.length === 0
         Layout.fillWidth: true
         spacing: 6
         Field { id: rpw; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password to show the recovery phrase" }
         Btn {
-            text: "Reveal"
+            text: "Show"
+            icon: "eye"
             enabled: rpw.text.length > 0
             onClicked: st.store.call("revealPhrase", { password: rpw.text }, function (v, e) {
                 rpw.text = ""
@@ -132,47 +152,60 @@ ColumnLayout {
             })
         }
     }
-    Rectangle {
+    Card {
         visible: st.words.length > 0
         Layout.fillWidth: true
-        implicitHeight: phr.implicitHeight + 24
-        radius: Theme.rRow
-        color: Theme.surface2
-        Txt { id: phr; x: 12; y: 12; width: parent.width - 24; text: st.words.join(" "); mono: true; font.pixelSize: 13; wrapMode: Text.Wrap }
+        pad: 14
+        PhraseGrid { width: parent.width; words: st.words; revealed: true; columns: st.width < 400 ? 2 : 3 }
     }
     Btn { visible: st.words.length > 0; Layout.fillWidth: true; text: "Hide phrase"; onClicked: st.words = [] }
 
     // -- connected apps -------------------------------------------------------------------------
     Section { text: "Connected apps" }
-    Txt { visible: st.apps.length === 0; text: "No apps are connected."; tone: "text2"; font.pixelSize: 13 }
+    EmptyState {
+        visible: st.apps.length === 0
+        Layout.fillWidth: true
+        glyph: "link"
+        title: "No apps connected"
+        body: "Apps you connect in Basecamp show up here, with what they can see."
+    }
     Repeater {
         model: st.apps
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 64
+            implicitHeight: appRow.implicitHeight + 24
             radius: Theme.rRow
             color: Theme.surface2
             RowLayout {
-                anchors.fill: parent
+                id: appRow
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
                 anchors.margins: 12
-                spacing: 10
+                spacing: 12
+                AppAvatar { store: st.store; requester: modelData.requester; size: 40 }
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 1
-                    Txt { text: modelData.requester; mono: true; font.weight: Font.DemiBold }
-                    Txt { Layout.fillWidth: true; text: modelData.accounts.length + " account" + (modelData.accounts.length === 1 ? "" : "s") + " · " + modelData.caps.join(", ").replace(/_/g, " "); tone: "text2"; font.pixelSize: 12 }
+                    spacing: 2
+                    Txt { text: st.store.appName(modelData.requester); font.pixelSize: 14; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    Txt { text: modelData.requester; mono: true; tone: "text3"; font.pixelSize: 11; Layout.fillWidth: true }
+                    Txt {
+                        Layout.fillWidth: true
+                        text: modelData.accounts.length + " account" + (modelData.accounts.length === 1 ? "" : "s") + " · " + modelData.caps.join(", ").replace(/_/g, " ")
+                        tone: "text2"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+                    }
                 }
                 Btn {
                     tone: "danger"; text: "Revoke"
                     onClicked: st.store.call("revoke", { requester: modelData.requester }, function () { st.load() })
                 }
             }
+            Component.onCompleted: st.store.loadApp(modelData.requester)
         }
     }
 
     Section { text: "Wallet" }
-    Btn { objectName: "lockNow"; Layout.fillWidth: true; icon: "lock"; text: "Lock now"; onClicked: st.store.call("lock", {}, function () { st.store.refreshAll() }) }
+    Btn { objectName: "lockNow"; Layout.fillWidth: true; large: true; icon: "lock"; text: "Lock now"; onClicked: st.store.call("lock", {}, function () { st.store.refreshAll() }) }
 
-    Txt { visible: st.note !== ""; Layout.fillWidth: true; text: st.note; tone: "ok"; wrapMode: Text.Wrap; font.pixelSize: 13 }
-    Txt { visible: st.problem !== ""; Layout.fillWidth: true; text: st.problem; tone: "danger"; wrapMode: Text.Wrap; font.pixelSize: 13 }
+    Notice { visible: st.note !== ""; Layout.fillWidth: true; text: st.note; tone: "info" }
+    Notice { visible: st.problem !== ""; Layout.fillWidth: true; text: st.problem; tone: "danger" }
 }

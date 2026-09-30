@@ -111,7 +111,7 @@ pub struct CallAccount {
     pub signer: bool,
 }
 
-/// Someone else's private account: what `wallet account show-keys` exports.
+/// Someone else's private account: what `logos-kit account keys` (LEZ `show-keys` format) exports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecipientKeys {

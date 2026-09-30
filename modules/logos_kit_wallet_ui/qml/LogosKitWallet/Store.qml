@@ -1,4 +1,5 @@
 import QtQuick
+import "../LogosKitUi"
 import "Fmt.js" as Fmt
 
 // The only file that touches `logos`. Every view reads parsed properties from
@@ -116,9 +117,23 @@ QtObject {
     property string _stateKey: ""
     property string _accountsKey: ""
     property string _activityKey: ""
+    // Handles seen in flight, so a toast marks the moment one settles (the
+    // user may have closed its sheet long ago).
+    property var _inFlight: ({})
+    signal settled(var status)
     function setActivity(v) {
         var k = JSON.stringify(v)
-        if (k !== _activityKey) { _activityKey = k; activity = v }
+        if (k === _activityKey) return
+        _activityKey = k
+        var next = {}
+        for (var i = 0; i < v.length; i++) {
+            var s = v[i]
+            var fin = ["included", "rejected", "dropped", "expired"].indexOf(s.lifecycle) >= 0
+            if (!fin && s.lifecycle !== "awaiting_approval") next[s.handle] = true
+            else if (fin && _inFlight[s.handle]) settled(s)
+        }
+        _inFlight = next
+        activity = v
     }
 
     function refreshState(cb) {
@@ -134,6 +149,7 @@ QtObject {
             if (k !== store._stateKey) { store._stateKey = k; store.state = v || {} }
             store.loaded = true
             if (v && v.theme) Theme.dark = v.theme !== "light"
+            if (v && v.motion) Theme.reducedMotion = v.motion === "reduce" || (v.motion === "system" && !!v.systemReducedMotion)
             if (!store.unlocked && store.accounts.length) {
                 store.accounts = []; store._accountsKey = ""
                 store.activity = []; store._activityKey = ""

@@ -13,6 +13,7 @@
       "!**/dist",
       "!sdk/qml/**/logoskit.js",
       "!sdk/qml/**/Tokens.js",
+      "!sdk/qml/LogosKitUi/*.js",
       "!modules/*/qml",
       "!templates/*/qml/LogosKit",
       "!templates/*/qml/LogosKitUi",
@@ -21,6 +22,7 @@
       "!packages/qml-bundle/gate/noderun.cjs",
       "!docs/dev/PLAN.md",
       "!assets/logos",
+      "!apps/docs/public/logos",
       "!sdk/qml/LogosKitUi/assets",
       "!protocol/vectors",
       "!docs/protocol/capability-matrix.json",
@@ -138,5 +140,10 @@
         }
       }
     }
-  ]
+  ],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
 }

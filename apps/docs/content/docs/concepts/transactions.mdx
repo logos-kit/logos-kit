@@ -1,0 +1,68 @@
+---
+title: 'Transactions'
+description: 'From proposal to block: lifecycle, proving time, fees and outcomes.'
+---
+
+A proposal from your app becomes a transaction only after the user approves
+it. From then on the wallet gives you a **handle** and you follow it.
+
+<Shot name="wallet-proving" caption="A private send proving on the device. Each step is shown as it happens." />
+
+## Lifecycle
+
+```
+awaiting_approval → building → proving → signing → submitted → included
+                                              ↘ rejected · dropped · expired
+```
+
+| Lifecycle | What's happening |
+|---|---|
+| `awaiting_approval` | The approval sheet is open. It expires after 5 minutes, on lock, or on a network switch. |
+| `building` | The wallet reads fresh chain state and builds the exact message. |
+| `proving` | Private routes only: RISC Zero proves the transfer locally. `proving.phase` (`preparing`, `proving`, `submitting`, `waiting_for_block`) and `proving.progress` (0–100) update. |
+| `signing` | Nonces and program headers are re-checked, then the wallet signs. |
+| `submitted` | Sent to the sequencer; `txHash` is set. |
+| `included` | In a block (`block.id`). **Final** for watchers. |
+| `rejected` · `dropped` · `expired` | Didn't happen. `error` says why. |
+
+The protocol reserves `finalized`, but the wallet doesn't report it yet.
+
+## Outcomes: included is not "it worked"
+
+LEZ 0.3 includes failed transactions (and charges their fee). So the wallet
+proves each result from chain state and reports an `outcome`:
+
+| `outcome` | Evidence | Your app shows |
+|---|---|---|
+| `success` | Your own account moved by exactly the amount, or the record your call writes exists | Done |
+| `failure` | Included, and the effect provably didn't happen | The error and a retry |
+| `unknown` | Included, but the wallet can't prove it either way | "Included, not confirmed yet", then re-read the state you expected to change |
+
+`outcomeSource` says how it was decided (`own-account-invariant`, …).
+
+## Proving time
+
+Private transactions need a zero-knowledge proof, made on the user's machine
+so keys never leave it.
+
+| Machine | Time per proof | Peak memory |
+|---|---|---|
+| Apple M-series laptop | ~4.5 minutes (measured 267–337 s) | ~4.3 GB |
+
+The wallet shows progress and lets the user close the sheet; the proof keeps
+running. Only one proof runs at a time.
+
+## Fees
+
+Every transaction declares a **fee cap** (`maxFee`) that the payer approves. The
+approval sheet shows it. Native LEZ has no decimals: fees and balances are
+whole LEZ.
+
+## Re-checks at signing
+
+Between approval and signing, time passes (sometimes minutes of proving). Just
+before signing, the wallet re-checks what the approval depended on: the signer
+nonces, the program's image, and, for testimonial posts, which stats page is
+open. If something moved, it refuses with `6106 StaleApproval` (propose again),
+or, where the effect is provably identical, rebuilds the same post
+([details](/docs/wallet/security)).

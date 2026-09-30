@@ -1,0 +1,72 @@
+---
+title: 'Read balances and data'
+description: 'Balances for shared accounts, public account data, and status.'
+---
+
+Reads are module calls: they never open the wallet and return quickly.
+
+## Balances
+
+```qml
+kit.api.getWalletBalance(root.account).then(function (b) {
+    root.balance = b.amount          // "1000000000" (a string: u128 never becomes a JS number)
+    root.synced = b.synced           // false while a private account is still syncing
+})
+
+// A token: pass its definition account.
+kit.api.getWalletBalance(root.account, tokenDefinition).then(function (b) { … })
+```
+
+| Field | |
+|---|---|
+| `amount` | The raw integer amount, as a decimal string (native LEZ has no decimals, so this is the LEZ balance) |
+| `asset` | The token definition, or native |
+| `synced` | Private accounts: whether the wallet has caught up with the chain |
+| `asOfBlock` | The block the balance is from |
+
+Private handles (`pvt_…`) work too, if the user shared that account.
+
+Format with the SDK's helpers, never with JS numbers:
+
+```qml
+kit.sdk.formatUnits("1500000", 6)     // "1.5"
+kit.sdk.parseUnits("1.5", 6)          // "1500000"
+```
+
+Native LEZ has no decimals: show `b.amount` as is.
+
+## Public account data
+
+```qml
+kit.api.readAccount(accountId, programId).then(function (a) {
+    // { nonce, data }: the account's data under that program, as bytes
+})
+```
+
+## The network
+
+```qml
+kit.chain                            // "lez:preview", follows the wallet
+kit.api.getChainId()                 // ask the wallet directly
+```
+
+See [Follow the network](/docs/guides/follow-network).
+
+## In TypeScript
+
+The same reads work from Node against any sequencer. From a browser they work
+only against endpoints that send CORS headers: the preview network does, the
+official testnet does not.
+
+```ts
+import { createClient, http, nodeActions } from '@logos-kit/client'
+
+const node = createClient({
+  transport: http('https://lez.84.46.247.92.sslip.io'),
+  chain: 'lez:preview',
+}).extend(nodeActions)
+
+const height = await node.getBlockNumber()
+```
+
+See [TypeScript client](/docs/sdk/client).

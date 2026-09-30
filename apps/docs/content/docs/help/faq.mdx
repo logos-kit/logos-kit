@@ -1,0 +1,61 @@
+---
+title: 'FAQ'
+description: 'Short answers to the questions people ask first.'
+---
+
+<Accordions>
+<Accordion title="Is it safe to use with real funds?">
+
+No. Logos Kit runs on LEZ testnets and hasn't been audited. Use test funds
+only.
+
+</Accordion>
+<Accordion title="Where are my keys?">
+
+In the wallet's encrypted vault on your machine (Argon2id and
+XChaCha20-Poly1305). No app, and no Logos Kit server, ever sees them. See the
+[security model](/docs/wallet/security).
+
+</Accordion>
+<Accordion title="Why is a private transfer so slow?">
+
+It's proved on your own machine with RISC Zero, so your keys never leave it.
+That takes minutes on a laptop. Public transfers take seconds.
+
+</Accordion>
+<Accordion title="What is the preview network?">
+
+Logos Kit's public LEZ 0.3 network, run until the official testnet moves from
+0.2 to 0.3. It runs the same release candidate, with real proofs.
+[Details](/docs/concepts/networks).
+
+</Accordion>
+<Accordion title="Do testimonials on the preview network count for LP-0021?">
+
+No. The prize counts testimonials on the official LEZ testnet. The program
+will be redeployed there once it runs 0.3.
+
+</Accordion>
+<Accordion title="Can my web app use it?">
+
+Not yet. Today `@logos-kit/client` is Node and transport tooling: typed chain
+reads, encoding, and the Basecamp module bridge. It has no browser wallet
+connector. It can read the preview network from a browser (that endpoint sends
+CORS headers). A web connect kit (React), React Native, and an embedded passkey
+wallet are planned, not shipped.
+
+</Accordion>
+<Accordion title="Do I need Logos Kit Wallet to build an app?">
+
+Your users need a wallet that answers the LWS-0 intents; Logos Kit Wallet is
+one. During development you can also test against the conformance fake
+(`modules/logos_kit_wallet_fake`, `just conformance <dapp>`).
+
+</Accordion>
+<Accordion title="Is it open source?">
+
+Yes, MIT or Apache-2.0, at
+[github.com/logos-kit/logos-kit](https://github.com/logos-kit/logos-kit).
+
+</Accordion>
+</Accordions>

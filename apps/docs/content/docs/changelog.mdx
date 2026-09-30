@@ -1,0 +1,35 @@
+---
+title: 'Changelog'
+description: 'What changed in each release of the wallet, the apps and the SDK.'
+---
+
+## 2026-09-28 · Wallet 0.1.2, Testimonials 0.1.0, Faucet 0.1.0
+
+- **Preview network.** The wallet, CLI and SDK default to `lez:preview`, Logos
+  Kit's public LEZ 0.3 network, with a built-in faucet. The official testnet
+  still runs 0.2.
+- **New apps in the catalog:** Logos Kit Testimonials and Logos Kit Faucet.
+- **Approval sheets show the requesting app's icon and name,** with the module
+  name Basecamp attests.
+- **Testimonial posts re-check their stats page at signing,** so a page that
+  filled during approval no longer costs a failed transaction.
+- **Honest outcomes everywhere:** public token sends now confirm as `success`
+  from the sender's token balance; the apps show Done only on `success`, with
+  a "not confirmed yet" state for `unknown`.
+- **SDK:** `lateResult` for approvals slower than 45 s; `lez_chainId` so apps
+  follow the wallet's network; `lez_openExplorer` for sandboxed explorer links
+  (connected apps only, rate-limited); private faucet claims report the public
+  account that was paid (`fundedAccount`).
+- **Conformance kit:** a scenario-driven fake wallet and `just conformance <dapp>`.
+- **CLI:** the wallet folder flag is `--home` (`logos-kit call` works again).
+
+## 2026-09-27 · Wallet 0.1.1
+
+- The wallet's real app icon (0.1.0 shipped the template placeholder).
+
+## 2026-09-27 · Wallet 0.1.0
+
+- First catalog release: the Logos Kit core module and wallet app, signed,
+  for macOS arm64 and Linux x86-64 and arm64.
+- Public and private accounts, native LEZ and tokens, local proving, decoded
+  approvals with source verification, grants, auto-lock, backups.

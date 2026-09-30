@@ -1,0 +1,56 @@
+---
+title: 'Connect a wallet'
+description: 'Ask the user to share accounts, restore the session silently, and handle "no".'
+---
+
+Connecting opens the wallet's connect sheet. The user picks which accounts to
+share and sees what your app will be able to do.
+
+<Shot name="wallet-connect" />
+
+## Connect
+
+```qml
+LogosKit {
+    id: kit
+    visible: root.visible
+    // Ready (or rebuilt for another network): restore without prompting.
+    onApiChanged: if (api) api.getSession().then(function (s) { if (s) root.session = s })
+}
+
+function connect() {
+    kit.api.connect({ accountKinds: ["public"] }).then(function (s) {
+        root.session = s                   // { sessionId, accounts[], chains, capabilities }
+        root.account = s.accounts[0].address
+    }, function (e) {
+        if (!kit.sdk.isUserRejection(e)) root.error = e.message
+    })
+}
+```
+
+| Parameter | Default | |
+|---|---|---|
+| `accountKinds` | `["public"]` | Add `"private"` to allow private accounts. The user ticks each one explicitly; you get `pvt_…` handles. |
+| `capabilities` | the wallet's default set | See [Permissions](/docs/concepts/permissions). |
+| `signIn` | none | A sign-in request (SIWE-style) to sign in the same sheet. |
+
+## Restore on start
+
+`getSession()` never prompts. Call it when `kit.api` becomes ready: if the user
+connected before, you get the session back; otherwise `null`, and you show
+your **Connect** button.
+
+## When the user says no
+
+A cancelled sheet rejects with `4001`. It's not an error: check
+`kit.sdk.isUserRejection(e)` and show nothing. Other failures are in
+[Errors](/docs/reference/errors).
+
+## States to design
+
+| State | Show |
+|---|---|
+| `kit.api === null` | A skeleton: the SDK is loading |
+| No session | A **Connect** button and what your app does |
+| Connecting | The button busy; the wallet is showing its sheet |
+| Connected, empty account | Balance `0` and an in-flow **Get test funds** ([faucet guide](/docs/guides/faucet)) |
