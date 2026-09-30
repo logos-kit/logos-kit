@@ -372,5 +372,5 @@ The single place to resume from after a context clear.
 - [ ] Narrated demo video; 2–3 non-expert usability sessions
 - [ ] Security follow-ups from S2 (vault write counter, zeroize LEZ `Storage`, Windows ACL); Logos Storage encrypted backup and performance budgets (S9)
 - [ ] Linux GUI Basecamp run; conformance Basecamp mode on Linux; run the "other Logos modules" pattern in Basecamp
-- [ ] Small UI polish: live network pill hidden on the desktop landing; site ignores a light color-scheme preference
+- [x] Docs polish: the live network pill shows on the desktop landing (hero content was centred in a fixed-height box and pushed under the nav). The site stays dark by default on purpose (Tray dark, like Basecamp); the toggle switches to light
 

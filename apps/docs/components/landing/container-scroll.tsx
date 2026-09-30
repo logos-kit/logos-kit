@@ -33,7 +33,7 @@ export function ContainerScroll({
   return (
     <div
       ref={ref}
-      className="relative flex items-start justify-center px-2 pt-10 pb-6 md:h-[74rem] md:items-center md:p-16"
+      className="relative flex items-start justify-center px-2 pt-10 pb-6 md:h-[74rem] md:px-16 md:pt-14 md:pb-16"
     >
       <div className="relative w-full py-6 md:py-24" style={{ perspective: '1000px' }}>
         <motion.div style={{ translateY: translate }} className="mx-auto max-w-5xl text-center">
