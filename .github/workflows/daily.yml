@@ -59,7 +59,7 @@ jobs:
           cargo xtask fingerprint "$PREVIEW" > out/preview.json || echo '{"version":"unreachable"}' > out/preview.json
           for n in official preview; do
             echo "$n=$(jq -r .version out/$n.json)" >> "$GITHUB_OUTPUT"
-            echo "${n}_halted=$(jq -r '.halted // "unknown"' out/$n.json)" >> "$GITHUB_OUTPUT"
+            echo "${n}_halted=$(jq -r 'if has("halted") then (.halted | tostring) else "unknown" end' out/$n.json)" >> "$GITHUB_OUTPUT"
             jq -c '{version, halted, lastBlockId, headAgeSecs}' out/$n.json
           done
 
