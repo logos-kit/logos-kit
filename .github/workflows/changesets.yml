@@ -1,0 +1,74 @@
+# npm releases for @logos-kit/{protocol,codec,client,theme}, after wagmi's
+# changesets workflow: a push to main with pending changesets opens (or
+# refreshes) a "version packages" PR; merging it publishes to npm through
+# trusted publishing (OIDC, provenance). No npm token is stored anywhere.
+# One-time setup per package: `npm trust github <pkg> --file changesets.yml
+# --repo logos-kit/logos-kit` (docs/dev/releasing.md).
+name: Changesets
+
+on:
+  push:
+    branches: [main]
+
+permissions: {} # each job declares only what it needs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changesets:
+    name: Version PR
+    if: github.repository == 'logos-kit/logos-kit'
+    permissions:
+      contents: write # commit version and changelog updates to the release PR
+      pull-requests: write # open or update the release PR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # changelogs need the history
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          require-lockfile: true
+      - name: Create version pull request
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          title: "chore: version packages"
+          commit: "chore: version packages"
+          version: pnpm changeset:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Publish to npm
+    needs: changesets
+    # Only when the version PR lands: other pushes have nothing new to publish.
+    if: >-
+      github.repository == 'logos-kit/logos-kit'
+      && needs.changesets.outputs.hasChangesets == 'false'
+      && contains(github.event.head_commit.message, 'chore: version packages')
+    permissions:
+      contents: write # GitHub releases and tags after publishing
+      id-token: write # npm trusted publishing (OIDC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          require-lockfile: true
+      - name: Publish
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          createGithubReleases: true
+          publish: pnpm changeset:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

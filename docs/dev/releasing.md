@@ -75,3 +75,29 @@ Packages are signed inline in CI with an Ed25519 key made by
 
 To rotate: make a new key, add its DID to `trustedSigners` next to the old one,
 swap the secret, release, then remove the old DID once installs have moved over.
+
+## npm packages (`@logos-kit/protocol`, `codec`, `client`, `theme`)
+
+Versions come from [changesets](https://github.com/changesets/changesets): add one with
+`pnpm changeset` in the PR that changes a package. On `main`,
+`.github/workflows/changesets.yml` opens a "chore: version packages" PR; merging
+it publishes to npm through **trusted publishing** (OIDC, with provenance). No npm
+token is stored in the repo or in GitHub.
+
+One-time setup, done by an owner of the npm org `logos-kit` (needs 2FA; run in a
+terminal so npm can ask for the code):
+
+```bash
+for p in protocol codec client theme; do
+  npm trust github @logos-kit/$p --file changesets.yml --repo logos-kit/logos-kit
+done
+```
+
+The GitHub org must also allow Actions to open PRs (Settings → Actions → General →
+Workflow permissions → "Allow GitHub Actions to create and approve pull requests").
+
+History:
+- 0.1.0 (2026-09-30) was published by hand. npm placed `@logos-kit/codec@0.1.0`
+  in its staged-release review; until that clears, its `latest` tag points at an
+  npm placeholder (`0.0.0-stage`), so docs install it as `@logos-kit/codec@^0.1.0`.
+  `@logos-kit/client` depends on exactly `0.1.0` and installs fine.
