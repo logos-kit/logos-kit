@@ -3,6 +3,27 @@ title: 'Changelog'
 description: 'What changed in each release of the wallet, the apps and the SDK.'
 ---
 
+## 2026-09-30 · Wallet 0.1.3, Testimonials 0.1.1, Faucet 0.1.1, npm 0.1.0
+
+- **On npm:** [`@logos-kit/client`](https://www.npmjs.com/package/@logos-kit/client),
+  [`@logos-kit/codec`](https://www.npmjs.com/package/@logos-kit/codec),
+  [`@logos-kit/protocol`](https://www.npmjs.com/package/@logos-kit/protocol) and
+  [`@logos-kit/theme`](https://www.npmjs.com/package/@logos-kit/theme) 0.1.0.
+  Future releases publish from GitHub Actions through npm trusted publishing,
+  with provenance.
+- **Redesigned wallet and apps.** A new component kit ported from 21st.dev
+  components: approval sheets lead with the asset, amount and full
+  destination; proving shows a step timeline; toasts, sheets, skeleton
+  loaders, an animated balance, a copy-to-check address chip; keyboard focus
+  on every control and stronger contrast in both themes.
+- **Token create confirms as `success`** from the holder's balance.
+- **Testimonial evidence** counts each author's own transactions before their
+  post (prior activity), read from the blocks.
+- **Preview faucet:** restart-safe ledger (a request key is never paid twice),
+  per-visitor limits, `Retry-After`.
+- **Docs rewritten** with a new structure, guides per task, a CLI reference and
+  current screenshots.
+
 ## 2026-09-28 · Wallet 0.1.2, Testimonials 0.1.0, Faucet 0.1.0
 
 - **Preview network.** The wallet, CLI and SDK default to `lez:preview`, Logos

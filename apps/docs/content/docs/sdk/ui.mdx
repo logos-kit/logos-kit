@@ -31,3 +31,21 @@ Card {
 
 Loading, pending, empty and error states are part of the design: every
 screen in the testimonial and faucet apps has one, built from these.
+
+## The same tokens outside QML
+
+The Tray colours, radii and type scale also ship as a package, for web pages,
+tools and anything else that should match the wallet:
+
+<NpmBadge name="@logos-kit/theme" />
+
+```npm
+npm i @logos-kit/theme
+```
+
+```ts
+import { cssVars, themes } from '@logos-kit/theme'
+
+const vars = cssVars(themes.dark) // CSS custom properties
+```
+

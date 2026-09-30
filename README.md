@@ -17,6 +17,13 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@logos-kit/client"><img src="https://img.shields.io/npm/v/%40logos-kit%2Fclient?logo=npm&label=%40logos-kit%2Fclient&color=cb3837" alt="@logos-kit/client on npm" /></a>
+  <a href="https://www.npmjs.com/package/@logos-kit/codec"><img src="https://img.shields.io/npm/v/%40logos-kit%2Fcodec?logo=npm&label=%40logos-kit%2Fcodec&color=cb3837" alt="@logos-kit/codec on npm" /></a>
+  <a href="https://www.npmjs.com/package/@logos-kit/protocol"><img src="https://img.shields.io/npm/v/%40logos-kit%2Fprotocol?logo=npm&label=%40logos-kit%2Fprotocol&color=cb3837" alt="@logos-kit/protocol on npm" /></a>
+  <a href="https://www.npmjs.com/package/@logos-kit/theme"><img src="https://img.shields.io/npm/v/%40logos-kit%2Ftheme?logo=npm&label=%40logos-kit%2Ftheme&color=cb3837" alt="@logos-kit/theme on npm" /></a>
+</p>
+
+<p align="center">
   <img src="apps/docs/public/shots/testimonial-basecamp.webp" width="820" alt="Logos Kit Testimonials in Basecamp after a post landed on chain" />
 </p>
 
@@ -31,7 +38,7 @@ It is two things that ship together:
   connect, read, propose transfers and program calls, and follow them to an
   outcome. A TypeScript client (`@logos-kit/client`, `@logos-kit/codec`) does
   typed chain reads and encoding from Node scripts and tools
-  (`pnpm add @logos-kit/client @logos-kit/codec`). Web (React) and React
+  (`npm install @logos-kit/client @logos-kit/codec`). Web (React) and React
   Native connect kits are planned, not shipped.
 
 Keys, accounts and approvals live only in the wallet. Apps ask; the user decides.

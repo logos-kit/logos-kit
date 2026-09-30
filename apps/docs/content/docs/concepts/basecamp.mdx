@@ -44,3 +44,15 @@ Basecamp runs `ui_qml` apps in a sandbox. Plan for it:
 - Qt 6.9's JavaScript engine: no `BigInt`, no `Intl`.
 
 Amounts are strings everywhere in the SDK for that reason.
+
+## The protocol as a package
+
+LWS-0's types, JSON Schema, error codes and test vectors are published, so a
+wallet or an app in any language can implement the same contract:
+
+<NpmBadge name="@logos-kit/protocol" />
+
+```npm
+npm i @logos-kit/protocol
+```
+

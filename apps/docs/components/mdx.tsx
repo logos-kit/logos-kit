@@ -6,6 +6,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs'
 import { TypeTable } from 'fumadocs-ui/components/type-table'
 import defaultMdxComponents from 'fumadocs-ui/mdx'
 import type { MDXComponents } from 'mdx/types'
+import { NpmBadge, NpmPackages } from '@/components/npm'
 import { Shot } from '@/components/shot'
 
 export function getMDXComponents(components?: MDXComponents) {
@@ -15,6 +16,8 @@ export function getMDXComponents(components?: MDXComponents) {
     Accordion,
     Accordions,
     ImageZoom,
+    NpmBadge,
+    NpmPackages,
     Shot,
     Step,
     Steps,

@@ -75,13 +75,14 @@ shell answers `not_declared`.
 </Tab>
 <Tab value="TypeScript">
 
-```sh
-pnpm add @logos-kit/client @logos-kit/codec
-# npm install @logos-kit/client @logos-kit/codec
+```npm
+npm i @logos-kit/client @logos-kit/codec
 ```
 
-The wire types and JSON Schema are in `@logos-kit/protocol`; the Tray tokens in
-`@logos-kit/theme`.
+All four packages are on npm under MIT OR Apache-2.0. New versions publish from
+GitHub Actions through npm trusted publishing, with provenance.
+
+<NpmPackages />
 
 They're Node and transport tooling (typed chain reads, encoding, the Basecamp
 module bridge), written in QML-safe ES2017 with no native `BigInt`. A browser

@@ -3,7 +3,8 @@
 Byte-exact encoding for the **Logos Execution Zone** (LEZ 0.3): borsh, messages, transactions, account ids and u128 amounts, with no `BigInt` and no bignum library. The root entry is QML-safe, so it runs in Node, browsers and Basecamp's Qt engine; its output is checked against vectors from the Rust wallet.
 
 ```sh
-pnpm add @logos-kit/codec
+npm install @logos-kit/codec
+# pnpm add @logos-kit/codec  ·  yarn add @logos-kit/codec  ·  bun add @logos-kit/codec
 ```
 
 ## Build calls

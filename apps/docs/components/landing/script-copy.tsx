@@ -11,9 +11,12 @@ import { cn } from '@/lib/cn'
 
 export function ScriptCopy({
   commands,
+  icons,
   className,
 }: {
   commands: Record<string, string>
+  /** Optional logo per tab (e.g. npm), shown before its name. */
+  icons?: Record<string, string>
   className?: string
 }) {
   const names = Object.keys(commands)
@@ -59,7 +62,19 @@ export function ScriptCopy({
                 transition={{ type: 'spring', stiffness: 500, damping: 34 }}
               />
             )}
-            <span className="relative">{n}</span>
+            <span className="relative inline-flex items-center gap-1.5">
+              {icons?.[n] && (
+                // biome-ignore lint/performance/noImgElement: a 12 px local logo
+                <img
+                  src={icons[n]}
+                  alt=""
+                  width={12}
+                  height={12}
+                  className="h-3 w-3 rounded-[2px]"
+                />
+              )}
+              {n}
+            </span>
           </button>
         ))}
       </div>

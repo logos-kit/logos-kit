@@ -3,7 +3,8 @@
 The Logos Kit design tokens: the **Tray** theme in light and dark, used by the wallet, its Basecamp apps and the docs. One source of truth, exported for CSS and for QML.
 
 ```sh
-pnpm add @logos-kit/theme
+npm install @logos-kit/theme
+# pnpm add @logos-kit/theme  ·  yarn add @logos-kit/theme  ·  bun add @logos-kit/theme
 ```
 
 ```ts

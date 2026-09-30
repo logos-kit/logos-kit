@@ -42,6 +42,7 @@ const stack = [
   { src: '/logos/rust.svg', dark: '/logos/rust_dark.svg', name: 'Rust engine' },
   { src: '/logos/qt.svg', name: 'Qt / QML' },
   { src: '/logos/typescript.svg', name: 'TypeScript client' },
+  { src: '/logos/npm.svg', name: '@logos-kit on npm', href: 'https://www.npmjs.com/org/logos-kit' },
   { src: '/logos/nix.svg', name: 'Nix builds' },
   { src: '/logos/risc0.png', name: 'RISC Zero proofs', mono: true },
 ]
@@ -145,8 +146,9 @@ export default function HomePage() {
               className="mt-9 w-full max-w-xl text-left"
               commands={{
                 'Basecamp app': 'nix flake init -t github:logos-kit/logos-kit#dapp',
-                TypeScript: 'pnpm add @logos-kit/client @logos-kit/codec',
+                'npm · TypeScript': 'npm install @logos-kit/client @logos-kit/codec',
               }}
+              icons={{ 'npm · TypeScript': '/logos/npm.svg' }}
             />
           </div>
         }
@@ -283,9 +285,15 @@ export default function HomePage() {
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
           {stack.map((s) => (
-            <div
+            <a
               key={s.name}
-              className="flex items-center gap-2.5 text-fd-muted-foreground text-sm"
+              href={s.href}
+              target={s.href ? '_blank' : undefined}
+              rel={s.href ? 'noreferrer' : undefined}
+              className={cn(
+                'flex items-center gap-2.5 text-fd-muted-foreground text-sm',
+                s.href && 'transition-colors hover:text-fd-foreground',
+              )}
             >
               {s.dark ? (
                 <>
@@ -314,7 +322,7 @@ export default function HomePage() {
                 />
               )}
               {s.name}
-            </div>
+            </a>
           ))}
         </div>
       </section>

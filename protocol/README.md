@@ -3,7 +3,8 @@
 **LWS-0**, the Logos Kit wallet protocol for the Logos Execution Zone: the methods a dApp calls, the Basecamp intents it opens, their parameters and results, error codes and constants. Shipped as TypeScript types, JSON Schema and test vectors, so a wallet or an app in any language can implement it.
 
 ```sh
-pnpm add @logos-kit/protocol
+npm install @logos-kit/protocol
+# pnpm add @logos-kit/protocol  ·  yarn add @logos-kit/protocol  ·  bun add @logos-kit/protocol
 ```
 
 ```ts

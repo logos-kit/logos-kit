@@ -3,7 +3,8 @@
 Typed client for the **Logos Execution Zone** (LEZ): node reads, the LWS-0 wallet actions a dApp uses to ask the Logos Kit wallet for things, and lossless u128 JSON. The root entry is QML-safe (no `BigInt`, no `Intl`), so the same code runs in Node, browsers and Basecamp's Qt engine.
 
 ```sh
-pnpm add @logos-kit/client @logos-kit/codec
+npm install @logos-kit/client @logos-kit/codec
+# pnpm add @logos-kit/client @logos-kit/codec  ·  yarn add @logos-kit/client @logos-kit/codec  ·  bun add @logos-kit/client @logos-kit/codec
 ```
 
 ## Read the chain
