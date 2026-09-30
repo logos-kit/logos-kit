@@ -1,6 +1,6 @@
 {
   "name": "@logos-kit/protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LWS-0: the Logos Kit wallet protocol for the Logos Execution Zone. Types, JSON Schema, errors, constants.",
   "license": "MIT OR Apache-2.0",
   "repository": {
