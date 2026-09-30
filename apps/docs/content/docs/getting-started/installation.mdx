@@ -76,13 +76,11 @@ shell answers `not_declared`.
 <Tab value="TypeScript">
 
 ```sh
-pnpm add @logos-kit/client @logos-kit/codec@^0.1.0
-# npm install @logos-kit/client @logos-kit/codec@^0.1.0
+pnpm add @logos-kit/client @logos-kit/codec
+# npm install @logos-kit/client @logos-kit/codec
 ```
 
-Keep the `^0.1.0` range on `@logos-kit/codec` for now: npm is still reviewing
-its first release, so its `latest` tag briefly points at a placeholder. The
-wire types and JSON Schema are in `@logos-kit/protocol`; the Tray tokens in
+The wire types and JSON Schema are in `@logos-kit/protocol`; the Tray tokens in
 `@logos-kit/theme`.
 
 They're Node and transport tooling (typed chain reads, encoding, the Basecamp

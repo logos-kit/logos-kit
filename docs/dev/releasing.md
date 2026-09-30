@@ -98,6 +98,5 @@ Workflow permissions → "Allow GitHub Actions to create and approve pull reques
 
 History:
 - 0.1.0 (2026-09-30) was published by hand. npm placed `@logos-kit/codec@0.1.0`
-  in its staged-release review; until that clears, its `latest` tag points at an
-  npm placeholder (`0.0.0-stage`), so docs install it as `@logos-kit/codec@^0.1.0`.
-  `@logos-kit/client` depends on exactly `0.1.0` and installs fine.
+  in its staged-release review; the review cleared the same day and
+  `latest` moved from npm's `0.0.0-stage` placeholder to `0.1.0`.

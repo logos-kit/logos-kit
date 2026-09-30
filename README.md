@@ -31,7 +31,7 @@ It is two things that ship together:
   connect, read, propose transfers and program calls, and follow them to an
   outcome. A TypeScript client (`@logos-kit/client`, `@logos-kit/codec`) does
   typed chain reads and encoding from Node scripts and tools
-  (`pnpm add @logos-kit/client @logos-kit/codec@^0.1.0`). Web (React) and React
+  (`pnpm add @logos-kit/client @logos-kit/codec`). Web (React) and React
   Native connect kits are planned, not shipped.
 
 Keys, accounts and approvals live only in the wallet. Apps ask; the user decides.
@@ -48,7 +48,7 @@ Keys, accounts and approvals live only in the wallet. Apps ask; the user decides
 | Public, private and token flows | ✅ faucet, public send, shield, private → public, token public and private, on the live preview network with real proofs (`e2e/preview-flows.sh`) |
 | Testimonial and faucet mini-apps | ✅ `logos_kit_testimonial`, `logos_kit_faucet` 0.1.0 in the catalog |
 | QML SDK, dApp template | ✅ `sdk/qml/LogosKit`, `nix flake init -t github:logos-kit/logos-kit#dapp` |
-| TypeScript client (Node/transport tooling) | ✅ on npm: `@logos-kit/client`, `codec`, `protocol`, `theme` 0.1.0 (codec awaiting npm's staged-release review; install `@^0.1.0`) |
+| TypeScript client (Node/transport tooling) | ✅ on npm: `@logos-kit/client`, `codec`, `protocol`, `theme` 0.1.0 |
 | Conformance kit | ✅ fake wallet with 11 scenarios, `just conformance <dapp>` |
 | Testimonial program | ✅ on the preview network (immutable, source-verified); ⏳ official testnet when it runs 0.3 |
 | CI with the real-sequencer E2E | ⏳ S9 |
