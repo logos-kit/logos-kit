@@ -9,8 +9,6 @@ on:
   schedule:
     - cron: "41 2 * * *" # off the hour, before LEZ's own 03:17 run
   workflow_dispatch:
-  push:
-    branches: ["ci/extra"] # iteration only; removed when merged
 
 permissions:
   contents: read

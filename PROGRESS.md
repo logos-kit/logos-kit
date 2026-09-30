@@ -366,7 +366,7 @@ The single place to resume from after a context clear.
 - [x] Clean catalog installs of 0.1.3 (2026-09-30): `e2e/catalog-install.sh` on macOS arm64, `--docker` Linux arm64 and (agari-box) Linux x86_64 install wallet 0.1.3 + apps 0.1.1, each signed by the release key; `e2e/catalog-install-gui.sh` installs from the catalog in real Basecamp and the wallet opens on "Preview network · LEZ 0.3" (`docs/reviews/s7/catalog/`). The GUI test now retries screenshots and waits up to 120 s for the first launch
 - [ ] Performance: the wallet's first launch in Basecamp takes 16–40 s (loading the core module; Basecamp shows its spinner meanwhile). Measure where the time goes (plugin load vs engine init) and cut it
 - [ ] npm: `npm trust github` for the four packages (maintainer, needs 2FA) and org setting "Allow GitHub Actions to create and approve pull requests"
-- [ ] Extra CI: nightly real proofs, guest reproducibility, QML gate (in progress on `ci/extra`)
+- [x] Extra CI (merged from `ci/extra`): `valid-proof.yml` nightly real-proof E2E (a shield proved on the runner's CPU and verified by a real-proof sequencer; first run 61 min, green), `guest-repro.yml` (testimonial program image id reproducible from the recorded commit; on program changes + weekly, green), `qml-gate.yml` (QML bundle up to date + engine gate; on SDK changes, green)
 - [ ] Official testnet 0.3 cutover (blocked; `docs/dev/cutover-0.3.md`)
 - [ ] Domain (sslip.io had a multi-minute DNS outage during a demo run)
 - [ ] Adoption: drafts in `adoption/drafts/` await the maintainer's approval; 10 independent developers; testimonials on the official network
