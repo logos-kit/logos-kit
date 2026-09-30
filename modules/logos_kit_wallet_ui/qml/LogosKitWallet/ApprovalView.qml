@@ -97,7 +97,11 @@ ColumnLayout {
             address: av.recipient,
             kind: (av.ownRecipient && av.ownRecipient.kind === "private") || (av.intent.toKeys && av.route !== "public") ? "private" : "public"
         })
-        effects: av.summary.lines || []
+        // A plain transfer's decoded line ("5 to CQTd…") repeats the card
+        // above; calls keep every line.
+        effects: (av.summary.lines || []).filter(function (l) {
+            return !(av.intent.kind === "transfer" && /^[0-9][0-9,]* (of token \S+ )?to \S+$/.test(l))
+        })
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
         fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee }) : null
         program: !av.program ? null : ({
