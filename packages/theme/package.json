@@ -1,6 +1,6 @@
 {
   "name": "@logos-kit/theme",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Logos Kit design tokens (Tray light and dark) for web, React Native and QML.",
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -35,5 +35,19 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "keywords": [
+    "logos",
+    "lez",
+    "design-tokens",
+    "theme",
+    "qml"
+  ],
+  "homepage": "https://logos-kit-docs.vercel.app",
+  "bugs": {
+    "url": "https://github.com/logos-kit/logos-kit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
