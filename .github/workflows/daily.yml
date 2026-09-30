@@ -1,0 +1,101 @@
+# Once a day:
+# - fingerprint the official LEZ testnet and our preview network; the day the
+#   official one runs 0.3, open the cutover issue (docs/dev/cutover-0.3.md);
+#   fail if the preview network is down, halted or not 0.3;
+# - export the testimonial evidence (distinct authors, months, each author's
+#   prior activity) from chain data, as a 90-day artifact. The official
+#   network's export starts once registry/programs.json names a lez:testnet
+#   deployment.
+name: Daily
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  OFFICIAL: https://testnet.lez.logos.co
+  PREVIEW: https://lez.84.46.247.92.sslip.io
+
+jobs:
+  daily:
+    name: fingerprint + evidence
+    if: github.repository == 'logos-kit/logos-kit'
+    permissions:
+      contents: read
+      issues: write # the cutover issue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk (the LEZ + RISC Zero build is large)
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+      - name: System packages
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev clang cmake ninja-build pkg-config libssl-dev unzip jq
+      - name: Vendor LEZ (pinned rev + our patches)
+        run: scripts/lez-vendor.sh
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: ""
+          cache-shared-key: workspace-debug
+      - name: Build the CLI and xtask
+        run: cargo build -q -p logos-kit-cli -p xtask
+
+      - name: Fingerprint both networks
+        id: fp
+        run: |
+          mkdir -p out
+          cargo xtask fingerprint "$OFFICIAL" > out/official.json || echo '{"version":"unreachable"}' > out/official.json
+          cargo xtask fingerprint "$PREVIEW" > out/preview.json || echo '{"version":"unreachable"}' > out/preview.json
+          for n in official preview; do
+            echo "$n=$(jq -r .version out/$n.json)" >> "$GITHUB_OUTPUT"
+            echo "${n}_halted=$(jq -r '.halted // "unknown"' out/$n.json)" >> "$GITHUB_OUTPUT"
+            jq -c '{version, halted, lastBlockId, headAgeSecs}' out/$n.json
+          done
+
+      - name: Official testnet runs 0.3 - open the cutover issue
+        if: steps.fp.outputs.official == '0.3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Official LEZ testnet runs 0.3: run the cutover"
+          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
+            gh issue create --title "$title" --body "$(printf 'The daily fingerprint of %s reports version 0.3 (%s).\n\nRun docs/dev/cutover-0.3.md.\n\n```json\n%s\n```' "$OFFICIAL" "$(date -u +%F)" "$(jq -c . out/official.json)")"
+          fi
+
+      - name: Evidence exports
+        run: |
+          export LOGOS_KIT_HOME="$RUNNER_TEMP/wallet" LOGOS_KIT_PASSWORD=daily SUPPRESS_VERBOSE_PRINTS=1
+          LK=target/debug/logos-kit
+          "$LK" init --json > /dev/null 2>&1
+          for zone in preview testnet; do
+            programs=$(jq -r --arg c "lez:$zone" '.[] | select(.name == "testimonial" and .chain == $c) | "--program=" + .account' registry/programs.json)
+            [ -n "$programs" ] || { echo "no lez:$zone testimonial deployment yet"; continue; }
+            # shellcheck disable=SC2086
+            "$LK" --zone "lez-$zone" testimonial evidence $programs --snapshot "out/snapshots/$zone" --json \
+              | tail -1 > "out/evidence-$zone.json" \
+              && jq -c '{distinctAuthors, qualified: .target.qualified, met: .target.met}' "out/evidence-$zone.json" \
+              || echo "evidence export for lez:$zone failed"
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: daily-${{ github.run_id }}
+          path: out/
+          retention-days: 90
+
+      - name: Preview network is healthy
+        run: |
+          [ "${{ steps.fp.outputs.preview }}" = "0.3" ] || { echo "::error::preview network reports '${{ steps.fp.outputs.preview }}'"; exit 1; }
+          [ "${{ steps.fp.outputs.preview_halted }}" = "false" ] || { echo "::error::preview network halted"; exit 1; }
