@@ -363,7 +363,8 @@ The single place to resume from after a context clear.
 - [x] **npm**: `@logos-kit/protocol`, `codec`, `client`, `theme` 0.1.0 with READMEs/licenses (`1abe336`); publint + attw clean; installs and runs from npm (client read block 12,655 off the preview network). `@logos-kit/codec@0.1.0` is in npm's staged-release review (its `latest` briefly points at npm's `0.0.0-stage` placeholder), so docs install `@logos-kit/codec@^0.1.0`. Future releases: `changesets.yml` with trusted publishing (setup in `docs/dev/releasing.md`)
 
 ### Open
-- [ ] Clean catalog installs of 0.1.3 (macOS, Linux arm64/x86_64) and the GUI install check
+- [x] Clean catalog installs of 0.1.3 (2026-09-30): `e2e/catalog-install.sh` on macOS arm64, `--docker` Linux arm64 and (agari-box) Linux x86_64 install wallet 0.1.3 + apps 0.1.1, each signed by the release key; `e2e/catalog-install-gui.sh` installs from the catalog in real Basecamp and the wallet opens on "Preview network · LEZ 0.3" (`docs/reviews/s7/catalog/`). The GUI test now retries screenshots and waits up to 120 s for the first launch
+- [ ] Performance: the wallet's first launch in Basecamp takes 16–40 s (loading the core module; Basecamp shows its spinner meanwhile). Measure where the time goes (plugin load vs engine init) and cut it
 - [ ] npm: `npm trust github` for the four packages (maintainer, needs 2FA) and org setting "Allow GitHub Actions to create and approve pull requests"; codec's staged review
 - [ ] Extra CI: nightly real proofs, guest reproducibility, QML gate (in progress on `ci/extra`)
 - [ ] Official testnet 0.3 cutover (blocked; `docs/dev/cutover-0.3.md`)

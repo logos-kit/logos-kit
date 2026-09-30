@@ -48,9 +48,18 @@ async function byType(typeName) {
   return r.matches ?? []
 }
 async function shot(name) {
-  const r = await app.screenshot()
-  if (r.image) fs.writeFileSync(path.join(SHOTS, `${name}.png`), Buffer.from(r.image, 'base64'))
-  say('  shot', name)
+  // Basecamp can be busy for a while (installing, loading a module): retry.
+  for (let i = 0; i < 5; i++) {
+    try {
+      const r = await app.screenshot()
+      if (r.image) fs.writeFileSync(path.join(SHOTS, `${name}.png`), Buffer.from(r.image, 'base64'))
+      say('  shot', name)
+      return
+    } catch (e) {
+      if (i === 4) throw e
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  }
 }
 
 // 1. Add the catalog.
@@ -140,7 +149,10 @@ await app.waitFor(
   { timeout: 600000, interval: 2000, description: 'the install to finish' },
 )
 await shot('05-installed')
-await ins.send('click', { objectId: primary })
+// Launch loads the wallet core module (a large plugin): Basecamp can stay busy
+// past the inspector's 15 s per-call limit, so trigger the button's handler and
+// poll with retries instead of a synchronous mouse click.
+await ins.send('callMethod', { objectId: primary, method: 'clicked' }).catch(() => {})
 await app.waitFor(
   async () => {
     // In the tree is not enough: Basecamp shows a spinner until the view is
@@ -155,7 +167,7 @@ await app.waitFor(
     }
     throw new Error('wallet not on its welcome screen yet')
   },
-  { timeout: 60000, interval: 1000, description: 'the wallet welcome screen' },
+  { timeout: 120000, interval: 2000, description: 'the wallet welcome screen' },
 )
 await new Promise((r) => setTimeout(r, 1500)) // let the first frame paint
 await shot('06-wallet-opens')
