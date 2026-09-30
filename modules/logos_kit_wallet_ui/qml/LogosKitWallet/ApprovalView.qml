@@ -97,11 +97,16 @@ ColumnLayout {
             address: av.recipient,
             kind: (av.ownRecipient && av.ownRecipient.kind === "private") || (av.intent.toKeys && av.route !== "public") ? "private" : "public"
         })
-        // A plain transfer's decoded line ("5 to CQTd…") repeats the card
-        // above; calls keep every line.
-        effects: (av.summary.lines || []).filter(function (l) {
-            return !(av.intent.kind === "transfer" && /^[0-9][0-9,]* (of token \S+ )?to \S+$/.test(l))
-        })
+        // A single transfer's decoded line ("5 to CQTd…") repeats the card
+        // above. Only then is it dropped: with more than one outflow, or any
+        // other line of that shape, every line stays.
+        effects: {
+            var lines = av.summary.lines || []
+            var plain = /^[0-9][0-9,]* (of token \S+ )?to \S+$/
+            var hits = lines.filter(function (l) { return plain.test(l) })
+            if (av.recipient === "" || hits.length !== 1 || (av.summary.outflows || []).length !== 1) return lines
+            return lines.filter(function (l) { return l !== hits[0] })
+        }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
         fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee }) : null
         program: !av.program ? null : ({
