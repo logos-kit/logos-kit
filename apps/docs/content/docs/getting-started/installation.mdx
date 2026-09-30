@@ -75,17 +75,15 @@ shell answers `not_declared`.
 </Tab>
 <Tab value="TypeScript">
 
-<Callout type="warn" title="Preview: not on npm yet">
-`@logos-kit/client` and `@logos-kit/codec` aren't published yet. Use them from
-the monorepo:
-</Callout>
-
 ```sh
-git clone https://github.com/logos-kit/logos-kit && cd logos-kit
-pnpm install && pnpm build
-# then work inside the workspace, e.g. add a package under packages/ or a
-# script that imports "@logos-kit/client" (resolved through pnpm workspaces)
+pnpm add @logos-kit/client @logos-kit/codec@^0.1.0
+# npm install @logos-kit/client @logos-kit/codec@^0.1.0
 ```
+
+Keep the `^0.1.0` range on `@logos-kit/codec` for now: npm is still reviewing
+its first release, so its `latest` tag briefly points at a placeholder. The
+wire types and JSON Schema are in `@logos-kit/protocol`; the Tray tokens in
+`@logos-kit/theme`.
 
 They're Node and transport tooling (typed chain reads, encoding, the Basecamp
 module bridge), written in QML-safe ES2017 with no native `BigInt`. A browser

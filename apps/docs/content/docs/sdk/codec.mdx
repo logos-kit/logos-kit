@@ -9,10 +9,9 @@ records. It matches the Rust engine byte for byte (both are checked against the
 same test vectors), and it runs in Qt's JavaScript engine: no native `BigInt`,
 `u128` values are decimal strings.
 
-<Callout type="warn" title="Preview: not on npm yet">
-Use it from the monorepo (`pnpm install && pnpm build`, then import
-`@logos-kit/codec` from a workspace package). See [Installation](/docs/getting-started/installation).
-</Callout>
+```sh
+pnpm add @logos-kit/codec@^0.1.0
+```
 
 ## Program calls
 

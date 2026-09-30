@@ -145,6 +145,7 @@ export default function HomePage() {
               className="mt-9 w-full max-w-xl text-left"
               commands={{
                 'Basecamp app': 'nix flake init -t github:logos-kit/logos-kit#dapp',
+                TypeScript: 'pnpm add @logos-kit/client @logos-kit/codec@^0.1.0',
               }}
             />
           </div>
