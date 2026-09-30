@@ -24,6 +24,10 @@ concurrency:
 
 env:
   RISC0_VERSION: 3.0.5
+  # cargo-risczero reads the host RISC Zero toolchain to pick the guest's
+  # rust flags, even for docker builds: the version that reproduced the
+  # trusted image (pins.md).
+  RISC0_RUST: 1.97.0
 
 jobs:
   recorded:
@@ -35,10 +39,19 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           cache: false
-      - name: cargo-risczero ${{ env.RISC0_VERSION }}
+      - name: Cache RISC Zero tools
+        id: risc0
+        uses: actions/cache@v6
+        with:
+          path: ~/.risc0
+          key: risc0-guest-${{ runner.os }}-${{ env.RISC0_VERSION }}-rust${{ env.RISC0_RUST }}
+      - name: cargo-risczero ${{ env.RISC0_VERSION }} + risc0 rust ${{ env.RISC0_RUST }}
         run: |
-          curl -fsSL https://risczero.com/install | bash
-          ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+          if [ "${{ steps.risc0.outputs.cache-hit }}" != "true" ]; then
+            curl -fsSL https://risczero.com/install | bash
+            ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+            ~/.risc0/bin/rzup install rust "$RISC0_RUST"
+          fi
           bin="$(ls -d ~/.risc0/extensions/v${RISC0_VERSION}-cargo-risczero-*/cargo-risczero | head -1)"
           [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
           mkdir -p ~/.local/bin && ln -sf "$bin" ~/.local/bin/cargo-risczero
@@ -76,10 +89,19 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           cache: false
-      - name: cargo-risczero ${{ env.RISC0_VERSION }}
+      - name: Cache RISC Zero tools
+        id: risc0
+        uses: actions/cache@v6
+        with:
+          path: ~/.risc0
+          key: risc0-guest-${{ runner.os }}-${{ env.RISC0_VERSION }}-rust${{ env.RISC0_RUST }}
+      - name: cargo-risczero ${{ env.RISC0_VERSION }} + risc0 rust ${{ env.RISC0_RUST }}
         run: |
-          curl -fsSL https://risczero.com/install | bash
-          ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+          if [ "${{ steps.risc0.outputs.cache-hit }}" != "true" ]; then
+            curl -fsSL https://risczero.com/install | bash
+            ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+            ~/.risc0/bin/rzup install rust "$RISC0_RUST"
+          fi
           bin="$(ls -d ~/.risc0/extensions/v${RISC0_VERSION}-cargo-risczero-*/cargo-risczero | head -1)"
           [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
           mkdir -p ~/.local/bin && ln -sf "$bin" ~/.local/bin/cargo-risczero

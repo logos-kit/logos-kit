@@ -35,6 +35,7 @@ Mirrors LEZ's own `flake.nix` at the LEZ rev above. When LEZ re-pins, copy these
 | Rust toolchain | `1.98.1` | LEZ `rust-toolchain.toml` |
 | risc0-zkvm | `3.0.5` | LEZ `Cargo.lock` |
 | RISC Zero guest docker builder | `r0.1.91.1` | LEZ `Justfile:27` (`RISC0_DOCKER_CONTAINER_TAG`) |
+| RISC Zero host rust toolchain (`rzup install rust`) | `1.97.0` | cargo-risczero reads it to pick the guest's rust flags even for docker builds; this version reproduced the testimonial image (`.github/workflows/guest-repro.yml`) |
 | Nix | `2.35.2` | `/nix/var/nix/profiles/default/bin/nix` (flakes enabled) |
 | Qt (Basecamp desktop) | `6.9.2` | note 11 |
 | Qt (mobile Basecamp, and the open desktop bump PR) | `6.11.1` | logos-nix #7/#8 |
