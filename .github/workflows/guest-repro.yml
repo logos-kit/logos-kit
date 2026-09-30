@@ -1,0 +1,101 @@
+name: Guest reproducibility
+
+# The testimonial program must be reproducible from public source: rebuilding
+# the commit recorded in programs/testimonial/artifacts/build.json in the
+# pinned RISC Zero docker builder gives exactly the image id the wallet trusts
+# and the registry lists (registry/programs.json). A second job reports whether
+# the current guest source still builds that image (a change means a redeploy).
+on:
+  push:
+    branches: [main, "ci/**", "stage/**"]
+    paths: ["programs/**", "registry/programs.json", ".github/workflows/guest-repro.yml"]
+  pull_request:
+    paths: ["programs/**", "registry/programs.json"]
+  schedule:
+    - cron: "23 4 * * 1" # weekly: the builder image and crates stay fetchable
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guest-repro-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RISC0_VERSION: 3.0.5
+
+jobs:
+  recorded:
+    name: recorded commit → trusted image id
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+      - name: cargo-risczero ${{ env.RISC0_VERSION }}
+        run: |
+          curl -fsSL https://risczero.com/install | bash
+          ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+          bin="$(ls -d ~/.risc0/extensions/v${RISC0_VERSION}-cargo-risczero-*/cargo-risczero | head -1)"
+          [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
+          mkdir -p ~/.local/bin && ln -sf "$bin" ~/.local/bin/cargo-risczero
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Rebuild the recorded commit
+        run: |
+          set -euo pipefail
+          b=programs/testimonial/artifacts/build.json
+          commit=$(jq -er .source.commit "$b"); tag=$(jq -er .source.dockerTag "$b")
+          guest=$(jq -er .source.guestPath "$b"); want=$(jq -er .imageId "$b")
+          # Every registry entry for the testimonial names the same build.
+          jq -e --arg w "$want" --arg c "$commit" \
+            'map(select(.name == "testimonial")) | length > 0 and all(.imageId == $w and .source.commit == $c)' \
+            registry/programs.json > /dev/null \
+            || { echo "::error::registry/programs.json disagrees with $b"; exit 1; }
+          src="$RUNNER_TEMP/src"; git init -q "$src"
+          git -C "$src" fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}" "$commit"
+          git -C "$src" checkout -q FETCH_HEAD
+          cd "$src"
+          RISC0_DOCKER_CONTAINER_TAG="$tag" CARGO_TARGET_DIR="$RUNNER_TEMP/target" \
+            cargo risczero build --manifest-path "$guest/Cargo.toml" | tee "$RUNNER_TEMP/build.txt"
+          got=$(sed -n 's/^ImageID: \([0-9a-f]\{64\}\) .*testimonial\.bin$/\1/p' "$RUNNER_TEMP/build.txt")
+          echo "commit $commit  docker $tag"
+          echo "want $want"
+          echo "got  $got"
+          [ "$got" = "$want" ] || { echo "::error::rebuilt image $got != trusted $want"; exit 1; }
+          echo "### Testimonial program reproduced: \`$got\` from \`${commit:0:12}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  head:
+    name: current source vs the deployed image (report)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+      - name: cargo-risczero ${{ env.RISC0_VERSION }}
+        run: |
+          curl -fsSL https://risczero.com/install | bash
+          ~/.risc0/bin/rzup install cargo-risczero "$RISC0_VERSION"
+          bin="$(ls -d ~/.risc0/extensions/v${RISC0_VERSION}-cargo-risczero-*/cargo-risczero | head -1)"
+          [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
+          mkdir -p ~/.local/bin && ln -sf "$bin" ~/.local/bin/cargo-risczero
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build the guest at this commit
+        run: |
+          set -euo pipefail
+          b=programs/testimonial/artifacts/build.json
+          tag=$(jq -er .source.dockerTag "$b"); guest=$(jq -er .source.guestPath "$b"); want=$(jq -er .imageId "$b")
+          RISC0_DOCKER_CONTAINER_TAG="$tag" CARGO_TARGET_DIR="$RUNNER_TEMP/target" \
+            cargo risczero build --manifest-path "$guest/Cargo.toml" | tee "$RUNNER_TEMP/build.txt"
+          got=$(sed -n 's/^ImageID: \([0-9a-f]\{64\}\) .*testimonial\.bin$/\1/p' "$RUNNER_TEMP/build.txt")
+          echo "deployed $want"; echo "source   $got"
+          if [ "$got" = "$want" ]; then
+            echo "### Current guest source builds the deployed image \`$got\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::the testimonial guest at this commit builds $got, not the deployed $want: redeploy and update build.json + registry/programs.json"
+            echo "### Guest changed since the deployed build: \`$got\` (deployed \`$want\`)" >> "$GITHUB_STEP_SUMMARY"
+          fi
