@@ -1,5 +1,11 @@
 # @logos-kit/theme
 
+## 0.1.1
+
+### Patch Changes
+
+- npm-first install instructions in each README (npm, pnpm, yarn, bun). First release through GitHub Actions trusted publishing, with provenance. ([`20f5360`](https://github.com/logos-kit/logos-kit/commit/20f53602f56df72e05ed0b4c8cc1fbd9f9c09eed))
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@logos-kit/codec",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Byte-exact LEZ 0.3 encoding: borsh, messages, transactions, account ids, u128 amounts (no BigInt, no bignum library). QML-safe root; BIP-340 signing in ./sign.",
   "license": "MIT OR Apache-2.0",
   "repository": {
