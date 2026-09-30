@@ -2296,40 +2296,6 @@ fn icon_grid(dir: &std::path::Path, rel: &str) -> Option<Vec<String>> {
     Some(cells)
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn explorer_budget_gaps_and_caps_per_app() {
-        use std::time::{Duration, Instant};
-        let mut b = super::ExplorerBudget::default();
-        let t0 = Instant::now();
-        assert!(b.take("app", t0).is_ok());
-        assert!(b.take("other", t0 + Duration::from_millis(500)).is_err());
-        for i in 1..20 {
-            assert!(b.take("app", t0 + Duration::from_secs(i * 2)).is_ok());
-        }
-        assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
-        assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
-        assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
-    }
-
-    #[test]
-    fn receive_code_round_trips() {
-        let npk = "11".repeat(32);
-        let vpk = "22".repeat(1184);
-        let v = super::receive_code(&npk, &vpk).unwrap();
-        let code = v["code"].as_str().unwrap();
-        assert!(
-            code.starts_with("lezpriv1:") && code.len() < 1700,
-            "{}",
-            code.len()
-        );
-        let keys = super::parse_receive_code(code).unwrap();
-        assert_eq!((keys.npk, keys.vpk), (npk, vpk));
-        assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
-    }
-}
-
 /// The OS "reduce motion" setting, read once per process (Qt 6.9 exposes no
 /// such hint to QML): macOS Accessibility → Display → Reduce motion, GNOME's
 /// `enable-animations = false`. Anything unreadable counts as "not reduced".
@@ -2363,4 +2329,38 @@ fn system_reduced_motion() -> bool {
             false
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn explorer_budget_gaps_and_caps_per_app() {
+        use std::time::{Duration, Instant};
+        let mut b = super::ExplorerBudget::default();
+        let t0 = Instant::now();
+        assert!(b.take("app", t0).is_ok());
+        assert!(b.take("other", t0 + Duration::from_millis(500)).is_err());
+        for i in 1..20 {
+            assert!(b.take("app", t0 + Duration::from_secs(i * 2)).is_ok());
+        }
+        assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
+        assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
+        assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
+    }
+
+    #[test]
+    fn receive_code_round_trips() {
+        let npk = "11".repeat(32);
+        let vpk = "22".repeat(1184);
+        let v = super::receive_code(&npk, &vpk).unwrap();
+        let code = v["code"].as_str().unwrap();
+        assert!(
+            code.starts_with("lezpriv1:") && code.len() < 1700,
+            "{}",
+            code.len()
+        );
+        let keys = super::parse_receive_code(code).unwrap();
+        assert_eq!((keys.npk, keys.vpk), (npk, vpk));
+        assert!(super::parse_receive_code("lezpriv1:AAAA").is_err());
+    }
 }
