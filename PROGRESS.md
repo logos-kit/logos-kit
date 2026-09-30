@@ -15,7 +15,7 @@ The single place to resume from after a context clear.
 - Nothing is pushed, published or deployed without the user's go-ahead.
 - Tests are not a deliverable; only the integration-confidence tests listed in the plan.
 
-**Next action:** S8 on `stage/08-apps`: apps, template, docs, network-following and the Basecamp run are done; next the conformance kit, then the catalog release (held for testnet 0.3, see S8). S7 leftovers below (testnet-0.3 flows) wait for 0.3. Earlier note: S7 in progress on `stage/07-basecamp` (pushed). Done: engine service, module shim, Tray wallet UI, intents, dev harness, Basecamp flow (`just bc-flow` green), reviews fixed. Left for S7: catalog fork `logos-kit-modules` + release workflow, Linux lgx builds + clean-VM installs, public/private/token flows on testnet 0.3 (testnet still 0.2; target 2026-09-30), then merge. Testimonial deploy still waits for `just fingerprint` = 0.3.
+**Next action (2026-09-30):** first release is out on the preview network (catalog 0.1.3 / apps 0.1.1, npm 0.1.0, docs live). Open work is listed at the end of "After S8"; the official-testnet switch waits for 0.3 (the daily workflow opens an issue the day it flips; runbook `docs/dev/cutover-0.3.md`). Then S9 leftovers and the adoption track.
 
 ---
 
@@ -44,7 +44,7 @@ The single place to resume from after a context clear.
 
 ### QA tooling
 - [x] Build `logos-qt-mcp` (`MCP EXIT 0`; driven from Node via `test-framework/framework.mjs` over TCP :3768)
-- [ ] Run the design-system storybook (before S7)
+- [x] ~~Run the design-system storybook (before S7)~~ superseded (2026-09-30): the QML kit gallery `sdk/qml/gallery/` renders every component in light and dark (`docs/reviews/revamp/kit/`), and `apps/design-lab` is the web reference
 - [x] Wallet design v2: `apps/design-lab` (React + 21st.dev/Motion Primitives/NumberFlow/Vaul components) with three working directions (Veil, Tray, Ledger); references study in `docs/design/references.md` + `docs/design/refs/`. Published for picks (artifact db collection `picks`).
 
 ### Design and chain tooling
@@ -61,7 +61,7 @@ The single place to resume from after a context clear.
 - [x] The module loads in Basecamp and answers `ping` via `logos.callModuleAsync`. Proof: wallet UI shows `core: {"module":"logos_kit_wallet","ok":true,"version":"0.1.0"}` (`docs/reviews/s0/bc-wallet.png`)
 - [x] The probe results are recorded below
 - [x] `pnpm i && pnpm check` is green
-- [ ] `/code-review` run; findings recorded
+- [x] Reviews run and findings recorded: S2/S3 security + code reviews (below), Codex milestone reviews `docs/reviews/s8/codex-review.md` and `docs/reviews/full-1/codex-review.md`
 
 ### Decisions and deviations
 - 2026-09-26: the brand is Logos Kit (D12). The repo-local git identity is `Blockchain-Oracle <blockchainoracle.dev@gmail.com>`.
@@ -110,7 +110,7 @@ The single place to resume from after a context clear.
 - [x] `crates/wallet-engine` links `wallet`, `lee` (`prove`), `lee_core`, `key_protocol`, `common` at the pinned rev. Proof: `cargo test -p wallet-engine` builds with real Metal kernels, 5 tests pass (`aff4502`)
 - [x] `cargo xtask vectors` → `protocol/vectors/{public_tx,keys}.json`: LEZ's 4 pinned message layouts, a signed native transfer (fixed aux rand, verified by LEZ's public verifier) incl. the `sendTransaction` base64 param and tx hash, public nodes `/`, `/0`, `/1`, `/0/0` (the wallet's layered order) and private nodes `/0`, `/1`
 - [x] Integration test #1 (Rust side): `crates/wallet-engine/tests/vectors.rs` decodes the committed bytes with LEZ and re-verifies. Proof: `cargo test -p wallet-engine` → `vectors_*` 4 passed
-- [ ] LEZ fork patches in `vendor/lez-patches/` (StorageBackend, SyncObserver, prepare/sign split, prove split, keycard feature)
+- [x] LEZ fork patches in `vendor/lez-patches/` 0001–0007 (StorageBackend, SyncObserver, prepare/sign split, prove split, keycard feature, remove_label, no plaintext note on stdout)
 - [x] typify → `crates/lwsp-types`: `cargo xtask types` (typify lib + pinned rustfmt). Emit now writes `$ref`s for named schemas (55), so types are named once (2.2k lines, was 7.6k). Proof: `cargo clippy -p lwsp-types -- -D warnings` clean (`17303d9`). CI diff lands with S9 workflows
 - [x] Engine C ABI for the module: `lk_engine_info` / `lk_engine_call` / `lk_engine_free` (`include/wallet_engine.h`), JSON dispatch with `info` and `derivePublicAccounts`. Proof: exported symbols in `libwallet_engine.dylib`; dispatch test matches vectors (`b3e1ff8`)
 - [x] Nix build of the module with the engine (macOS). Root `flake.nix` builds `wallet-engine` (crane, LEZ tarball + patches, circuits 2846ee7 ↔ v0.5.7, rapidsnark e91187f8, pre-fetched recursion zkr, Metal xcrun stub); the module takes it via `externalLibInputs` + CMake `EXTERNAL_LIBS` (a dylib, so the two Rust std copies never collide). Proof: `logosctl … call logos_kit_wallet engine_info` → `{"ok":true,"result":{"engine":"0.1.0","lezRev":"f7fda38a…"}}` (`ed0b5f6`). Lesson: without `EXTERNAL_LIBS` the plugin still links (dynamic lookup) and segfaults on the first engine call.
@@ -179,7 +179,7 @@ The single place to resume from after a context clear.
 - [x] Exit proof, dev-mode proofs: `just e2e-cli` (`e2e/cli.sh`) → public send (block 44, recipient 500000) and shield with progress (`proving → signing → submitted → included`, block 48, outcome **Success** via own-account invariant, private balance 1234). `OK: public send + shield (debug, dev-mode proofs)`
 - [x] Exit proof, **real proofs**: `LK_REAL_PROOF=1 e2e/cli.sh` (release, real RISC Zero proof on this Mac): shield `proving` 0 s → `signing` **267 s** → `included` 279 s (block 96), outcome **Success**; `OK: public send + shield (release, proofs)`; whole script 297 s, max RSS 4.27 GB
 - [x] Code review + security review: 15 findings, fixed in `b43ad96` (details in the commit): zone-switch/lock races (epoch), app slot hogging (owner priority, cooldown, status cap), prover slot leak, auto-lock killing a proof, inclusion vs bookkeeping errors, sponsor fee check, zone id in hashes, error text to apps, CLI `--json` blind approve, date validation
-- [ ] Deferred to S4 by scope: token send/balance, deshield/private send, faucet, verify-program, backup/restore commands, program-header re-check at sign time (S4 source verification); `testimonial` to S5
+- [x] (done in S4/S5) Deferred to S4 by scope: token send/balance, deshield/private send, faucet, verify-program, backup/restore commands, program-header re-check at sign time (S4 source verification); `testimonial` to S5
 
 ### Exit criteria
 - [x] A public send and a shield (with progress) via `logos-kit` on standalone (dev-mode and real proofs, above). **S3 complete (2026-09-26).**
@@ -346,3 +346,31 @@ The single place to resume from after a context clear.
 - 2026-09-27: Local faucet rate limit is 60 s per account; a wallet's first-run funding counts, so an app's first claim right after onboarding is rate-limited (correct).
 - 2026-09-27: Testimonials must name "Logos Kit" (the prize counts texts that identify this wallet). Starter phrases fill the rest.
 - Gotchas: `short` is reserved in QML JS; `\u` escapes typed into a file can arrive as the real characters (U+2028 breaks a QML line), so keep regex escapes ASCII; relative `source:` strings in a component resolve against the *using* file, so `LogosKitUi` uses `Qt.resolvedUrl`; the SDK's `kit.api` is null until `LogosKit` completes (`onApiChanged`); private accounts need an explicit tick in the connect sheet.
+
+---
+
+## After S8 · Full review, redesign, first public release (2026-09-29/30), `main`
+
+- [x] Codex full review, prompt + result in `docs/reviews/full-1/` (verdict: real preview release; prize gates were canonical 0.3, CI, evaluator README/demo, adoption evidence)
+- [x] **UI redesign** (merged from `ui/revamp`, `48a106d`): `sdk/qml/LogosKitUi` v2, ~30 QML components each ported from a named 21st.dev source (`docs/design/revamp-picks.md`, brief `docs/design/revamp.md`); wallet, both apps and the template rebuilt on it; approval sheet leads with asset + amount + full destination; focusable controls, contrast ≥ 4.5:1, reduced motion, integer LEZ units. Proof: harness flows (testimonial, faucet, template) and **real Basecamp** `e2e/basecamp-apps.sh` green on the 0.1.3/0.1.1 bundles, 0 sandbox "Blocked" lines. Test fixes: `tests/bc-lib.mjs` scrolls items into view before clicking; exact "Local" network pick; waits for onboarding funds or uses the in-flow faucet
+- [x] **Docs + README rewrite** (40+ pages, Getting started / Concepts / Guides / SDK / Wallet / Reference / Help; landing from 21st.dev components; `pnpm shots` pipeline); every claim checked against code; deployed to https://logos-kit-docs.vercel.app
+- [x] **CI** on `main` (green): `rust.yml`, `ts.yml` (incl. capability-matrix check, docs build), `e2e.yml` (standalone sequencer, dev proofs), `nix.yml` (manual/weekly), `changesets.yml` (npm), `daily.yml` (fingerprints both networks, opens the cutover issue on 0.3, evidence export artifacts). `scripts/lez-vendor.sh` makes clean clones build
+- [x] **Evaluator contract** `e2e/demo.sh`: `--local` 16/16 (dev proofs), `--preview` 14/14 on the live network with real proofs (faucet, public, shield, private→public, token create/public/private, testimonial, evidence, 3 refusals)
+- [x] **Drip faucet v2** live: durable ledger (restart-safe, never pays a key twice), per-client IP limits behind Traefik, 200/h global budget, `Retry-After`; sequencer key on tmpfs, deleted after start
+- [x] **Evidence exporter**: prior activity from blocks before the post (`priorTxs`, `hasPriorActivity`, qualified counts)
+- [x] Engine: public token send and token create settle as `success` from balances; approval sheet drops a single transfer's duplicate line
+- [x] **Catalog release**: `logos_kit_wallet` + `_ui` 0.1.3, `logos_kit_testimonial` + `logos_kit_faucet` 0.1.1 (catalog `ef56f77`, all three platforms)
+- [x] **npm**: `@logos-kit/protocol`, `codec`, `client`, `theme` 0.1.0 with READMEs/licenses (`1abe336`); publint + attw clean; installs and runs from npm (client read block 12,655 off the preview network). `@logos-kit/codec@0.1.0` is in npm's staged-release review (its `latest` briefly points at npm's `0.0.0-stage` placeholder), so docs install `@logos-kit/codec@^0.1.0`. Future releases: `changesets.yml` with trusted publishing (setup in `docs/dev/releasing.md`)
+
+### Open
+- [ ] Clean catalog installs of 0.1.3 (macOS, Linux arm64/x86_64) and the GUI install check
+- [ ] npm: `npm trust github` for the four packages (maintainer, needs 2FA) and org setting "Allow GitHub Actions to create and approve pull requests"; codec's staged review
+- [ ] Extra CI: nightly real proofs, guest reproducibility, QML gate (in progress on `ci/extra`)
+- [ ] Official testnet 0.3 cutover (blocked; `docs/dev/cutover-0.3.md`)
+- [ ] Domain (sslip.io had a multi-minute DNS outage during a demo run)
+- [ ] Adoption: drafts in `adoption/drafts/` await the maintainer's approval; 10 independent developers; testimonials on the official network
+- [ ] Narrated demo video; 2–3 non-expert usability sessions
+- [ ] Security follow-ups from S2 (vault write counter, zeroize LEZ `Storage`, Windows ACL); Logos Storage encrypted backup and performance budgets (S9)
+- [ ] Linux GUI Basecamp run; conformance Basecamp mode on Linux; run the "other Logos modules" pattern in Basecamp
+- [ ] Small UI polish: live network pill hidden on the desktop landing; site ignores a light color-scheme preference
+
