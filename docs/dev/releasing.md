@@ -88,10 +88,14 @@ One-time setup, done by an owner of the npm org `logos-kit` (needs 2FA; run in a
 terminal so npm can ask for the code):
 
 ```bash
+# npm >= 11.19 (the registry now needs --allow-publish; older clients get a bare 400)
 for p in protocol codec client theme; do
-  npm trust github @logos-kit/$p --file changesets.yml --repo logos-kit/logos-kit
+  npm trust github @logos-kit/$p --file changesets.yml --repo logos-kit/logos-kit --allow-publish -y
 done
+npm trust list @logos-kit/protocol   # check
 ```
+
+Done for all four on 2026-09-30 (publish + stage publish).
 
 The GitHub org must also allow Actions to open PRs (Settings → Actions → General →
 Workflow permissions → "Allow GitHub Actions to create and approve pull requests").
