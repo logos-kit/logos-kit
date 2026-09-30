@@ -1,0 +1,50 @@
+name: QML SDK gate
+
+# The QML SDK is TypeScript transpiled for Qt's V4 engine (packages/qml-bundle).
+# 1. The committed bundle (sdk/qml/LogosKit/logoskit.js) and every vendored
+#    copy in the apps and the template match a fresh build (`just qml-vendor`).
+# 2. The engine gate: the same suite runs in Node and in Qt 6.9.2 (Basecamp
+#    desktop) and 6.11.1 (Basecamp mobile), and the logs must be identical.
+on:
+  push:
+    branches: [main, "ci/**", "stage/**"]
+    paths: ["packages/**", "sdk/**", "protocol/**", "modules/*/qml/**", "templates/**", "justfile", ".github/workflows/qml-gate.yml"]
+  pull_request:
+    paths: ["packages/**", "sdk/**", "protocol/**", "modules/*/qml/**", "templates/**", "justfile"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qml-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: bundle drift + Qt 6.9 / 6.11 engine gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          cache: true
+          require-lockfile: true
+      - uses: extractions/setup-just@v4
+      - uses: astral-sh/setup-uv@v10
+      - name: Build the QML SDK and re-vendor it
+        run: |
+          just qml-sdk
+          just qml-vendor
+      - name: Committed SDK and vendored copies match the build
+        run: |
+          if ! git diff --exit-code --stat -- sdk modules templates; then
+            echo "::error::the QML SDK or a vendored copy is stale: run 'just qml-sdk && just qml-vendor' and commit"
+            exit 1
+          fi
+      - name: Qt envs (PySide6 6.9.2 + 6.11.1)
+        run: just qt-setup
+      - name: Engine gate (Node vs Qt 6.9.2 vs Qt 6.11.1)
+        run: just qml-gate
