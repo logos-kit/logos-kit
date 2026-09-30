@@ -103,7 +103,7 @@ Item {
                                 color: Theme.priv; border.width: 2; border.color: Theme.surface2
                             }
                         }
-                        Txt { text: home.acct ? Fmt.accountName(home.acct) : "No account"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.maximumWidth: Math.min(200, col.width - 230) }
+                        Txt { text: home.acct ? Fmt.accountName(home.acct) : home.store.accounts.length === 0 ? "Loading accounts…" : "No account"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.maximumWidth: Math.min(200, col.width - 230) }
                         Glyph { name: "chevronDown"; implicitWidth: 14; implicitHeight: 14; color: Theme.text2 }
                     }
                     MouseArea { id: pillMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pill.clicked() }

@@ -54,7 +54,7 @@ async function viaWallet(name, what) {
 await step('wallet: first run on the local zone', async () => {
   await openApp('Logos Kit Wallet')
   await waitVisible('createWallet', 60000)
-  await send('findAndClick', { text: 'lez:local' })
+  await send('findAndClick', { text: 'Local', exact: true })
   await sleep(1500)
   await click('createWallet')
   await type('password', PW)
@@ -86,6 +86,18 @@ await step('testimonial: connect through the shell', async () => {
 })
 
 await step('testimonial: post, approve, included', async () => {
+  // The wallet's first run requested test funds; they may still be landing.
+  // If they haven't after a while, use the app's own in-flow faucet.
+  try {
+    await waitFor('onboarding funds', async () => !(await visibleId('tmNoFunds')), 90000)
+  } catch {
+    await click('tmFunds')
+    await viaWallet('fundsApprove', 'wallet faucet sheet')
+    await click('fundsApprove')
+    await click('fundsDone', 90000)
+    await openApp('Logos Kit Testimonials')
+    await waitFor('funds after the faucet', async () => !(await visibleId('tmNoFunds')), 90000)
+  }
   await type('tmName', 'basecamp')
   await type('tmText', 'I use the Logos Kit wallet on LEZ inside Basecamp.')
   await click('tmPost')

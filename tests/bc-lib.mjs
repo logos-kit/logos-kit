@@ -66,8 +66,27 @@ export async function click(name, timeout) {
     },
     20000,
   )
+  await reveal(id)
   await send('click', { objectId: id })
   await sleep(500)
+}
+// The inspector clicks at the item's centre in window coordinates, so an item
+// below the fold of a scrolled page gets nothing: scroll it into view first,
+// as a user would (nearest Flickable ancestor).
+export async function reveal(id) {
+  await ins.send('evaluate', {
+    objectId: id,
+    expression: `(function (it) {
+      for (var f = it.parent; f; f = f.parent) {
+        if (f.contentY === undefined || f.contentItem === undefined) continue
+        var y = it.mapToItem(f.contentItem, 0, 0).y
+        if (y < f.contentY || y + it.height > f.contentY + f.height)
+          f.contentY = Math.max(0, Math.min(y - f.height / 3, f.contentHeight - f.height))
+      }
+      return true
+    })(this)`,
+  })
+  await sleep(300)
 }
 export async function type(name, text) {
   const id = await waitVisible(name)
