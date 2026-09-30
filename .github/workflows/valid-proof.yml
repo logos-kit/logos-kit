@@ -1,0 +1,98 @@
+name: Valid proof (nightly)
+
+# Real proving end to end, no RISC0_DEV_MODE anywhere: the standalone
+# sequencer verifies the proof, and the wallet (logos-kit CLI, release build)
+# proves a shield on the runner's CPU. Mirrors LEZ's nightly valid-proof-test:
+# a single real proof takes about an hour on a standard runner, so it runs
+# nightly while every push runs the dev-mode E2E (e2e.yml).
+on:
+  schedule:
+    - cron: "41 2 * * *" # off the hour, before LEZ's own 03:17 run
+  workflow_dispatch:
+  push:
+    branches: ["ci/extra"] # iteration only; removed when merged
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valid-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  R0VM_VERSION: 3.0.5
+
+jobs:
+  valid-proof:
+    name: CLI send + shield with a real proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+      - name: System packages
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev clang cmake ninja-build pkg-config libssl-dev unzip
+      - name: Vendor LEZ (pinned rev + our patches)
+        run: scripts/lez-vendor.sh
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: ""
+          cache-shared-key: workspace-release
+      - name: Cache r0vm
+        id: r0vm
+        uses: actions/cache@v6
+        with:
+          path: ~/.risc0
+          key: r0vm-${{ runner.os }}-${{ env.R0VM_VERSION }}
+      - name: Install r0vm ${{ env.R0VM_VERSION }}
+        if: steps.r0vm.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://risczero.com/install | bash
+          ~/.risc0/bin/rzup install r0vm "$R0VM_VERSION"
+      - name: r0vm on PATH
+        run: |
+          bin="$(ls -d ~/.risc0/extensions/v${R0VM_VERSION}-*/r0vm | head -1)"
+          [ -x "$bin" ] || { ls -la ~/.risc0/extensions; exit 1; }
+          ln -sf "$bin" ~/.risc0/bin/r0vm
+          echo "$HOME/.risc0/bin" >> "$GITHUB_PATH"
+          ~/.risc0/bin/r0vm --version
+      - name: Cache the sequencer build
+        id: seq
+        uses: actions/cache@v6
+        with:
+          path: target/lez-sequencer/release/sequencer_service
+          key: sequencer-${{ runner.os }}-${{ hashFiles('crates/xtask/src/main.rs', 'vendor/lez-patches/*.patch') }}
+      - name: Build sequencer_service (standalone)
+        if: steps.seq.outputs.cache-hit != 'true'
+        working-directory: vendor/lez
+        run: CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/lez-sequencer" cargo build --release --features standalone -p sequencer_service
+      - name: Build the CLI (release, real prover)
+        run: cargo build --release -p logos-kit-cli
+      - name: Start the sequencer (verifies real proofs)
+        env:
+          LK_E2E_DEV_MODE: "0"
+        run: e2e/standalone.sh
+      - name: Public send + shield, real proof
+        env:
+          LK_REAL_PROOF: "1"
+        run: |
+          set -o pipefail
+          /usr/bin/time -v e2e/cli.sh 2>&1 | tee cli.log
+      - name: Proof timing
+        if: always()
+        run: grep -E "Elapsed|Maximum resident|proving|OK:" cli.log || true
+      - name: Sequencer log on failure
+        if: failure()
+        run: tail -200 target/e2e-sequencer/sequencer.log || true
+      - name: Stop the sequencer
+        if: always()
+        run: e2e/standalone.sh stop

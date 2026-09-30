@@ -5,6 +5,7 @@
 #
 #   e2e/standalone.sh            build if needed, start, wait until the RPC answers
 #   e2e/standalone.sh stop       stop it
+#   LK_E2E_DEV_MODE=0 e2e/standalone.sh   verify real proofs (nightly valid-proof)
 #
 # Recipe mirrors LEZ's `just run-sequencer-standalone` and CI; the binary is
 # built from vendor/lez (our pinned LEZ + patches) into target/lez-sequencer.
@@ -49,7 +50,10 @@ fi
 rm -rf "$STATE"
 mkdir -p "$STATE/home"
 cd "$LEZ/lez/sequencer/service"
-RISC0_DEV_MODE=1 RUST_LOG="${RUST_LOG:-info,kameo=warn}" nohup "$BIN" configs/debug/sequencer_config.json \
+# LK_E2E_DEV_MODE=0: the sequencer verifies real proofs (the nightly
+# valid-proof run); the default skips verification like LEZ's dev mode.
+if [[ "${LK_E2E_DEV_MODE:-1}" == 1 ]]; then export RISC0_DEV_MODE=1; else unset RISC0_DEV_MODE; fi
+RUST_LOG="${RUST_LOG:-info,kameo=warn}" nohup "$BIN" configs/debug/sequencer_config.json \
   --home "$STATE/home" --listen-address 127.0.0.1 --port "$PORT" \
   --metrics-address "127.0.0.1:${LK_E2E_METRICS_PORT:-$((PORT + 6000))}" >"$STATE/sequencer.log" 2>&1 &
 echo $! >"$STATE/pid"
