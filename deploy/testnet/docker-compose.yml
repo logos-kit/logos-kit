@@ -1,0 +1,71 @@
+# Logos Kit services for the official LEZ testnet (https://testnet.lez.logos.co,
+# LEZ v0.3.0) on Coolify: the drip faucet, and a browser relay for the RPC.
+# The official sequencer sends no CORS headers, so web dApps and the docs'
+# live examples read through `rpc`; Basecamp and the CLI talk to the official
+# URL directly. Secret from Coolify env: LK_DRIP_KEY (the testnet treasury).
+services:
+  rpc:
+    image: caddy:2.10-alpine
+    command: caddy reverse-proxy --from :8080 --to https://testnet.lez.logos.co --change-host-header
+    mem_limit: 128m
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.lk-tn-rpc-http.entrypoints=http
+      - traefik.http.routers.lk-tn-rpc-http.rule=Host(`lez-testnet.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-tn-rpc-http.middlewares=redirect-to-https
+      - traefik.http.routers.lk-tn-rpc.entrypoints=https
+      - traefik.http.routers.lk-tn-rpc.rule=Host(`lez-testnet.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-tn-rpc.tls=true
+      - traefik.http.routers.lk-tn-rpc.tls.certresolver=letsencrypt
+      - traefik.http.routers.lk-tn-rpc.service=lk-tn-rpc
+      - traefik.http.routers.lk-tn-rpc.middlewares=lk-tn-cors,lk-tn-rpc-limit
+      - traefik.http.services.lk-tn-rpc.loadbalancer.server.port=8080
+      - traefik.http.middlewares.lk-tn-cors.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.lk-tn-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS
+      - traefik.http.middlewares.lk-tn-cors.headers.accesscontrolallowheaders=content-type
+      - traefik.http.middlewares.lk-tn-cors.headers.accesscontrolmaxage=600
+      # Reads only reach the official node through us: keep each client IP modest.
+      - traefik.http.middlewares.lk-tn-rpc-limit.ratelimit.average=10
+      - traefik.http.middlewares.lk-tn-rpc-limit.ratelimit.burst=30
+      - traefik.http.middlewares.lk-tn-rpc-limit.ratelimit.period=1s
+
+  drip:
+    build:
+      context: .
+      dockerfile: drip.Dockerfile
+    environment:
+      LK_DRIP_KEY: ${LK_DRIP_KEY}
+      LK_DRIP_SEQUENCER: https://testnet.lez.logos.co
+      LK_DRIP_AMOUNT: "1000000000"
+      LK_DRIP_EVERY_SECS: "3600"
+      LK_DRIP_IP_PER_HOUR: "5"
+      # The treasury is a share of the testnet's public genesis funds: spend it slowly.
+      LK_DRIP_MAX_PER_HOUR: "60"
+      LK_DRIP_DATA: /var/lib/drip
+      # Traefik is the only way in and rewrites X-Forwarded-For (see deploy/preview-net).
+      LK_DRIP_TRUST_PROXY: "1"
+    volumes:
+      - lez-testnet-drip:/var/lib/drip
+    mem_limit: 256m
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.lk-tn-drip-http.entrypoints=http
+      - traefik.http.routers.lk-tn-drip-http.rule=Host(`lez-testnet-drip.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-tn-drip-http.middlewares=redirect-to-https
+      - traefik.http.routers.lk-tn-drip.entrypoints=https
+      - traefik.http.routers.lk-tn-drip.rule=Host(`lez-testnet-drip.84.46.247.92.sslip.io`)
+      - traefik.http.routers.lk-tn-drip.tls=true
+      - traefik.http.routers.lk-tn-drip.tls.certresolver=letsencrypt
+      - traefik.http.routers.lk-tn-drip.service=lk-tn-drip
+      - traefik.http.routers.lk-tn-drip.middlewares=lk-tn-drip-cors
+      - traefik.http.middlewares.lk-tn-drip-cors.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.lk-tn-drip-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS
+      - traefik.http.middlewares.lk-tn-drip-cors.headers.accesscontrolallowheaders=content-type
+      - traefik.http.middlewares.lk-tn-drip-cors.headers.accesscontrolexposeheaders=retry-after
+      - traefik.http.middlewares.lk-tn-drip-cors.headers.accesscontrolmaxage=600
+      - traefik.http.services.lk-tn-drip.loadbalancer.server.port=8080
+
+volumes:
+  lez-testnet-drip:
