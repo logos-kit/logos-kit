@@ -18,8 +18,10 @@ client:
 - **`walletActions`**: LWS-0 requests to the Logos Kit wallet (connect, read
   shared accounts, propose transactions, follow them).
 
-Amounts are decimal strings (`u128` never becomes a JS number), and the root
-entry point stays QML-safe: no native `BigInt`, no `Intl`.
+Amounts are decimal strings (`u128` never becomes a JS number): lepta for the
+native token (1 LGO = 10^9 lepta; show them with `formatUnits(amount, 9)` from
+`@logos-kit/codec`). The root entry point stays QML-safe: no native `BigInt`,
+no `Intl`.
 
 Hover over the code below to see the types.
 
@@ -29,8 +31,8 @@ Hover over the code below to see the types.
 import { createClient, http, nodeActions } from '@logos-kit/client'
 
 const node = createClient({
-  transport: http('https://lez.84.46.247.92.sslip.io', { retryCount: 2 }),
-  chain: 'lez:preview',
+  transport: http('https://testnet.lez.logos.co', { retryCount: 2 }),
+  chain: 'lez:testnet',
 }).extend(nodeActions)
 
 async function main() {
@@ -45,9 +47,10 @@ async function main() {
 <Callout type="warn">
 The official LEZ sequencer (`testnet.lez.logos.co`) and a default LEZ
 deployment send no CORS headers, so from those `http()` works in Node and other
-non-browser runtimes, not in a web page. The Logos Kit **preview** endpoint
-does send CORS headers and is browser-callable. In Basecamp, read through the
-wallet (`readAccount`, `getWalletBalance`).
+non-browser runtimes, not in a web page. In a web page, use Logos Kit's relay
+for the testnet, `https://lez-testnet.84.46.247.92.sslip.io`, which does send
+CORS headers. In Basecamp, read through the wallet (`readAccount`,
+`getWalletBalance`).
 </Callout>
 
 ## Talk to the wallet
@@ -72,15 +75,16 @@ declare const logos: {
 
 const wallet = createClient({
   transport: basecampModule({ callModuleAsync: logos.callModuleAsync }),
-  chain: 'lez:preview',
+  chain: 'lez:testnet',
 }).extend(walletActions)
 
 async function pay(to: string) {
-  const session = await wallet.connect({ chains: ['lez:preview'] })
+  const session = await wallet.connect({ chains: ['lez:testnet'] })
   const from = session.accounts[0].address
   //    ^?
 
   // Resolves when the user approves, not when the transaction lands.
+  // '1000' is lepta: 0.000001 LGO.
   const { handle } = await wallet.sendCall(from, nativeTransfer(from, to, '1000'))
   const status = await wallet.waitForTransactionStatus(handle)
   //    ^?

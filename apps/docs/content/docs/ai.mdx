@@ -18,13 +18,15 @@ A good first prompt:
 ```text
 Read https://logos-kit-docs.vercel.app/llms-full.txt. Then build a Basecamp
 ui_qml app from `nix flake init -t github:logos-kit/logos-kit#dapp` that
-connects a public account, shows its balance, and sends LEZ with a receipt.
+connects a public account, shows its balance in LGO, and sends LGO with a receipt.
 Handle user rejection, 6108 timeouts (onLateResult) and outcome "unknown".
 ```
 
 Things agents get wrong in QML, and should be told:
 
 - amounts are strings: no `Number()`, no `BigInt` (use `kit.sdk.parseUnits`);
+- native amounts are lepta (1 LGO = 10^9 lepta): show `kit.sdk.formatUnits(x, 9)`,
+  parse input with `kit.sdk.parseUnits(text, 9)`;
 - no `Intl`, no regex lookbehind or named groups, `short` is reserved;
 - no network access, remote or `data:` images, or `Qt.openUrlExternally`;
 - read `kit.api` fresh; it's rebuilt when the network changes.

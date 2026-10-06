@@ -35,9 +35,15 @@ const give = tokenTransfer(from, to, token, '250')
 
 ## Amounts
 
+The native token, LOGOS (LGO), has 9 decimals: on the wire and in the SDK its
+amounts are lepta (1 LGO = 10^9 lepta). `formatUnits` never rounds, and trims
+trailing zeros.
+
 ```ts twoslash
 import { formatUnits, parseUnits, add, compare } from '@logos-kit/codec'
 
+parseUnits('2.5', 9)      // "2500000000": LGO → lepta
+formatUnits('1', 9)       // "0.000000001": lepta → LGO
 parseUnits('1.5', 6)      // "1500000"
 formatUnits('1500000', 6) // "1.5"
 add('1', '2')             // "3"
@@ -66,7 +72,7 @@ compare('10', '9')        // 1
 
 | Export | |
 |---|---|
-| `TESTIMONIAL_PROGRAMS` | The deployed program per chain (`lez:preview` today) |
+| `TESTIMONIAL_PROGRAMS` | The deployed program per chain (`lez:testnet` and `lez:preview`) |
 | `testimonialPost(…)` | The post call (the page account included) |
 | `decodeTestimonial`, `decodeTestimonialStats` | Records and stats pages |
 | `TESTIMONIAL_MAX_TEXT` (280), `TESTIMONIAL_MAX_USERNAME` (32), `TESTIMONIAL_PAGE_SIZE` (1000) | The program's limits (bytes) |

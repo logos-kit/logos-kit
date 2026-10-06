@@ -1,11 +1,12 @@
 'use client'
 
-// Live preview-network status: the sequencer's latest block, read from the
-// browser (the preview RPC sends CORS headers). Uses the Status pill.
+// Live status of the official LEZ testnet: the sequencer's latest block, read
+// from the browser through Logos Kit's CORS relay (the official RPC sends no
+// CORS headers). Uses the Status pill.
 import { useEffect, useState } from 'react'
 import { Status } from './status'
 
-const RPC = 'https://lez.84.46.247.92.sslip.io'
+const RPC = 'https://lez-testnet.84.46.247.92.sslip.io'
 
 export function NetworkStatus({ className }: { className?: string }) {
   const [block, setBlock] = useState<number | null>(null)
@@ -40,12 +41,12 @@ export function NetworkStatus({ className }: { className?: string }) {
   if (down)
     return (
       <Status variant="warn" className={className}>
-        Preview network unreachable
+        Testnet unreachable
       </Status>
     )
   return (
     <Status variant="ok" pulse className={className}>
-      LEZ 0.3 preview network{block !== null ? ` · block ${block.toLocaleString('en-US')}` : ''}
+      LEZ 0.3 testnet{block !== null ? ` · block ${block.toLocaleString('en-US')}` : ''}
     </Status>
   )
 }

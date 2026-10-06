@@ -20,8 +20,10 @@ kit.api.transfer(root.account, to, "42").then(function (r) {
 })
 ```
 
-`transfer(from, to, amount, token?)` covers native LEZ and tokens. For any
-other program, build a call and use `sendCall`:
+`transfer(from, to, amount, token?)` covers the native token (LGO) and
+tokens. A native amount is lepta, as a string: `"42"` is 0.000000042 LGO, and
+`kit.sdk.parseUnits(text, 9)` turns what the user typed in LGO into lepta. For
+any other program, build a call and use `sendCall`:
 
 ```qml
 var call = kit.sdk.nativeTransfer(from, to, "42")      // or your own ProgramCall
@@ -50,7 +52,8 @@ function follow(handle) {
 ```
 
 The watcher stops by itself at the first final lifecycle. Call
-`root.watcher.stop()` if the user leaves.
+`root.watcher.stop()` if the user leaves. On the official testnet a
+transaction can take a minute or more to be included.
 
 </Step>
 <Step>

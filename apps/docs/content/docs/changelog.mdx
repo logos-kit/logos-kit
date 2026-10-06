@@ -3,6 +3,28 @@ title: 'Changelog'
 description: 'What changed in each release of the wallet, the apps and the SDK.'
 ---
 
+## Wallet 0.2.0, Testimonials 0.2.0, Faucet 0.2.0
+
+- **The official LEZ testnet is the default.** The wallet, the CLI (`--zone`
+  defaults to `lez-testnet`) and the SDK (`chain: "lez:testnet"`) use
+  `https://testnet.lez.logos.co`, which runs LEZ `v0.3.0`. The engine is
+  re-pinned to that release (`db66590`). The preview network stays listed for
+  wallets that saved it. See [Networks](/docs/concepts/networks).
+- **Testnet faucet:** Logos Kit's drip for the testnet, 1 LGO per request, each
+  account once an hour. The wallet's **Get test LGO** and the SDK's
+  `requestFunds` use it automatically.
+- **Testimonial program on the testnet:**
+  `5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef`, immutable,
+  `TESTIMONIAL_PROGRAMS["lez:testnet"]`. Posts there count for LP-0021. The
+  wallet recognises only the `v0.3.0` testimonial image, so the preview
+  network's program shows as unrecognised.
+- **LGO units.** The native token is LOGOS (LGO), 1 LGO = 10^9 lepta. The
+  wallet, the apps and the CLI show LGO with up to 9 decimals, nothing
+  rounded. The SDK and the CLI's `--json` stay in lepta; `send --amount`
+  also takes LGO (`2.5`, `2.5LGO`, `3 LGO`).
+- **Slower inclusion handled:** the wallet waits up to about 6 minutes before
+  it reports a send as not included.
+
 ## 2026-09-30 · Wallet 0.1.3, Testimonials 0.1.1, Faucet 0.1.1, npm 0.1.0
 
 - **On npm:** [`@logos-kit/client`](https://www.npmjs.com/package/@logos-kit/client),
@@ -52,5 +74,5 @@ description: 'What changed in each release of the wallet, the apps and the SDK.'
 
 - First catalog release: the Logos Kit core module and wallet app, signed,
   for macOS arm64 and Linux x86-64 and arm64.
-- Public and private accounts, native LEZ and tokens, local proving, decoded
+- Public and private accounts, the native token and tokens, local proving, decoded
   approvals with source verification, grants, auto-lock, backups.

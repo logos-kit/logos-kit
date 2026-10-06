@@ -3,7 +3,7 @@ title: 'Install the wallet'
 description: 'Logos Kit Wallet in Basecamp from its catalog, or built from source.'
 ---
 
-<Shot name="wallet-welcome" caption="Logos Kit Wallet, installed from the catalog, opening on the preview network." />
+<Shot name="wallet-welcome" caption="Logos Kit Wallet, installed from the catalog, opening on its default network." />
 
 ## From the catalog
 
@@ -37,7 +37,8 @@ https://raw.githubusercontent.com/logos-kit/logos-kit-modules/refs/heads/main/lo
 
 **Create wallet** (write the recovery phrase down; it's shown once) or
 **Restore from recovery phrase**. Pick a password; the wallet locks itself
-after 15 minutes without use (1 minute to 24 hours, in Settings).
+after 15 minutes without use (1 minute to 24 hours, in Settings). It starts
+on the official [LEZ testnet](/docs/concepts/networks).
 
 <Shot name="wallet-phrase" caption="The recovery phrase, shown once." />
 
@@ -46,10 +47,10 @@ after 15 minutes without use (1 minute to 24 hours, in Settings).
 
 | Package | Version | What |
 |---|---|---|
-| `logos_kit_wallet` | 0.1.2 | Core module: keys, policy, proving, sync |
-| `logos_kit_wallet_ui` | 0.1.2 | The wallet app |
-| `logos_kit_testimonial` | 0.1.0 | Testimonials app |
-| `logos_kit_faucet` | 0.1.0 | Test funds app |
+| `logos_kit_wallet` | 0.2.0 | Core module: keys, policy, proving, sync |
+| `logos_kit_wallet_ui` | 0.2.0 | The wallet app |
+| `logos_kit_testimonial` | 0.2.0 | Testimonials app |
+| `logos_kit_faucet` | 0.2.0 | Test funds app |
 
 Packages are signed by the Logos Kit release key and built for macOS
 (Apple silicon) and Linux (x86-64, arm64). The catalog lives at
@@ -77,7 +78,8 @@ checkout: the UI flake refers to `../logos_kit_wallet`.
 - **Accounts**: add public or private accounts from the account menu; name
   them; switch with one click.
 - **Send / Receive**: the route (public, shield, deshield, private) follows
-  from the two accounts.
-- **Add**: on the preview network, gets test funds from its faucet.
+  from the two accounts. Amounts are in LGO, with up to 9 decimals.
+- **Test LGO**: on the testnet (and the preview network), gets test LGO from
+  Logos Kit's faucet.
 - **Settings**: network, theme, auto-lock, connected apps (revoke any time),
   reveal the recovery phrase.

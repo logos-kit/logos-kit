@@ -1,6 +1,6 @@
 ---
 title: 'Quickstart'
-description: 'From the Logos Kit catalog to your own Basecamp app that connects, gets test funds and sends LEZ with a receipt.'
+description: 'From the Logos Kit catalog to your own Basecamp app that connects, gets test funds and sends LGO with a receipt.'
 ---
 
 You'll install the wallet from its catalog, make a first send in it, then
@@ -49,8 +49,8 @@ sidebar.
 ### Create a wallet
 
 Open it and choose **Create wallet**. Pick a password, then write down the
-recovery phrase: it's shown once. The wallet opens on the **preview network**
-(`lez:preview`), Logos Kit's public LEZ 0.3 network.
+recovery phrase: it's shown once. The wallet opens on the official **LEZ
+testnet** (`lez:testnet`), which runs LEZ `v0.3.0`.
 
 <Shot name="wallet-welcome" />
 
@@ -59,9 +59,10 @@ recovery phrase: it's shown once. The wallet opens on the **preview network**
 
 ### Get test funds, then send
 
-On the home screen, press **Add** (test funds). The faucet sends
-1,000,000,000 LEZ to your public account (native LEZ has no decimals). Then
-**Send** some to a second public account (**account menu → + Public account**) and approve it. It lands in a few seconds.
+On the home screen, press **Test LGO**. Logos Kit's testnet faucet sends
+1 LGO to your public account. Then **Send** some to a second public account
+(**account menu → + Public account**) and approve it. On the testnet it can
+take a minute or more to land.
 
 <div className="grid gap-4 sm:grid-cols-2">
 <Shot name="wallet-home-public" caption="A funded public account." />
@@ -145,6 +146,11 @@ kit.api.transfer(root.account, to, "42").then(function (r) {
 })
 ```
 
+Amounts are lepta, as strings (1 LGO = 10^9 lepta): `"42"` is
+0.000000042 LGO. Turn what the user types in LGO into lepta with
+`kit.sdk.parseUnits(text, 9)`, and show amounts with
+`kit.sdk.formatUnits(amount, 9)`.
+
 The wallet shows the approval with your app's icon and name. Once it lands,
 the template shows the receipt.
 
@@ -161,7 +167,7 @@ the template shows the receipt.
 | Connect does nothing, or fails with `unavailable` | No wallet provides the intent: Logos Kit isn't installed, or the core module didn't load | Install Logos Kit Wallet from the catalog; restart Basecamp; check it opens |
 | Basecamp asks which wallet to use | More than one wallet provides the intent | Pick Logos Kit |
 | `4900 Disconnected` | The wallet is locked or not set up | Open Logos Kit Wallet and unlock it |
-| The wallet shows an offline banner, or `4901` | The sequencer isn't reachable | Check the network pill in the wallet; the preview network's status is on this site's home page; retry later |
+| The wallet shows an offline banner, or `4901` | The sequencer isn't reachable | Check the network pill in the wallet; the testnet's status is on this site's home page; retry later |
 | `rate_limited` on test funds | One drop per account per hour, five per IP | Wait for the countdown |
 | Included, but `unknown` | The wallet couldn't prove the effect | Re-read the balance; show "not confirmed yet" until it moves |
 
