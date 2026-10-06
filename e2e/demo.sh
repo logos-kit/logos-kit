@@ -185,6 +185,11 @@ FS="$(echo "$F" | get "['status']")"
 if [[ "$FS" == funded ]]; then pass "faucet -> A" "+$(echo "$F" | get "['amount']") lepta"
 elif [[ "$FS" == outcome_unknown ]] && BAL=$(wait_funded "$A"); then pass "faucet -> A" "balance $BAL lepta (landed after the drip answered)"
 else fail "faucet -> A" "$(echo "$F" | cut -c1-160)"; bold "Cannot continue without funds."; exit 1; fi
+# A public network has several sequencers; the one the wallet reads can lag
+# the one that included the drop. Spend only once A's balance shows it.
+if [[ "$MODE" != local ]] && ! wait_funded "$A" >/dev/null; then
+  fail "faucet -> A visible" "the drop never showed in A's balance"; exit 1
+fi
 
 ok_outcome "public send A -> B" "$(LKR send --from "$A" --to "$B" --amount 1000 --yes --json 2>&1 | last)"
 ok_outcome "shield A -> private P" "$(LKR send --from "$A" --to "$P" --amount 5000 --yes --json 2>&1 | last)"
