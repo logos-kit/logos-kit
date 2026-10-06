@@ -397,3 +397,14 @@ The single place to resume from after a context clear.
 - [x] Clean installs of 0.3.0, every package signed by the release key, core loads and answers: `EXPECT_VERSION=0.3.0 e2e/catalog-install.sh` on macOS arm64, `--docker` on Linux aarch64 (this Mac) and Linux x86_64 (agari-box); real Basecamp `e2e/catalog-install-gui.sh`: repository added, Logos Kit Wallet v0.3.0 + core installed from Applications, the wallet opens on the testnet (`docs/reviews/a/catalog/`)
 - [x] Docs redeployed to production (`logos-kit-docs.vercel.app`), testnet default, LGO units
 - `e2e/catalog-install.sh` now checks the installed version (`EXPECT_VERSION`); the GUI test takes `LK_SHOTS`
+
+### Stage W · Wallet polish, README, `demo.sh --testnet` (2026-10-06), PR #6
+- [x] First run lands on the public account; dev networks behind Advanced; the legacy preview network hidden
+- [x] Activity persisted per network in an encrypted history vault; incoming payments found by reading blocks (no indexer on the testnet); faucet payments shown once and labelled; proofs that stopped when the wallet closed say so ("Nothing was sent")
+- [x] Recipient checks (a token ID pasted as an address, lookalikes of addresses you paid, first-time addresses); readable errors, including LEZ's insufficient-funds error; MAX leaves the fee cap
+- [x] Account names, hidden system accounts, explorer links, a private-account explainer, Settings (network, password, backup), backup and restore, cold start, programs you named
+- [x] Low-memory proving (LEZ patch 0008, segment po2 18): about half the memory (5.5 GB peak instead of 9.9 GB), slower; the wallet refuses to start a proof below the memory floor and says why. `--low-memory` / `LOGOS_KIT_LOW_MEMORY=1` in the CLI. Budgets measured in `docs/dev/perf.md`
+- [x] README on the RainbowKit/wagmi pattern with screenshots from the real wallet (`qa_readme.py`); internals moved to CONTRIBUTING, CHANGELOG and package READMEs
+- [x] `e2e/demo.sh --testnet`: real proofs on the official testnet, drip-funded, explorer links, every route (public, shield, private → public, private → private, token create/send, token from private, testimonial). Spends only once the drop shows in the balance; retries once when a request never reached the node
+- [x] Faucet client: a drip that answers after the client's 180 s cutoff is "outcome unknown" (it may still pay), not an internal error
+- Testnet runs on 2026-10-06 failed for reasons outside the wallet, each log kept locally (`docs/reviews/demo/`, gitignored) and labelled: sequencer outage, a 20-minute stall, funds not visible behind a lagging replica, a DNS failure, a request timeout, the drip answering late. The drip's host was overloaded (load ~80 on 4 cores, partly from thousands of health-check processes left as zombies by other apps)
