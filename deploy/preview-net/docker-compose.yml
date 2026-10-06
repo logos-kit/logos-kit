@@ -13,6 +13,8 @@ services:
     volumes:
       - lez-preview-data:/var/lib/sequencer_service
     mem_limit: 1500m
+    # Reaps health checks that time out (our binary is PID 1 and doesn't).
+    init: true
     cpus: 1.5
     restart: unless-stopped
     # A restart replays every block before the RPC answers (minutes on a long
@@ -66,6 +68,8 @@ services:
     depends_on:
       - sequencer
     mem_limit: 256m
+    # Reaps health checks that time out (our binary is PID 1 and doesn't).
+    init: true
     restart: unless-stopped
     labels:
       - traefik.enable=true

@@ -48,6 +48,8 @@ services:
     volumes:
       - lez-testnet-drip:/var/lib/drip
     mem_limit: 256m
+    # Reaps health checks that time out (our binary is PID 1 and doesn't).
+    init: true
     restart: unless-stopped
     labels:
       - traefik.enable=true
