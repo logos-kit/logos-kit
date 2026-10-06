@@ -376,3 +376,14 @@ The single place to resume from after a context clear.
 - [ ] Linux GUI Basecamp run; conformance Basecamp mode on Linux; run the "other Logos modules" pattern in Basecamp
 - [x] Docs polish: the live network pill shows on the desktop landing (hero content was centred in a fixed-height box and pushed under the nav). The site stays dark by default on purpose (Tray dark, like Basecamp); the toggle switches to light
 
+
+## Official testnet 0.3 cutover (2026-10-06), PR #3 → `main` (`97f1f6c`)
+- [x] §0 fingerprint `https://testnet.lez.logos.co`: version 0.3, head decodes with our pin, not halted, `getFeeState` answers (height ~11.8k; chain reset 2026-10-01)
+- [x] §1 re-pin `f7fda38` → `db66590` (v0.3.0): 7 patches unchanged, vectors identical; `ApplyOutput.chained_calls` forced a testimonial rebuild
+- [x] §4 testimonial `5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef` (image `61b22436…`, immutable, `verified_local`); 13 builtins reproduced from v0.3.0 (`registry/builtins.json`)
+- [x] §5 drip `https://lez-testnet-drip.84.46.247.92.sslip.io` + CORS relay `https://lez-testnet.84.46.247.92.sslip.io` (`deploy/testnet`, Coolify `oly3k82m9ngfw4twsacpz8wu`); treasury funded from the testnet's public genesis accounts (secrets `~/.config/logos/testnet/`, age backup)
+- [x] §6 testnet is the default (engine, CLI, SDK); §8 docs; units shown as LGO (1 LGO = 10^9 lepta)
+- [x] §7 catalog 0.2.0 (wallet core + UI, testimonial, faucet): pointer moved (`logos-kit-modules` `13196be`)
+- [x] §9 every route on the official testnet with real proofs (`LK_ZONE=lez-testnet e2e/preview-flows.sh`, fresh wallet, drip-funded): public send (block 11969), shield (11978), private→public (11987), token create (11991), token public send (11994), token private send (12002), **testimonial (12004)**
+- Network note: the testnet stalled for ~20 min (block 11960) during the run; transactions waited minutes for inclusion. The engine now waits ~6 min before "not seen"; the drip and flows treat `outcome_unknown` as pending.
+- [ ] §10 daily evidence snapshot workflow; launch posts (`adoption/drafts/05-testnet-launch.md`) await the maintainer's go-ahead

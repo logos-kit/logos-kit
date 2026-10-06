@@ -131,7 +131,7 @@ The testnet becomes the default. Preview stays listed until it's retired.
 
 ## 9. Prove the four asset routes on the official network, with real proofs
 
-- [ ] Run the flows against the official network with a fresh wallet:
+- [x] Run the flows against the official network with a fresh wallet (2026-10-06, all routes ok, blocks 11969–12004):
   ```sh
   LK_ZONE=lez-testnet e2e/preview-flows.sh
   ```
