@@ -86,7 +86,11 @@ export interface LogosKit {
   connect(params?: Partial<ConnectParams>): Promise<Session>
   getSession(sessionId?: string): Promise<Session | null>
   getAccounts(): Promise<WalletAccount[]>
-  /** Native balance, or a token's with `asset`. */
+  /**
+   * Native balance, or a token's with `asset`. `amount` is a base-unit
+   * string: lepta for the native token, so show it as LGO with
+   * `formatUnits(amount, 9)` (1 LGO = 10^9 lepta). Never `Number()` it.
+   */
   getWalletBalance(account: AccountId, asset?: AccountId): Promise<BalanceResult>
   /** A public account's data for one program (chain state). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
@@ -105,6 +109,11 @@ export interface LogosKit {
     proposal: Omit<TransactionProposal, 'chain'> & { chain?: ChainId },
   ): Promise<SubmitResult>
   sendCall(account: AccountId, call: ProgramCall): Promise<SubmitResult>
+  /**
+   * `amount` is a base-unit string: lepta for the native token. A user's
+   * LGO text becomes lepta with `parseUnits(text, 9)` ("2.5" → "2500000000");
+   * a token's amount is its own base units.
+   */
   transfer(from: AccountId, to: AccountId, amount: string, token?: AccountId): Promise<SubmitResult>
   /** Finds the open stats page itself when `page` is omitted. */
   postTestimonial(post: TestimonialRequest): Promise<SubmitResult>
@@ -130,6 +139,7 @@ export interface LogosKit {
   waitForTransactionStatus(handle: string, options?: PollOptions): Promise<TransactionStatus>
   signMessage(account: AccountId, message: string): Promise<SignMessageResult>
   signIn(request: SignInRequest): Promise<SignInResult>
+  /** A funded result's `amount` is lepta (`formatUnits(amount, 9)` for LGO). */
   requestFunds(account: AccountId): Promise<RequestFundsResult>
 }
 
@@ -147,7 +157,7 @@ let ids = 0
 const newId = (): string => `lk-${Date.now().toString(36)}-${(++ids).toString(36)}`
 
 export function createLogosKit(host: LogosKitHost): LogosKit {
-  const chain = host.chain || CHAINS.lezPreview
+  const chain = host.chain || CHAINS.lezTestnet
   const timeout = host.intentTimeoutMs || 45000
   const wallet = createClient({
     transport: basecampModule({ callModuleAsync: host.callModuleAsync, module: host.module }),

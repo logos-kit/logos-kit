@@ -70,6 +70,8 @@ const LABEL_MAX_CHARS: usize = 32;
 /// The preview network's sequencer and its drip faucet (`logos-kit-drip`).
 pub const PREVIEW_SEQUENCER: &str = "https://lez.84.46.247.92.sslip.io";
 pub const PREVIEW_FAUCET: &str = "https://lez-drip.84.46.247.92.sslip.io";
+/// Logos Kit's drip faucet for the official testnet (`deploy/testnet`).
+pub const TESTNET_FAUCET: &str = "https://lez-testnet-drip.84.46.247.92.sslip.io";
 
 /// A LEZ zone the wallet talks to.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,10 +92,10 @@ impl Zone {
         }
     }
 
-    /// Logos Kit's public LEZ 0.3 network, run until the official testnet
-    /// moves to 0.3 (it runs 0.2, whose blocks this wallet can't read). The
-    /// URL is permanent: a saved zone must keep its URL, so a real domain
-    /// later is an extra name, never a replacement.
+    /// Logos Kit's own public LEZ 0.3 network, from before the official
+    /// testnet moved to 0.3. Kept for wallets that saved it. The URL is
+    /// permanent: a saved zone must keep its URL, so a real domain later is an
+    /// extra name, never a replacement.
     pub fn preview() -> Self {
         Self {
             id: "lez-preview".into(),
@@ -104,7 +106,7 @@ impl Zone {
 
     /// Zones every wallet knows, default first.
     pub fn builtin() -> [Self; 3] {
-        [Self::preview(), Self::testnet(), Self::local()]
+        [Self::testnet(), Self::preview(), Self::local()]
     }
 
     pub fn local() -> Self {
@@ -112,6 +114,17 @@ impl Zone {
             id: "lez-local".into(),
             chain: "lez:local".into(),
             sequencer: "http://127.0.0.1:3040".into(),
+        }
+    }
+
+    /// The drip faucet Logos Kit runs for this zone, if any.
+    pub fn builtin_faucet(&self) -> Option<&'static str> {
+        if *self == Self::testnet() {
+            Some(TESTNET_FAUCET)
+        } else if *self == Self::preview() {
+            Some(PREVIEW_FAUCET)
+        } else {
+            None
         }
     }
 
@@ -200,6 +213,11 @@ impl DataDir {
                 sequencer_addr: zone.sequencer.parse()?,
                 basic_auth: None,
             }],
+            // Upstream gives up after 5 polls 12 s apart. The official testnet
+            // can take longer than a minute to include a transaction (seen
+            // 2026-10-06: a program segment landed minutes after the wallet
+            // declared it lost), so wait up to ~6 min before calling it failed.
+            seq_tx_poll_max_blocks: 30,
             ..WalletConfig::default()
         };
         atomic_write(

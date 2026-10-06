@@ -1,11 +1,11 @@
 import QtQuick
 
-// A token's mark. Native LEZ: the Logos mark on a black disc (never
+// A token's mark. Native (LGO): the Logos mark on a black disc (never
 // recoloured). Others: `source` (a bundled SVG/PNG, `Qt.resolvedUrl` it) or
 // an identicon from the definition id, with a private badge when needed.
 Item {
     id: ti
-    property string definition: ""     // empty = native LEZ
+    property string definition: ""     // empty = the native token (LGO)
     property url source: ""
     property real size: 40
     property bool isPrivate: false

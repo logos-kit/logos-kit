@@ -11,8 +11,8 @@ Item {
     property string kind: "send"
     property string title: ""
     property string sub: ""              // "2 min ago · to 3kS…9Y"
-    property string amount: ""           // unsigned, formatted
-    property string symbol: "LEZ"
+    property string amount: ""           // unsigned, formatted (native: Units.lgo)
+    property string symbol: "LGO"
     property string status: "included"
     property bool isPrivate: false
     signal clicked()

@@ -156,7 +156,7 @@ Item {
                     privLocked: home.lockedOut
                     ActionTile { objectName: "homeSend"; glyph: "arrowUp"; text: "Send"; tone: "ink"; onClicked: home.send() }
                     ActionTile { objectName: "homeReceive"; glyph: "arrowDown"; text: "Receive"; onClicked: home.receive() }
-                    ActionTile { objectName: "homeFunds"; glyph: "droplet"; text: "Test LEZ"; enabled: !!home.store.state.faucet; opacity: enabled ? 1 : 0.4; onClicked: home.funds() }
+                    ActionTile { objectName: "homeFunds"; glyph: "droplet"; text: "Test LGO"; enabled: !!home.store.state.faucet; opacity: enabled ? 1 : 0.4; onClicked: home.funds() }
                 }
             }
 
@@ -170,10 +170,10 @@ Item {
                     Txt { text: "Assets"; tone: "text2"; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.leftMargin: 12; Layout.topMargin: 8; Layout.bottomMargin: 4 }
                     TokenRow {
                         name: "Logos"
-                        symbol: "LEZ"
+                        symbol: Units.SYMBOL
                         sub: home.priv ? "Private · only you" : "Native token"
                         isPrivate: home.priv
-                        amount: home.synced ? Units.group(home.acct.native) : ""
+                        amount: home.synced ? Units.lgo(home.acct.native) : ""
                         loading: !home.synced
                     }
                     Repeater {
@@ -221,8 +221,8 @@ Item {
                         readonly property var f: home.store.funding || ({})
                         readonly property var r: f.result || ({})
                         kind: "faucet"
-                        title: r.status === "funded" ? "Test LEZ from the faucet" : "Test LEZ"
-                        amount: r.status === "funded" ? Units.group(r.amount) : ""
+                        title: r.status === "funded" ? "Test LGO from the faucet" : "Test LGO"
+                        amount: r.status === "funded" ? Units.lgo(r.amount) : ""
                         status: f.state === "running" || r.status === "outcome_unknown" ? "pending"
                               : r.status === "funded" ? "included" : "failed"
                         sub: f.state === "running" ? "Requesting from the faucet"
@@ -243,8 +243,8 @@ Item {
                         Layout.bottomMargin: 14
                         glyph: "inbox"
                         title: "No activity yet"
-                        body: home.store.state.faucet ? "Get test LEZ from the faucet to try a send." : "Sends, receives and app requests show up here."
-                        actionText: home.store.state.faucet ? "Get test LEZ" : ""
+                        body: home.store.state.faucet ? "Get test LGO from the faucet to try a send." : "Sends, receives and app requests show up here."
+                        actionText: home.store.state.faucet ? "Get test LGO" : ""
                         actionTone: "ink"
                         onAction: home.funds()
                     }

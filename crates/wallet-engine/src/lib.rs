@@ -26,7 +26,7 @@ pub mod verify;
 pub use lee::AccountId;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).
-pub const LEZ_REV: &str = "f7fda38a4428b9989f1db1dbf5d2411484848fd4";
+pub const LEZ_REV: &str = "db66590ab821a4e142c211017a3866d007f6fa77";
 
 #[cfg(test)]
 mod tests {

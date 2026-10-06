@@ -27,6 +27,9 @@ import { add, compare, formatUnits, parseUnits } from '@logos-kit/codec'
 
 parseUnits('1.5', 6)      // "1500000"   (for tokens that define display decimals)
 formatUnits('1500000', 6) // "1.5"
+// The native token: lepta on the wire, LGO on screen (1 LGO = 10^9 lepta)
+formatUnits('1500000000', 9) // "1.5"   (LGO)
+parseUnits('2.5', 9)         // "2500000000"   (lepta, for a transfer)
 add('1', '2')             // "3"
 compare('10', '9')        // 1
 ```

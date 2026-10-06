@@ -2,6 +2,7 @@ import QtQuick
 import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
 // Account chip (Tray home): identicon, short name, balance; ring when selected.
 Rectangle {
@@ -28,7 +29,7 @@ Rectangle {
                 Glyph { visible: chip.account.kind === "private"; name: "shield"; implicitWidth: 11; implicitHeight: 11; color: Theme.privText; stroke: 2.4 }
                 Txt { text: Fmt.accountName(chip.account); font.pixelSize: 12; font.weight: Font.DemiBold; Layout.maximumWidth: 140 }
             }
-            Txt { text: Fmt.amount(chip.account.native, 0); tone: "text2"; font.pixelSize: 12; num: true }
+            Txt { text: Fmt.amount(chip.account.native, Units.DECIMALS); tone: "text2"; font.pixelSize: 12; num: true }
         }
     }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: chip.clicked() }

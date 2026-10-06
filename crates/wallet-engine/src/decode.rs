@@ -38,6 +38,10 @@ pub enum Decoder {
 #[derive(Clone, Debug)]
 pub struct Decoders {
     entries: Vec<(AccountId, Decoder)>,
+    /// Zone id and this wallet's local rebuilds (`verified.json`), so an
+    /// approval shows a program the user rebuilt as verified.
+    pub(crate) zone: String,
+    pub(crate) verified: Vec<crate::verify::Verified>,
 }
 
 impl Default for Decoders {
@@ -48,11 +52,20 @@ impl Default for Decoders {
                 (programs::token_account_id(), Decoder::Token),
                 (programs::ata_account_id(), Decoder::AssociatedToken),
             ],
+            zone: String::new(),
+            verified: Vec::new(),
         }
     }
 }
 
 impl Decoders {
+    /// Consult `verified` (local rebuilds for `zone`) when checking programs.
+    pub fn with_rebuilds(mut self, zone: &str, verified: Vec<crate::verify::Verified>) -> Self {
+        zone.clone_into(&mut self.zone);
+        self.verified = verified;
+        self
+    }
+
     pub fn with(mut self, program: AccountId, decoder: Decoder) -> Self {
         self.entries.retain(|(p, _)| *p != program);
         self.entries.push((program, decoder));

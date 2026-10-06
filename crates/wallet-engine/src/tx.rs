@@ -546,7 +546,10 @@ async fn check_fee(
 
 impl Session {
     pub fn decoders(&self) -> Decoders {
-        Decoders::default()
+        Decoders::default().with_rebuilds(
+            &self.zone().id,
+            crate::verify::load_cache(self.data_dir().root()),
+        )
     }
 
     /// Build `intent` for approval (connects if needed). Checks that the
@@ -949,7 +952,7 @@ async fn prepare_transfer(
                 definition_id: def,
                 kind: held.kind(),
             };
-            let check = verify::check(core, token_program).await?;
+            let check = decoders.check(core, token_program).await?;
             (
                 token_program,
                 Some(descriptor),
@@ -1185,7 +1188,7 @@ async fn prepare_call(core: &WalletCore, decoders: &Decoders, intent: &Intent) -
     let check = if program == NATIVE_TOKEN_PROGRAM_ID {
         None
     } else {
-        Some(verify::check(core, program).await?)
+        Some(decoders.check(core, program).await?)
     };
     let tx = core
         .prepare_public(mentions, data, program, Some(from), |_| Ok(()))
@@ -1331,7 +1334,7 @@ async fn prepare_ata_transfer(
         recipient.is_none_or(|h| h.definition_id() == def),
         "{to} already holds another token in its token slot"
     );
-    let check = verify::check(core, ata_program).await?;
+    let check = decoders.check(core, ata_program).await?;
     let data =
         Program::serialize_instruction(associated_token_account_core::Instruction::Transfer {
             token_program_id: token_program,

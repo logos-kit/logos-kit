@@ -6,9 +6,11 @@ Logos Kit runs on its own preview network (`lez:preview`, LEZ `v0.3.0-rc1`) unti
 
 Work through it top to bottom. Tick each box in the PR description, and paste the output where a step asks for evidence.
 
+**Status (2026-10-06):** the official testnet runs LEZ `v0.3.0` and is the default network. Done on branch `cutover/0.3`: §0 detect, §1 re-pin, §4 testimonial, §5 faucet and the §6 defaults. Still open: the §0 `PROGRESS.md` record, §2, §3, the §6 network-switch check, and §7–§10.
+
 ## 0. Detect
 
-- [ ] Check the official testnet:
+- [x] Check the official testnet:
   ```sh
   cargo xtask fingerprint https://testnet.lez.logos.co
   ```
@@ -19,21 +21,26 @@ Work through it top to bottom. Tick each box in the PR description, and paste th
   - `getFeeState` answers.
 
   If it reports 0.3 but the head doesn't decode with our pin, go to §1: upstream changed the format since our pin.
+
+  *Done 2026-10-06: `"version": "0.3"`, `"headDecodesAsPinned": true`, tip around block 11.8k (the chain was reset 2026-10-01).*
 - [ ] Record the date, the tip block and the output in `PROGRESS.md`.
 
 ## 1. Pin
 
-- [ ] Find the release tag the network runs, then compare it with our pin (`LEZ_REV` in `crates/xtask/src/main.rs`, currently `f7fda38`, which is `v0.3.0-rc1`):
+- [x] Find the release tag the network runs, then compare it with our pin (`LEZ_REV` in `crates/xtask/src/main.rs`, currently `f7fda38`, which is `v0.3.0-rc1`):
   ```sh
   gh release list -R logos-blockchain/logos-execution-zone --limit 5
   gh api repos/logos-blockchain/logos-execution-zone/compare/f7fda38a4428b9989f1db1dbf5d2411484848fd4...v0.3.0 --jq '.status, .ahead_by'
   ```
-- [ ] **If the tag equals our pin:** skip to §2.
-- [ ] **If it differs:**
+  *Done 2026-10-06: the network runs `v0.3.0` (`db66590`, released 2026-09-30).*
+- [ ] **If the tag equals our pin:** skip to §2. *(n/a: it differed.)*
+- [x] **If it differs:**
   1. Set `LEZ_REV` to the tag's commit.
   2. Re-apply the patches with `rm -rf vendor/lez && scripts/lez-vendor.sh`. Fix any conflict in `vendor/lez`, commit it there, then run `cargo xtask lez-export`.
   3. Update `flake.nix`'s LEZ source and the circuits/rapidsnark pins together (`docs/dev/pins.md`, "Engine build").
   4. Record the re-pin and the reason in `docs/dev/pins.md`.
+
+  *Done 2026-10-06: re-pinned to `db66590`; all 7 patches applied unchanged; protocol vectors identical (`docs/dev/pins.md`).*
 
 ## 2. Validate the codec and engine against the new chain
 
@@ -60,36 +67,40 @@ Work through it top to bottom. Tick each box in the PR description, and paste th
 
 ## 4. The testimonial program
 
-- [ ] If §1 changed the pin, rebuild in the pinned docker builder and check the image id:
+- [x] If §1 changed the pin, rebuild in the pinned docker builder and check the image id:
   ```sh
   target/release/logos-kit testimonial build          # writes programs/testimonial/artifacts/{testimonial.bin,build.json}
   jq -r .imageId programs/testimonial/artifacts/build.json
   ```
   If the image changed, commit the new artifacts. The engine trusts the image in `build.json` through `testimonial::build()` / `is_image()`.
-- [ ] Fund a deployer on the official network. Use the official faucet if 0.3 ships one (§5); otherwise ask the Logos team for testnet funds.
-- [ ] Deploy **immutable**, which is the default:
+  *Done: image `61b2243645ead75c1aec2987bb3aac816e3a4def4c33d38640b55a0457e111a9`, built from commit `4baed37` in docker `r0.1.91.1`.*
+- [x] Fund a deployer on the official network. Use the official faucet if 0.3 ships one (§5); otherwise ask the Logos team for testnet funds.
+- [x] Deploy **immutable**, which is the default:
   ```sh
   LOGOS_KIT_ZONE=lez-testnet target/release/logos-kit testimonial deploy --payer <deployer> --yes --json | tee /tmp/testnet-deploy.json
   LOGOS_KIT_ZONE=lez-testnet target/release/logos-kit program "$(jq -r .account /tmp/testnet-deploy.json)" --json   # must say status verified_local, immutable true
   ```
-- [ ] Add the registry entry to `registry/programs.json`, next to the `lez:preview` one:
+  *Done: `5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef`, immutable, status `verified_local`.*
+- [x] Add the registry entry to `registry/programs.json`, next to the `lez:preview` one:
   - `name: "testimonial"`, `chain: "lez:testnet"`;
   - `account`, `imageId` and `source` from `/tmp/testnet-deploy.json`.
-- [ ] Add the SDK entry `'lez:testnet': '<account>'` to `TESTIMONIAL_PROGRAMS` in `packages/codec/src/programs.ts`.
-- [ ] Rebuild and re-vendor: `pnpm build && just qml-vendor`.
+- [x] Add the SDK entry `'lez:testnet': '<account>'` to `TESTIMONIAL_PROGRAMS` in `packages/codec/src/programs.ts`.
+- [x] Rebuild and re-vendor: `pnpm build && just qml-vendor`.
 
 ## 5. The faucet backend for `lez:testnet`
 
-- [ ] Choose the backend.
+- [x] Choose the backend.
   - **The official faucet, if the 0.3 deployment ships one:** add a backend for it in `crates/wallet-engine/src/faucet.rs`. Follow the `FaucetBackend` trait, and classify outcomes the same way: `funded` only when the balance moved by exactly the drop.
   - **Otherwise the drip:** run `logos-kit-drip` for the testnet with a funded testnet key, as a second service in `deploy/` alongside the preview's. Add a `TESTNET_FAUCET` next to `PREVIEW_FAUCET` in `crates/wallet-engine/src/session.rs`, and select it in `service.rs` (search for `PREVIEW_FAUCET`).
-- [ ] Update the docs faucet page and the Networks page to name the backend and its limits.
+
+  *Done: the drip, in `deploy/testnet` at `https://lez-testnet-drip.84.46.247.92.sslip.io` (1 LGO per request; each account once an hour; 5 per IP per hour; 60 per hour in all), with a CORS relay for browsers at `https://lez-testnet.84.46.247.92.sslip.io`.*
+- [x] Update the docs faucet page and the Networks page to name the backend and its limits.
 
 ## 6. The default network
 
 The testnet becomes the default. Preview stays listed until it's retired.
 
-- [ ] Change the default in each place:
+- [x] Change the default in each place:
   - **Engine:** in `crates/wallet-engine/src/session.rs`, `Zone::builtin()` puts `Self::testnet()` first. In `crates/wallet-engine/src/service.rs`, `current_zone()` falls back to `Zone::testnet`.
   - **CLI:** in `crates/logos-kit-cli/src/main.rs`, change `default_value = "lez-preview"` to `"lez-testnet"`, and update the help text.
   - **SDK:**

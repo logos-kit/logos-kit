@@ -181,7 +181,7 @@ Rectangle {
             Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
                 ColumnLayout { width: parent.width; spacing: 16
                     RowLayout { Layout.fillWidth: true
-                        Txt { text: "Shield 5,000 LEZ"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                        Txt { text: "Shield 5 LGO"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
                         Badge { text: "Proving"; tone: "private"; live: true } }
                     Pipeline {
                         objectName: "livePipeline"
@@ -198,7 +198,7 @@ Rectangle {
             Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
                 ColumnLayout { width: parent.width; spacing: 16
                     RowLayout { Layout.fillWidth: true
-                        Txt { text: "Send 1,000 LEZ"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                        Txt { text: "Send 1.5 LGO"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
                         Badge { text: "Included"; tone: "ok" } }
                     Pipeline {
                         Layout.fillWidth: true
@@ -237,7 +237,7 @@ Rectangle {
             rowSpacing: 22
             Card { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
                 ColumnLayout { width: parent.width
-                    EmptyState { Layout.fillWidth: true; glyph: "inbox"; title: "No activity yet"; body: "Your sends, receives and approvals will show up here."; actionText: "Get test LEZ"; actionTone: "ink" } } }
+                    EmptyState { Layout.fillWidth: true; glyph: "inbox"; title: "No activity yet"; body: "Your sends, receives and approvals will show up here."; actionText: "Get test LGO"; actionTone: "ink" } } }
             Card { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
                 ColumnLayout { width: parent.width
                     EmptyState { Layout.fillWidth: true; glyph: "search"; title: "No tokens match"; body: "Try the token's name or its definition address." } } }
@@ -245,7 +245,7 @@ Rectangle {
                 ColumnLayout { width: parent.width; spacing: 10
                     SuccessCheck { objectName: "check"; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8 }
                     Txt { Layout.alignment: Qt.AlignHCenter; text: "Sent"; font.pixelSize: 20; font.weight: Font.Bold }
-                    Txt { Layout.alignment: Qt.AlignHCenter; text: "1,000 LEZ to Savings · block 61"; tone: "text2"; num: true } } }
+                    Txt { Layout.alignment: Qt.AlignHCenter; text: "1.5 LGO to Savings · block 61"; tone: "text2"; num: true } } }
             ErrorCard {
                 Layout.alignment: Qt.AlignTop
                 Layout.columnSpan: 2
@@ -273,8 +273,8 @@ Rectangle {
                 ColumnLayout { width: parent.width; spacing: 14
                     RowLayout { Layout.fillWidth: true
                         AccountSwitcher {
-                            accounts: [{ id: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x", name: "Main", kind: "public", balance: "1,000,012,480" },
-                                       { id: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R", name: "Vault", kind: "private", balance: "5,000" }]
+                            accounts: [{ id: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x", name: "Main", kind: "public", balance: "12480000000" },
+                                       { id: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R", name: "Vault", kind: "private", balance: "5000000000" }]
                             currentId: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x"
                         }
                         Item { Layout.fillWidth: true }
@@ -282,9 +282,9 @@ Rectangle {
                     BalanceCard {
                         objectName: "balance"
                         Layout.fillWidth: true
-                        value: "1000012480"
-                        privSpendable: "5000"
-                        privPending: "1000"
+                        value: "12480000000"
+                        privSpendable: "5000000000"
+                        privPending: "1500000000"
                         privLocked: "0"
                         ActionTile { glyph: "arrowUp"; text: "Send"; tone: "ink" }
                         ActionTile { glyph: "arrowDown"; text: "Receive" }
@@ -292,25 +292,25 @@ Rectangle {
                         ActionTile { glyph: "droplet"; text: "Faucet" }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
-                    TokenRow { name: "Logos"; symbol: "LEZ"; amount: "1,000,012,480"; amountSub: "Public" }
-                    TokenRow { name: "Logos"; symbol: "LEZ"; amount: "5,000"; sub: "Private · 2 notes"; isPrivate: true }
+                    TokenRow { name: "Logos"; symbol: "LGO"; amount: "12.48"; amountSub: "Public" }
+                    TokenRow { name: "Logos"; symbol: "LGO"; amount: "5"; sub: "Private · 2 notes"; isPrivate: true }
                     TokenRow { name: "Kit Token"; symbol: "KIT"; definition: "He3w5dZRHnVUYMgn1xqZmSmij3wA43kHrLcFa5MJ8KEH"; amount: "999,740"; amountSub: "KIT"; chevron: true }
                     TokenRow { loading: true } } }
             ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; spacing: 20
                 Card { Layout.fillWidth: true
                     ColumnLayout { width: parent.width; spacing: 6
                         Label { text: "Activity" }
-                        ActivityRow { kind: "shield"; title: "Shielded"; sub: "Proving · 2:18"; amount: "5,000"; status: "pending"; isPrivate: true }
-                        ActivityRow { kind: "send"; title: "Sent to Savings"; sub: "2 min ago"; amount: "1,000" }
-                        ActivityRow { kind: "faucet"; title: "Test LEZ from the faucet"; sub: "Today, 20:46"; amount: "1,000,000,000" }
+                        ActivityRow { kind: "shield"; title: "Shielded"; sub: "Proving · 2:18"; amount: "5"; status: "pending"; isPrivate: true }
+                        ActivityRow { kind: "send"; title: "Sent to Savings"; sub: "2 min ago"; amount: "1.5" }
+                        ActivityRow { kind: "faucet"; title: "Test LGO from the faucet"; sub: "Today, 20:46"; amount: "1" }
                         ActivityRow { kind: "testimonial"; title: "Testimonial posted"; sub: "Block 221" }
                         ActivityRow { kind: "send"; title: "Sent to 3kS…9Y"; sub: "Yesterday"; amount: "250"; symbol: "KIT"; status: "unconfirmed" }
-                        ActivityRow { kind: "send"; title: "Send"; sub: "Yesterday"; amount: "40"; status: "failed" } } }
+                        ActivityRow { kind: "send"; title: "Send"; sub: "Yesterday"; amount: "0.04"; status: "failed" } } }
                 Card { Layout.fillWidth: true
                     ColumnLayout { width: parent.width; spacing: 10
                         Label { text: "Amount" }
-                        AmountField { Layout.fillWidth: true; text: "1250"; balance: "1000012480"; feeCap: "134400000"; tokenIcon: Component { TokenIcon { size: 24 } } }
-                        AmountField { Layout.fillWidth: true; text: "1000000"; symbol: "KIT"; balance: "999740"; tokenSelectable: false
+                        AmountField { Layout.fillWidth: true; text: "1.25"; balance: "12480000000"; feeCap: "134400000"; tokenIcon: Component { TokenIcon { size: 24 } } }
+                        AmountField { Layout.fillWidth: true; text: "1000000"; symbol: "KIT"; decimals: 0; balance: "999740"; tokenSelectable: false
                                       tokenIcon: Component { TokenIcon { size: 24; definition: "He3w5dZRHnVUYMgn1xqZmSmij3wA43kHrLcFa5MJ8KEH" } } } } } }
         }
     }
@@ -332,9 +332,9 @@ Rectangle {
                     Txt { text: "logos_kit_testimonial · checked by Basecamp"; mono: true; tone: "text3"; font.pixelSize: 12 }
                     Permissions { Layout.fillWidth: true; privateRead: true }
                     Txt { text: "Share which accounts?"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.topMargin: 6 }
-                    AccountCard { accountId: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x"; name: "Main"; balance: "1000012480"; checked: true }
-                    AccountCard { accountId: "3ksne6QbqZHhaY3QfWGkjbgDVHWm64y9FNCtEsBDDK9Y"; name: "Savings"; balance: "250000" }
-                    AccountCard { accountId: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R"; name: "Vault"; kind: "private"; balance: "5000" }
+                    AccountCard { accountId: "8YtpjPUypDNoRTFEqyvFjZ4wNkgd5GjMv1Gaf6P7JG2x"; name: "Main"; balance: "12480000000"; checked: true }
+                    AccountCard { accountId: "3ksne6QbqZHhaY3QfWGkjbgDVHWm64y9FNCtEsBDDK9Y"; name: "Savings"; balance: "250000000000" }
+                    AccountCard { accountId: "4a94KmHEf3CGvVmXybiaHs9sut5GQdZ41sXEKMwyeX9R"; name: "Vault"; kind: "private"; balance: "5000000000" }
                     CheckRow { text: "Let this app read the private balance of Vault. It still can't spend it."; accent: Theme.priv }
                     RowLayout { Layout.fillWidth: true; spacing: 10
                         Btn { text: "Cancel"; Layout.fillWidth: true; large: true }
@@ -421,7 +421,7 @@ Rectangle {
                                         Txt { text: "logos_kit_testimonial"; mono: true; tone: "text3"; font.pixelSize: 12 } } }
                                 TxSummary {
                                     Layout.fillWidth: true
-                                    outflow: ({ amount: "1000", symbol: "LEZ" })
+                                    outflow: ({ amount: "1500000000", symbol: "LGO" })
                                     to: ({ name: "Savings", address: "3ksne6QbqZHhaY3QfWGkjbgDVHWm64y9FNCtEsBDDK9Y", kind: "public" })
                                     fee: ({ cap: "134400000", payer: "Main" })
                                     program: ({ name: "Native token", status: "verified", immutable: true })
@@ -435,7 +435,7 @@ Rectangle {
                             Component.onCompleted: {
                                 show({ title: "Copied", tone: "ok" })
                                 show({ title: "Proving on this device", body: "About 5 minutes. You can keep using the wallet.", tone: "pending" })
-                                show({ title: "Sent 1,000 LEZ", body: "Included in block 61", tone: "ok", action: "View" })
+                                show({ title: "Sent 1.5 LGO", body: "Included in block 61", tone: "ok", action: "View" })
                             }
                         }
                     } }

@@ -18,7 +18,7 @@ use clap::{Parser, Subcommand};
 use wallet_engine::AccountId;
 use wallet_engine::{
     engine::{Config, Engine, Lifecycle, RequestView, Ticket, TxStatus},
-    faucet::{HttpFaucet, KeyFaucet},
+    faucet::{FundOutcome, HttpFaucet, KeyFaucet},
     policy::{Caller, code_of},
     session::{AccountKind, Birthday, DataDir, Session, Zone},
     testimonial,
@@ -33,12 +33,12 @@ struct Cli {
     /// Wallet data directory.
     #[arg(id = "home", long = "home", global = true, env = "LOGOS_KIT_HOME")]
     data: Option<PathBuf>,
-    /// Zone id: `lez-preview` (Logos Kit's 0.3 network), `lez-testnet`, `lez-local`, or one added with --sequencer.
+    /// Zone id: `lez-testnet` (the official LEZ testnet), `lez-preview` (Logos Kit's own 0.3 network), `lez-local`, or one added with --sequencer.
     #[arg(
         long,
         global = true,
         env = "LOGOS_KIT_ZONE",
-        default_value = "lez-preview"
+        default_value = "lez-testnet"
     )]
     zone: String,
     /// Sequencer URL, to add a zone that isn't built in.
@@ -73,7 +73,8 @@ enum Command {
     /// Accounts.
     #[command(subcommand)]
     Account(AccountCmd),
-    /// Balance of an account (public, or private as synced); `--token` for a token.
+    /// Balance of an account (public, or private as synced); `--token` for a
+    /// token. The native token prints in LGO (`--json`: lepta).
     Balance {
         account: String,
         #[arg(long)]
@@ -106,7 +107,7 @@ enum Command {
         /// Name of an env var holding a funded key to pay from (local/demo).
         #[arg(long)]
         key_env: Option<String>,
-        /// Base units per claim when paying from a key.
+        /// Lepta per claim when paying from a key (1 LGO = 1000000000 lepta).
         #[arg(long, default_value_t = 1_000_000)]
         drop: u128,
     },
@@ -170,8 +171,11 @@ struct SendArgs {
     /// account use --to-keys (or --to-npk/--to-vpk).
     #[arg(long)]
     to: Option<String>,
+    /// Native: lepta as a whole number (1 LGO = 1000000000 lepta), or LGO
+    /// with a decimal point or an `LGO` suffix (`2.5`, `2.5LGO`, `3LGO`).
+    /// With --token: a whole number of the token's base units.
     #[arg(long)]
-    amount: u128,
+    amount: String,
     /// Token definition account; omit for the native token.
     #[arg(long)]
     token: Option<String>,
@@ -436,6 +440,63 @@ fn print(cli: &Cli, value: &serde_json::Value, human: impl FnOnce()) {
     }
 }
 
+/// The native token is lepta on the wire and LGO on screen (the official
+/// Logos convention): 1 LGO = 10^9 lepta. JSON output stays in lepta.
+const LEPTA_PER_LGO: u128 = 1_000_000_000;
+
+/// Lepta → LGO, split in integers: nothing rounded, trailing zeros cut
+/// (1 → "0.000000001", 1500000000 → "1.5").
+fn lgo(lepta: u128) -> String {
+    let (whole, frac) = (lepta / LEPTA_PER_LGO, lepta % LEPTA_PER_LGO);
+    if frac == 0 {
+        return whole.to_string();
+    }
+    let frac = format!("{frac:09}");
+    format!("{whole}.{}", frac.trim_end_matches('0'))
+}
+
+/// `--amount` → base units. A whole number is lepta (or a token's base
+/// units), as before; a decimal point or an `LGO` suffix means LGO, at most
+/// 9 decimals (refused past that, never rounded).
+fn parse_amount(text: &str, token: bool) -> Result<u128> {
+    let t = text.trim();
+    let (num, suffixed) = match t.len().checked_sub(3) {
+        Some(i) if t.is_char_boundary(i) && t[i..].eq_ignore_ascii_case("lgo") => {
+            (t[..i].trim_end(), true)
+        }
+        _ => (t, false),
+    };
+    if !suffixed && !num.contains('.') {
+        return num.parse().with_context(|| {
+            format!("--amount {text}: not a whole number of lepta (for LGO write 2.5 or 2.5LGO)")
+        });
+    }
+    ensure!(
+        !token,
+        "--amount {text}: a token's amount is a whole number of its base units (LGO is the native token)"
+    );
+    let (whole, frac) = num.split_once('.').unwrap_or((num, ""));
+    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    ensure!(
+        !(whole.is_empty() && frac.is_empty()) && digits(whole) && digits(frac),
+        "--amount {text}: not an amount of LGO"
+    );
+    ensure!(
+        frac.len() <= 9,
+        "--amount {text}: LGO has 9 decimals (0.000000001 LGO is 1 lepta)"
+    );
+    let whole: u128 = if whole.is_empty() { 0 } else { whole.parse()? };
+    let frac: u128 = if frac.is_empty() {
+        0
+    } else {
+        format!("{frac:0<9}").parse()?
+    };
+    whole
+        .checked_mul(LEPTA_PER_LGO)
+        .and_then(|w| w.checked_add(frac))
+        .with_context(|| format!("--amount {text}: too large"))
+}
+
 async fn open(cli: &Cli) -> Result<(Session, String)> {
     let data = data_dir(cli)?;
     ensure!(
@@ -475,16 +536,29 @@ fn show_review(review: &Review) {
     if let Some(app) = &review.requester {
         println!("  asked by {app}");
     }
+    // `from_balance` is the token's for a token transfer, else lepta.
+    let balance = match &review.intent {
+        Intent::Transfer { token: Some(_), .. } => review.from_balance.to_string(),
+        _ => format!("{} LGO", lgo(review.from_balance)),
+    };
     println!(
-        "  from      {}  (balance {})",
+        "  from      {}  (balance {balance})",
         review.intent.from_account(),
-        review.from_balance
     );
     if let Some(to) = &review.recipient {
         println!("  to        {to}");
     }
     for line in &sum.lines {
-        println!("  · {line}");
+        // The engine writes a native transfer as "<lepta> to <account>".
+        match line.split_once(" to ") {
+            Some((n, to)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => {
+                match n.parse::<u128>() {
+                    Ok(v) => println!("  · {} LGO to {to}", lgo(v)),
+                    Err(_) => println!("  · {line}"),
+                }
+            }
+            _ => println!("  · {line}"),
+        }
     }
     for a in &sum.authorities {
         println!("  ⚠ AUTHORITY  {a}");
@@ -508,9 +582,12 @@ fn show_review(review: &Review) {
     }
     match (&review.fee.max_fee, &review.fee.payer) {
         (Some(max), Some(payer)) => {
+            let max = max
+                .parse::<u128>()
+                .map_or_else(|_| format!("{max} lepta"), |v| format!("{} LGO", lgo(v)));
             println!("  fee       up to {max}, paid by {payer}");
             if let Some(base) = review.fee.base_fee_exec {
-                println!("            network base fee now {base} per gas");
+                println!("            network base fee now {base} lepta per gas");
             }
         }
         _ => println!("  fee       none (private transactions are fee-exempt)"),
@@ -648,7 +725,7 @@ fn transfer(args: &SendArgs) -> Result<Intent> {
     Ok(Intent::Transfer {
         from: args.from.clone(),
         to: args.to.clone(),
-        amount: args.amount,
+        amount: parse_amount(&args.amount, args.token.is_some())?,
         token: args.token.clone(),
         to_keys,
     })
@@ -768,10 +845,12 @@ async fn faucet(
 ) -> Result<()> {
     let (session, pw) = open(cli).await?;
     let sequencer = session.zone().sequencer.clone();
-    // The preview network ships with its drip faucet (unless a key is given).
+    // The testnet and the preview network ship with a drip faucet (unless a key is given).
     let url = url.or_else(|| {
-        (key_env.is_none() && *session.zone() == Zone::preview())
-            .then_some(wallet_engine::session::PREVIEW_FAUCET)
+        key_env
+            .is_none()
+            .then(|| session.zone().builtin_faucet())
+            .flatten()
     });
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
@@ -804,11 +883,19 @@ async fn faucet(
     };
     let shield = funds.shield.clone();
     print(cli, &serde_json::to_value(&funds)?, || {
-        println!(
-            "{}: {}",
-            funds.faucet,
-            serde_json::to_string(&funds.outcome).unwrap_or_default()
-        );
+        match &funds.outcome {
+            FundOutcome::Funded { amount, tx_hash } => println!(
+                "{}: funded {} LGO into {} (tx {tx_hash})",
+                funds.faucet,
+                lgo(*amount),
+                funds.funded_account
+            ),
+            outcome => println!(
+                "{}: {}",
+                funds.faucet,
+                serde_json::to_string(outcome).unwrap_or_default()
+            ),
+        }
     });
     if let Some(ticket) = shield {
         if !cli.json {
@@ -831,7 +918,8 @@ fn verify_builtins(repo: Option<&str>, docker_tag: &str) -> Result<()> {
             .to_owned(),
         commit: wallet_engine::LEZ_REV.to_owned(),
         guest_path: "lez/programs".to_owned(),
-        bin: String::new(),
+        // One build makes every builtin; each evidence entry names its own .bin.
+        bin: "token.bin".to_owned(),
         docker_tag: docker_tag.to_owned(),
         features: Some("programs".to_owned()),
     };
@@ -1325,7 +1413,11 @@ async fn run(cli: Cli) -> Result<()> {
                 &cli,
                 &serde_json::json!({ "balance": balance.to_string() }),
                 || {
-                    println!("{balance}");
+                    if token.is_some() {
+                        println!("{balance}");
+                    } else {
+                        println!("{} LGO", lgo(balance));
+                    }
                 },
             );
             session.lock()

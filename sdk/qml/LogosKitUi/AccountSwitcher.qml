@@ -1,17 +1,19 @@
 import QtQuick
 import QtQuick.Layouts
+import "Units.js" as Units
 
 // From 21st.dev originui/dropdown-menu (id 385) laid out like Rabby's and
 // Family's account pickers: the trigger shows the identicon, name and a
 // caret; the panel lists accounts with kind and balance, a check on the
 // selected one, and "New account" at the bottom.
 //
-// accounts: [{ id, name, kind: "public"|"private", balance }]
+// accounts: [{ id, name, kind: "public"|"private", balance }]   (balance in lepta)
 Item {
     id: sw
     property var accounts: []
     property string currentId: ""
-    property string symbol: "LEZ"
+    property string symbol: "LGO"
+    property int decimals: Units.DECIMALS
     signal selected(string id)
     signal createRequested()
     implicitWidth: trig.implicitWidth
@@ -86,7 +88,7 @@ Item {
                         Layout.fillWidth: true
                         Txt { text: modelData.name; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.fillWidth: true }
                         Txt {
-                            text: (modelData.kind === "private" ? "Private" : "Public") + (modelData.balance !== undefined ? " · " + modelData.balance + " " + sw.symbol : "")
+                            text: (modelData.kind === "private" ? "Private" : "Public") + (modelData.balance !== undefined ? " · " + Units.token(modelData.balance, sw.decimals) + " " + sw.symbol : "")
                             tone: modelData.kind === "private" ? "priv" : "text2"; num: true; font.pixelSize: 12
                         }
                     }

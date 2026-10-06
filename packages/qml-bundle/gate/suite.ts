@@ -85,6 +85,11 @@ export async function run(host: Host): Promise<void> {
   log('u128 max round trip', readUle(u128le(max)) === max)
   log('add', add('18446744073709551615', '1'))
   log('units', `${formatUnits('1500000', 6)} ${parseUnits('0.000005', 6)}`)
+  // LGO: lepta on the wire, 9 decimals on screen; past 2^53 without a Number.
+  log(
+    'lgo',
+    `${formatUnits('1', 9)} ${formatUnits('18446744073709551615', 9)} ${parseUnits('2.5', 9)}`,
+  )
   log('lossless JSON', (parseJson(`{"balance":${max}}`) as { balance: string }).balance === max)
   log('tokens', toQmlTokens(trayDark).privateSoft)
 

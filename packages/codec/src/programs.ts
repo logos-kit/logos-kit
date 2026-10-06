@@ -76,6 +76,8 @@ export const TESTIMONIAL_MAX_USERNAME = 32
  * `registry/programs.json`). Missing until the chain has one.
  */
 export const TESTIMONIAL_PROGRAMS: Readonly<Record<string, AccountId>> = {
+  // The official LEZ testnet (v0.3.0), immutable, image 61b22436…
+  'lez:testnet': '5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef' as AccountId,
   // Logos Kit preview network (LEZ 0.3-rc1), immutable, image 8308e67d…
   'lez:preview': '4vjENywUCfC3h85mjNGFPV7R9DqvUjV2xhMkCZbJR8XK' as AccountId,
 }

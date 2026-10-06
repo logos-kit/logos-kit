@@ -35,13 +35,19 @@ ColumnLayout {
         for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return String(ts[i].amount)
         return "0"
     }
-    readonly property string base: Fmt.toBase(amountText, 0)
+    // The native token is typed in LGO and sent in lepta; tokens have no decimals.
+    readonly property int decimals: token === "" ? Units.DECIMALS : 0
+    // What is sent, in base units ("" while there's nothing to send).
+    readonly property string base: {
+        var b = Units.parse(amountText, decimals)
+        return /^0*$/.test(b) ? "" : b
+    }
     readonly property string tokenName: {
         var ts = from ? (from.tokens || []) : []
         for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return ts[i].name || ""
         return ""
     }
-    readonly property bool tooMuch: base !== "" && balance !== "" && Fmt.cmp(base, balance) > 0
+    readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(base, balance) > 0
     readonly property bool isCode: to.trim().indexOf("lezpriv1:") === 0
     readonly property bool toValid: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
     readonly property var toOwn: {
@@ -63,14 +69,22 @@ ColumnLayout {
     function key(k) {
         var a = amountText
         if (k === "del") a = a.slice(0, -1)
-        else if (k === ".") return
+        else if (k === ".") {
+            if (decimals === 0 || a.indexOf(".") >= 0) return
+            a = (a === "" ? "0" : a) + "."
+        }
         else if (a === "0") a = k
-        else a = (a + k).substring(0, 20)
+        else a = a + k
+        // Past the asset's decimals (or 30 characters): refused, not rounded.
+        if (a.length > 30 || (a !== "" && Units.parse(a, decimals) === "")) return
         amountText = a
     }
+    // Max: the whole balance, as the field shows it (LGO for native).
+    function useMax() { amountText = Units.plain(balance, decimals) }
     Keys.onPressed: function (e) {
         if (step !== "amount") return
         if (e.text >= "0" && e.text <= "9" && e.text.length === 1) { key(e.text); e.accepted = true }
+        else if (e.text === ".") { key("."); e.accepted = true }
         else if (e.key === Qt.Key_Backspace) { key("del"); e.accepted = true }
         else if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && reviewBtn.enabled) { reviewBtn.clicked(); e.accepted = true }
     }
@@ -120,7 +134,7 @@ ColumnLayout {
         Txt { text: "Send"; font.pixelSize: 20; font.weight: Font.DemiBold }
         Txt {
             Layout.fillWidth: true
-            text: sf.from ? "From " + Fmt.accountName(sf.from) + " · " + Fmt.amount(sf.from.native, 0) + " LEZ" : ""
+            text: sf.from ? "From " + Fmt.accountName(sf.from) + " · " + Fmt.lgo(sf.from.native) : ""
             tone: "text2"; font.pixelSize: 13
         }
         Field {
@@ -156,7 +170,7 @@ ColumnLayout {
             spacing: 6
             Txt { text: "Asset"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
             SegmentedControl {
-                readonly property var assets: [{ definition: "", name: "LEZ" }].concat(sf.from ? (sf.from.tokens || []) : [])
+                readonly property var assets: [{ definition: "", name: Units.SYMBOL }].concat(sf.from ? (sf.from.tokens || []) : [])
                 options: assets.map(function (t) { return t.name || Fmt.short(t.definition) })
                 currentIndex: {
                     for (var i = 0; i < assets.length; i++) if (assets[i].definition === sf.token) return i
@@ -194,13 +208,14 @@ ColumnLayout {
             objectName: "sendAmount"
             Layout.fillWidth: true
             Layout.topMargin: 6
-            symbol: sf.token === "" ? "LEZ" : (sf.tokenName || "tokens")
+            symbol: sf.token === "" ? Units.SYMBOL : (sf.tokenName || "tokens")
+            decimals: sf.decimals
             tokenSelectable: false
             tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; isPrivate: sf.fromPrivate } }
             balance: sf.balance
             text: sf.amountText
             onTextChanged: if (text !== sf.amountText) sf.amountText = text
-            onMaxClicked: sf.amountText = sf.balance
+            onMaxClicked: sf.useMax()
             onSubmitted: if (reviewBtn.enabled) reviewBtn.clicked()
         }
         GridLayout {
@@ -209,7 +224,8 @@ ColumnLayout {
             rowSpacing: 4
             columnSpacing: 4
             Repeater {
-                model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "max", "0", "del"]
+                // A decimal point for LGO; Max (also under the figure) for a token.
+                model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", sf.decimals > 0 ? "." : "max", "0", "del"]
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 46
@@ -222,7 +238,7 @@ ColumnLayout {
                     MouseArea {
                         id: km
                         anchors.fill: parent
-                        onClicked: modelData === "max" ? (sf.amountText = sf.balance) : sf.key(modelData)
+                        onClicked: modelData === "max" ? sf.useMax() : sf.key(modelData)
                     }
                 }
             }

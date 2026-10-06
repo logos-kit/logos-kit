@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import "LogosKit"
 import "LogosKitUi"
+import "LogosKitUi/Units.js" as Units   // lepta in, LGO on screen
 
 // Logos Kit Faucet: the LP-0021 faucet reference app for the Logos Kit SDK.
 //
@@ -70,14 +71,10 @@ Item {
         if (acc.label) return acc.label
         return acc.kind === "private" ? "Private ··" + acc.address.substring(acc.address.length - 4) : shortId(acc.address)
     }
+    // Lepta -> LGO ("1000000000" -> "1").
     function amount(raw) {
         if (raw === undefined || raw === null || raw === "") return "–"
-        var s = String(raw), out = ""
-        for (var i = 0; i < s.length; i++) {
-            if (i > 0 && (s.length - i) % 3 === 0) out += ","
-            out += s.charAt(i)
-        }
-        return out
+        return Units.lgo(String(raw))
     }
     function mmss(sec) {
         sec = Math.max(0, Math.ceil(sec))
@@ -313,10 +310,10 @@ Item {
                 ColumnLayout {
                     width: parent.width
                     spacing: 6
-                    Txt { text: "Test LEZ"; font.pixelSize: 26; font.weight: Font.DemiBold }
+                    Txt { text: "Test LGO"; font.pixelSize: 26; font.weight: Font.DemiBold }
                     Txt {
                         Layout.fillWidth: true
-                        text: "Free test tokens for trying LEZ: sends, private payments, Basecamp apps. They have no value. Native LEZ has no decimals, so a claim is a whole number of LEZ (on the preview network, 1,000,000,000 LEZ)."
+                        text: "Free test tokens for trying LEZ: sends, private payments, Basecamp apps. They have no value. A claim is 1 LGO (1 LGO = 1,000,000,000 lepta, its smallest unit)."
                         tone: "text2"
                         wrapMode: Text.Wrap
                         elide: Text.ElideNone
@@ -398,7 +395,7 @@ Item {
                             enabled: root.phase === "idle"
                             text: root.phase === "requesting" ? "Confirm in your wallet…"
                                 : root.phase === "limited" ? "Try again in " + root.mmss(root.waitLeft)
-                                : "Get test LEZ"
+                                : "Get test LGO"
                             onClicked: root.request()
                         }
                         Txt {
@@ -507,7 +504,7 @@ Item {
                                 spacing: 2
                                 Txt {
                                     objectName: "fcAmount"
-                                    text: root.result && root.result.amount ? "+" + root.amount(root.result.amount) + " LEZ" : "Funds arrived"
+                                    text: root.result && root.result.amount ? "+" + root.amount(root.result.amount) + " LGO" : "Funds arrived"
                                     font.pixelSize: 22
                                     font.weight: Font.DemiBold
                                     num: true
@@ -538,7 +535,7 @@ Item {
                         spacing: 10
                         ErrorCard {
                             objectName: "fcRetry"
-                            title: root.phase === "declined" ? "The faucet said no" : "Couldn't get test LEZ"
+                            title: root.phase === "declined" ? "The faucet said no" : "Couldn't get test LGO"
                             body: root.failure
                             glyph: root.phase === "declined" ? "info" : "warning"
                             retryText: "Back"

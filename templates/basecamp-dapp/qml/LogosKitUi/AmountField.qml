@@ -7,19 +7,22 @@ import "Units.js" as Units
 // fit, the token chip beside it, then "Balance … · Max". Invalid input
 // shakes once (300 ms). Digits and one decimal point only; `decimals` caps
 // the fraction. The text stays a string (u128 never becomes a JS number).
+// Defaults to the native token: typed in LGO (9 decimals), `base` in lepta.
 ColumnLayout {
     id: af
     property alias text: input.text
-    property string symbol: "LEZ"
+    property string symbol: "LGO"
     property Component tokenIcon: null
-    property string balance: ""        // raw integer in base units ("12480")
-    property string feeCap: ""         // raw integer; native sends need amount + fee ≤ balance
+    property string balance: ""        // base units: lepta for LGO ("12480000000")
+    property string feeCap: ""         // lepta; native sends need amount + fee ≤ balance
+    property int decimals: Units.DECIMALS   // LGO's 9; a token's own (0 if none)
+    // The typed amount in base units ("" while it isn't one): what to send.
+    readonly property string base: Units.parse(text, decimals)
     // Affordability, from integer strings (no JS numbers): over when the
     // amount (plus the fee cap for native) exceeds the balance.
-    readonly property bool over: balance !== "" && text !== "" && decimals === 0
-        && Units.cmp(feeCap !== "" ? Units.add(text, feeCap) : text, balance) > 0
-    readonly property bool empty: text === "" || /^0*$/.test(text)
-    property int decimals: 0
+    readonly property bool over: balance !== "" && base !== ""
+        && Units.cmp(feeCap !== "" ? Units.add(base, feeCap) : base, balance) > 0
+    readonly property bool empty: base === "" || /^0*$/.test(base)
     property bool invalid: false
     property string errorText: ""
     property bool tokenSelectable: true
@@ -108,7 +111,7 @@ ColumnLayout {
         spacing: 8
         Txt {
             visible: af.errorText === "" && !af.over && af.balance !== ""
-            text: "Balance " + Units.group(af.balance) + " " + af.symbol + (af.feeCap !== "" ? " · fee ≤ " + Units.group(af.feeCap) : "")
+            text: "Balance " + Units.token(af.balance, af.decimals) + " " + af.symbol + (af.feeCap !== "" ? " · fee ≤ " + Units.lgo(af.feeCap) : "")
             tone: "text2"; num: true; font.pixelSize: 13
         }
         Txt { visible: af.errorText !== ""; text: af.errorText; tone: "danger"; font.pixelSize: 13 }

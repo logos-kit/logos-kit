@@ -104,7 +104,7 @@ Item {
         onFunds: {
             var acct = store.current
             if (!acct) return
-            store.requestFunds(acct.accountId, function (v, e) { if (e) toasts.show({ title: "Couldn't request test LEZ", body: Fmt.errorText(e), tone: "danger" }) })
+            store.requestFunds(acct.accountId, function (v, e) { if (e) toasts.show({ title: "Couldn't request test LGO", body: Fmt.errorText(e), tone: "danger" }) })
         }
         onOpenStatus: function (s) {
             if (s.lifecycle === "awaiting_approval") return

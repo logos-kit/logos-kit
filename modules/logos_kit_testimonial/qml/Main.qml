@@ -470,7 +470,7 @@ Item {
                             objectName: "tmNoFunds"
                             visible: root.balance === "0"
                             tone: "warn"
-                            text: "This account has no LEZ for the network fee. Get test funds first."
+                            text: "This account has no LGO for the network fee. Get test funds first."
                         }
                         Btn {
                             objectName: "tmFunds"
