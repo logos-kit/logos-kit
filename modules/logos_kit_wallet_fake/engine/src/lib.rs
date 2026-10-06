@@ -440,6 +440,27 @@ fn lws(s: &mut State, method: &str, p: &Value, app: &str) -> Value {
                 "asOfBlock": "42",
             }))
         }
+        "lez_getTokens" => {
+            if str_param(p, "chain") != Some(s.chain.as_str()) {
+                return err(4902, &format!("the wallet is on {}", s.chain));
+            }
+            let account = str_param(p, "account").unwrap_or("");
+            if !granted(s, app, account) {
+                return err(4100, "this app can't read that account's balance");
+            }
+            // One listed token, so apps can render a tier.
+            ok(json!({
+                "tokens": [{
+                    "definition": "FakeToken1111111111111111111111111111111111",
+                    "name": "Fake Test Token",
+                    "symbol": "FTT",
+                    "decimals": 2,
+                    "amount": "12345",
+                    "tier": "verified",
+                }],
+                "synced": true,
+            }))
+        }
         "lez_readAccount" => {
             if str_param(p, "chain") != Some(s.chain.as_str()) {
                 return err(4902, &format!("the wallet is on {}", s.chain));

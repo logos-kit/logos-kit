@@ -57,6 +57,43 @@ export const BalanceResult = Type.Object({
   asOfBlock: Type.Optional(Type.String({ pattern: '^[0-9]+$' })),
 })
 
+/**
+ * `lez_getTokens`: the tokens a shared account holds (its own slot and its
+ * token accounts, added up), with how far the wallet trusts each. Spam and
+ * tokens the user hid are never listed; names and symbols are display only
+ * (a token's identity is its definition).
+ */
+export const TokensParams = Type.Object({
+  chain: ChainId,
+  account: Type.Union([AccountId, PrivateHandle]),
+})
+
+export const TokenTier = Type.Union([
+  /** On the Logos Kit token list for this network. */
+  Type.Literal('verified'),
+  /** The user added it by its ID. */
+  Type.Literal('added'),
+  /** It arrived, and nobody vouched for it. Show it with care. */
+  Type.Literal('unknown'),
+])
+
+export const TokenEntry = Type.Object({
+  /** The token's definition account: its identity. */
+  definition: AccountId,
+  name: Type.Optional(Type.String({ maxLength: 64 })),
+  symbol: Type.Optional(Type.String({ maxLength: 11 })),
+  /** Display decimals; absent when unknown (show whole units). */
+  decimals: Type.Optional(Type.Integer({ minimum: 0, maximum: 36 })),
+  amount: U128,
+  tier: TokenTier,
+})
+
+export const TokensResult = Type.Object({
+  tokens: Type.Array(TokenEntry),
+  /** For private accounts: false while the wallet is still scanning. */
+  synced: Type.Boolean(),
+})
+
 /** `lez_readAccount`: a public account's slot for one program, as the node holds it now. */
 export const ReadAccountParams = Type.Object({
   chain: ChainId,

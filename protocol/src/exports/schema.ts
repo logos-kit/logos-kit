@@ -9,6 +9,10 @@ export {
   RequestFundsResult,
   SignMessageParams,
   SignMessageResult,
+  TokenEntry,
+  TokensParams,
+  TokensResult,
+  TokenTier,
 } from '../schema/messaging.ts'
 export { Methods, Notifications } from '../schema/methods.ts'
 export {

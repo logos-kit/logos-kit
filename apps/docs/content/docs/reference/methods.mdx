@@ -1314,6 +1314,125 @@ LWS-0: balance of a shared account.
 
 </details>
 
+## `lez_getTokens`
+
+LWS-0: tokens on a shared account, with their trust tier.
+
+**Read.** A module call; no prompt.
+
+### Params
+
+| Name | Type | Required | Notes |
+|---|---|---|---|
+| `chain` | string | yes | CAIP-2 chain id, e.g. "lez:testnet" |
+| `account` | string \| string | yes |  |
+
+### Result
+
+`object`: `tokens`, `synced`
+
+<details>
+<summary>JSON Schema</summary>
+
+```json
+{
+  "params": {
+    "type": "object",
+    "required": [
+      "chain",
+      "account"
+    ],
+    "properties": {
+      "chain": {
+        "type": "string",
+        "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+        "description": "CAIP-2 chain id, e.g. \"lez:testnet\""
+      },
+      "account": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+            "description": "Base58-encoded 32-byte LEZ account id"
+          },
+          {
+            "type": "string",
+            "pattern": "^pvt_[A-Za-z0-9_-]{16,64}$",
+            "description": "Opaque per-origin private account handle"
+          }
+        ]
+      }
+    }
+  },
+  "result": {
+    "type": "object",
+    "required": [
+      "tokens",
+      "synced"
+    ],
+    "properties": {
+      "tokens": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "definition",
+            "amount",
+            "tier"
+          ],
+          "properties": {
+            "definition": {
+              "type": "string",
+              "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+              "description": "Base58-encoded 32-byte LEZ account id"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "symbol": {
+              "type": "string",
+              "maxLength": 11
+            },
+            "decimals": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 36
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "description": "u128 as a decimal string. The pattern allows up to 39 digits; values above 2^128-1 are rejected by the codec and wallet with -32602."
+            },
+            "tier": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "verified"
+                },
+                {
+                  "type": "string",
+                  "const": "added"
+                },
+                {
+                  "type": "string",
+                  "const": "unknown"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "synced": {
+        "type": "boolean"
+      }
+    }
+  }
+}
+```
+
+</details>
+
 ## `lez_readAccount`
 
 LWS-0: a public account's data for one program (chain state).

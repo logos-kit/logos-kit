@@ -1888,6 +1888,186 @@ impl ::std::convert::TryFrom<String> for Timestamp {
         value.parse()
     }
 }
+///`TokenEntry`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct TokenEntry {
+    pub amount: U128,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub decimals: ::std::option::Option<i64>,
+    pub definition: AccountId,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub name: ::std::option::Option<TokenEntryName>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub symbol: ::std::option::Option<TokenEntrySymbol>,
+    pub tier: TokenTier,
+}
+///`TokenEntryName`
+#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct TokenEntryName(::std::string::String);
+impl ::std::ops::Deref for TokenEntryName {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<TokenEntryName> for ::std::string::String {
+    fn from(value: TokenEntryName) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for TokenEntryName {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() > 64usize {
+            return Err("longer than 64 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for TokenEntryName {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TokenEntryName {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for TokenEntryName {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+///`TokenEntrySymbol`
+#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct TokenEntrySymbol(::std::string::String);
+impl ::std::ops::Deref for TokenEntrySymbol {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<TokenEntrySymbol> for ::std::string::String {
+    fn from(value: TokenEntrySymbol) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for TokenEntrySymbol {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() > 11usize {
+            return Err("longer than 11 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for TokenEntrySymbol {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TokenEntrySymbol {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for TokenEntrySymbol {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+///`TokenTier`
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum TokenTier {
+    #[serde(rename = "verified")]
+    Verified,
+    #[serde(rename = "added")]
+    Added,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+impl ::std::fmt::Display for TokenTier {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Verified => f.write_str("verified"),
+            Self::Added => f.write_str("added"),
+            Self::Unknown => f.write_str("unknown"),
+        }
+    }
+}
+impl ::std::str::FromStr for TokenTier {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "verified" => Ok(Self::Verified),
+            "added" => Ok(Self::Added),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for TokenTier {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TokenTier {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+///`TokensParams`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct TokensParams {
+    pub account: AccountRef,
+    pub chain: ChainId,
+}
+///`TokensResult`
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct TokensResult {
+    pub synced: bool,
+    pub tokens: ::std::vec::Vec<TokenEntry>,
+}
 ///`TransactionProposal`
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct TransactionProposal {

@@ -10,6 +10,8 @@ import {
   RequestFundsResult,
   SignMessageParams,
   SignMessageResult,
+  TokensParams,
+  TokensResult,
 } from './messaging.ts'
 import { AccountId, ChainId, PrivateHandle } from './primitives.ts'
 import {
@@ -51,6 +53,12 @@ export const Methods = {
     userFacing: false,
   },
   lez_getBalance: { params: BalanceParams, result: BalanceResult, userFacing: false },
+  /**
+   * Tokens on a shared account, with their trust tier (verified, added,
+   * unknown). Same grants as `lez_getBalance`; spam and hidden tokens are
+   * never listed.
+   */
+  lez_getTokens: { params: TokensParams, result: TokensResult, userFacing: false },
   /** Read one program's public data on an account (chain state: no grant needed). */
   lez_readAccount: { params: ReadAccountParams, result: ReadAccountResult, userFacing: false },
   /**

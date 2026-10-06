@@ -21,6 +21,7 @@ import {
   type SignInResult,
   type SignMessageResult,
   type SubmitResult,
+  type TokensResult,
   type TransactionProposal,
   type TransactionStatus,
   type WalletAccount,
@@ -52,6 +53,8 @@ export interface WalletActions {
   getSession(sessionId?: string): Promise<Session | null>
   getAccounts(): Promise<WalletAccount[]>
   getWalletBalance(params: P<'lez_getBalance'>): Promise<BalanceResult>
+  /** Tokens on a shared account, with their trust tier (verified, added, unknown). */
+  getWalletTokens(params: P<'lez_getTokens'>): Promise<TokensResult>
   /** A public account's data for one program (chain state; no grant needed). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
   /** The network the wallet is on. */
@@ -124,6 +127,7 @@ export function walletActions(client: Client): WalletActions {
       ) as Promise<Session | null>,
     getAccounts: () => call(METHODS.getAccounts, {}) as Promise<WalletAccount[]>,
     getWalletBalance: (params) => call(METHODS.getBalance, params) as Promise<BalanceResult>,
+    getWalletTokens: (params) => call(METHODS.getTokens, params) as Promise<TokensResult>,
     async readAccount(account, program) {
       const r = (await call(METHODS.readAccount, {
         chain: client.chain,

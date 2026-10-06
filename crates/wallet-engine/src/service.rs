@@ -375,6 +375,7 @@ impl Service {
                 self.granted_accounts(&app)
             }
             "lez_getBalance" => self.get_balance(p, caller),
+            "lez_getTokens" => self.get_tokens(p, caller),
             "lez_getTransactionStatus" => {
                 let h: HandleP = params(p)?;
                 let s = self.engine()?.status(caller, &h.handle)?;
@@ -2010,6 +2011,31 @@ impl Service {
         })
     }
 
+    /// The wallet account behind what an app passed as `account` (an address
+    /// or a private handle), if this app may read it; refused the same way
+    /// otherwise, so the answer says nothing about which accounts exist.
+    fn shared_account(s: &mut Session, app: &str, account: &str) -> Result<String> {
+        let zone_id = s.zone().id.clone();
+        let mine = s.accounts()?;
+        let key = s.handle_key()?;
+        let (id, cap) = if account.starts_with("pvt_") {
+            let found = mine.iter().find(|m| {
+                m.kind == AccountKind::Private
+                    && private_handle(&key, &zone_id, app, &m.account_id) == account
+            });
+            (found.map(|m| m.account_id.clone()), Capability::ReadPrivate)
+        } else {
+            (Some(account.to_owned()), Capability::ReadPublic)
+        };
+        id.filter(|id| policy::allows(s.grants(), &zone_id, app, id, cap))
+            .ok_or_else(|| {
+                Denied::err(
+                    Code::Unauthorized,
+                    "this app can't read that account's balance",
+                )
+            })
+    }
+
     fn get_balance(&self, p: &Value, caller: &Caller) -> Result<Value> {
         #[derive(Deserialize)]
         struct P {
@@ -2033,25 +2059,7 @@ impl Service {
         self.block(async {
             engine
                 .with_session_quiet(async |s| {
-                    let zone_id = s.zone().id.clone();
-                    let mine = s.accounts()?;
-                    let key = s.handle_key()?;
-                    let (id, cap) = if a.account.starts_with("pvt_") {
-                        let found = mine.iter().find(|m| {
-                            m.kind == AccountKind::Private
-                                && private_handle(&key, &zone_id, &app, &m.account_id) == a.account
-                        });
-                        (found.map(|m| m.account_id.clone()), Capability::ReadPrivate)
-                    } else {
-                        (Some(a.account.clone()), Capability::ReadPublic)
-                    };
-                    let id = id.filter(|id| policy::allows(s.grants(), &zone_id, &app, id, cap));
-                    let Some(id) = id else {
-                        return Err(Denied::err(
-                            Code::Unauthorized,
-                            "this app can't read that account's balance",
-                        ));
-                    };
+                    let id = Self::shared_account(s, &app, &a.account)?;
                     let amount = s.balance_of(&id, a.asset.as_deref()).await?;
                     let synced = !s.status()?.discovering;
                     let mut out = json!({
@@ -2066,6 +2074,74 @@ impl Service {
                 })
                 .await
         })
+    }
+
+    /// `lez_getTokens`: the tokens on a shared account from the last sync
+    /// (own slot and token accounts added up), Verified, Added and Unknown
+    /// only: spam and the user's hidden tokens never reach an app.
+    fn get_tokens(&self, p: &Value, caller: &Caller) -> Result<Value> {
+        #[derive(Deserialize)]
+        struct P {
+            chain: String,
+            account: String,
+        }
+        let a: P = params(p)?;
+        let app = app_of(caller)?;
+        let zone = self.current_zone();
+        if a.chain != zone.chain {
+            return Err(coded(
+                4902,
+                format!("the wallet is on {}", zone.chain),
+                Value::Null,
+            ));
+        }
+        let engine = self.locked_is_disconnected()?;
+        let (id, synced) = self.block(async {
+            engine
+                .with_session_quiet(async |s| {
+                    let id = Self::shared_account(s, &app, &a.account)?;
+                    Ok((id, !s.status()?.discovering))
+                })
+                .await
+        })?;
+        let holdings: Vec<Value> = lock(&self.snapshot)
+            .accounts
+            .iter()
+            .find(|acct| acct["accountId"] == id.as_str())
+            .and_then(|acct| acct["tokens"].as_array().cloned())
+            .unwrap_or_default();
+        let mut by: Vec<(String, Value, u128)> = Vec::new();
+        for h in holdings {
+            let tier = h["tier"].as_str().unwrap_or("unknown");
+            if !matches!(tier, "verified" | "added" | "unknown") || h["kind"] != "fungible" {
+                continue;
+            }
+            let Some(def) = h["definition"].as_str().map(str::to_owned) else {
+                continue;
+            };
+            let amount: u128 = h["amount"].as_str().and_then(|v| v.parse().ok()).unwrap_or(0);
+            match by.iter_mut().find(|(d, _, _)| *d == def) {
+                Some(entry) => entry.2 = entry.2.saturating_add(amount),
+                None => by.push((def, h, amount)),
+            }
+        }
+        let tokens: Vec<Value> = by
+            .into_iter()
+            .map(|(def, h, amount)| {
+                let mut t = json!({
+                    "definition": def,
+                    "amount": amount.to_string(),
+                    "tier": h["tier"],
+                });
+                for k in ["name", "symbol", "decimals"] {
+                    if !h[k].is_null() {
+                        t[k] = h[k].clone();
+                    }
+                }
+                t
+            })
+            .collect();
+        Ok(json!({ "tokens": tokens, "synced": synced }))
     }
 
     // -- background ----------------------------------------------------------------

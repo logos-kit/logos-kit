@@ -187,6 +187,9 @@ impl LogosKitWalletModule for Wallet {
     fn lez_get_balance(&self, params: String) -> serde_json::Value {
         self.forward("lez_getBalance", &params)
     }
+    fn lez_get_tokens(&self, params: String) -> serde_json::Value {
+        self.forward("lez_getTokens", &params)
+    }
     fn lez_read_account(&self, params: String) -> serde_json::Value {
         self.forward("lez_readAccount", &params)
     }
