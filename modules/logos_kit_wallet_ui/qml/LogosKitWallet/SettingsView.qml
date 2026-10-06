@@ -30,9 +30,11 @@ ColumnLayout {
     }
     spacing: 10
 
+    property var programs: []
     function load() {
         problem = ""; note = ""; words = []
         store.call("grants", {}, function (v, e) { if (!e) st.grants = v || [] })
+        store.call("programs", {}, function (v, e) { if (!e) st.programs = v || [] })
     }
     onVisibleChanged: if (visible) load()
 
@@ -168,6 +170,18 @@ ColumnLayout {
     InfoRow { label: "Faucet"; value: st.store.state.faucetHost || "None (off)"; mono: !!st.store.state.faucetHost }
     InfoRow { visible: !!st.store.state.explorer; label: "Explorer"; value: "Only when you open a link" }
     InfoRow { label: "Proving"; value: "On this device" }
+    SettingsRow {
+        objectName: "lowMemoryRow"
+        glyph: "zap"
+        title: "Low-memory proving"
+        description: "Private transactions use about 2 GB of memory instead of 4.6 GB, and take longer."
+        chevron: false
+        Toggle {
+            objectName: "lowMemoryToggle"
+            checked: !!st.store.state.lowMemory
+            onToggled: function (on) { st.store.call("setPrefs", { lowMemory: on }, function () { st.store.refreshState() }) }
+        }
+    }
 
     // -- security ----------------------------------------------------------------------------
     Section { text: "Security" }
@@ -242,6 +256,46 @@ ColumnLayout {
                 st.changingPassword = false
                 st.note = "Password changed. Your recovery phrase didn't change."
             }, 60000)
+        }
+    }
+
+    // -- programs you named ----------------------------------------------------------------
+    Section { text: "Programs you named" }
+    Txt {
+        Layout.fillWidth: true
+        text: "Your own names for programs apps ask you to use. Approvals show the name with “named by you”; it doesn't verify the program."
+        tone: "text3"; font.pixelSize: 12; wrapMode: Text.Wrap
+    }
+    Repeater {
+        model: st.programs
+        SettingsRow {
+            glyph: "pencil"
+            title: modelData.name
+            description: Fmt.short(modelData.account)
+            chevron: false
+            Btn {
+                text: "Forget"
+                onClicked: st.store.call("forgetProgram", { account: modelData.account }, function (v, e) {
+                    if (e) { st.problem = Fmt.errorText(e); return }
+                    st.load()
+                })
+            }
+        }
+    }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 6
+        Field { id: progId; objectName: "programAccount"; Layout.fillWidth: true; mono: true; placeholderText: "Program address" }
+        Field { id: progName; objectName: "programName"; Layout.preferredWidth: 140; placeholderText: "Your name for it" }
+        Btn {
+            objectName: "programAdd"
+            text: "Add"
+            enabled: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(progId.text.trim()) && progName.text.trim().length > 0
+            onClicked: st.store.call("nameProgram", { account: progId.text.trim(), name: progName.text.trim() }, function (v, e) {
+                if (e) { st.problem = Fmt.errorText(e); return }
+                progId.text = ""; progName.text = ""
+                st.load()
+            })
         }
     }
 

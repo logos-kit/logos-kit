@@ -49,12 +49,21 @@ proves each result from chain state and reports an `outcome`:
 Private transactions need a zero-knowledge proof, made on the user's machine
 so keys never leave it.
 
-| Machine | Time per proof | Peak memory |
-|---|---|---|
-| Apple M-series laptop | ~4.5 minutes (measured 267–337 s) | ~4.3 GB |
+| Machine | Proof | Time | Peak memory |
+|---|---|---|---|
+| Apple M1 Pro, 16 GB | Shield (public → private) | 267–337 s | ~4.3 GB resident |
+| Apple M1 Pro, 16 GB | Private send | 469 s | ~4.3 GB resident |
+
+The wallet quotes one figure for both: **about 5–8 minutes**. Before a proof
+starts it checks free memory: below the recommended amount it warns and
+suggests **low-memory proving** (Settings, or `--low-memory` on the CLI),
+which proves in smaller pieces with about 2 GB instead of 4.6 GB and takes
+longer; with almost no memory free it refuses and says why, and nothing is
+sent.
 
 The wallet shows progress and lets the user close the sheet; the proof keeps
-running. Only one proof runs at a time.
+running. Only one proof runs at a time. If Basecamp closes during a proof, the
+next start shows that the proof stopped and that nothing was sent.
 
 ## Amounts: LGO and lepta
 

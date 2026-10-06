@@ -116,7 +116,18 @@ enum Command {
         drop: u128,
     },
     /// Show a program's header and verification status (address, or a builtin's name).
-    Program { account: String },
+    /// With --name, also give it your own name: approvals show "<name> (named by you)".
+    Program {
+        account: String,
+        /// Your name for this program on this network (shown on approvals).
+        #[arg(long)]
+        name: Option<String>,
+        /// Forget the name you gave it.
+        #[arg(long, conflicts_with = "name")]
+        forget: bool,
+    },
+    /// Programs you named on this network.
+    Programs,
     /// Rebuild a program from source (docker) and compare with what's deployed.
     VerifyProgram {
         /// Program account; its source comes from the registry unless given.
@@ -1482,8 +1493,30 @@ async fn run(cli: Cli) -> Result<()> {
             )
             .await
         }
-        Command::Program { account } => {
+        Command::Programs => {
+            let (session, _) = open(&cli).await?;
+            let named = session.named_programs();
+            print(&cli, &serde_json::to_value(&named)?, || {
+                if named.is_empty() {
+                    println!("no named programs on {}", session.zone().id);
+                }
+                for p in &named {
+                    println!("{}  {}", p.account, p.name);
+                }
+            });
+            session.lock()
+        }
+        Command::Program {
+            account,
+            name,
+            forget,
+        } => {
             let (mut session, _) = open(&cli).await?;
+            if let Some(n) = name {
+                session.name_program(account, n)?;
+            } else if *forget {
+                session.forget_program(account)?;
+            }
             let zone = session.zone().id.clone();
             let cache = verify::load_cache(session.data_dir().root());
             session.connect().await?;
@@ -1496,7 +1529,8 @@ async fn run(cli: Cli) -> Result<()> {
                 Some((_, id, _)) => id,
                 None => wallet_engine::decode::account_id(account)?,
             };
-            let check = verify::check_cached(core, id, &zone, &cache).await?;
+            let named = session.named_programs();
+            let check = verify::check_cached(core, id, &zone, &cache, &named).await?;
             print(&cli, &serde_json::to_value(&check)?, || {
                 println!(
                     "{}",

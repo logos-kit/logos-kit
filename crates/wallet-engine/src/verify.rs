@@ -61,6 +61,21 @@ pub struct ProgramCheck {
     pub source: Option<Source>,
     /// Why the status is what it is, in plain words.
     pub note: String,
+    /// `name` is one the user gave it (Settings → Programs you named).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub named_by_user: bool,
+}
+
+/// A program the user named themselves, so approvals can say "Payroll
+/// (named by you)" instead of "Unknown program". A name is the user's own
+/// label, never a source claim: it doesn't change the verification status.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserProgram {
+    pub zone: String,
+    pub account: String,
+    pub name: String,
+    pub added_ms: u64,
 }
 
 /// Where a program's source lives and how it builds reproducibly.
@@ -222,7 +237,7 @@ pub async fn read_header(core: &WalletCore, program: AccountId) -> Result<Option
 
 /// Status of `program` as it is on chain now (no local rebuild cache).
 pub async fn check(core: &WalletCore, program: AccountId) -> Result<ProgramCheck> {
-    check_cached(core, program, "", &[]).await
+    check_cached(core, program, "", &[], &[]).await
 }
 
 impl crate::decode::Decoders {
@@ -232,7 +247,7 @@ impl crate::decode::Decoders {
         core: &WalletCore,
         program: AccountId,
     ) -> Result<ProgramCheck> {
-        check_cached(core, program, &self.zone, &self.verified).await
+        check_cached(core, program, &self.zone, &self.verified, &self.named).await
     }
 }
 
@@ -242,11 +257,22 @@ pub async fn check_cached(
     program: AccountId,
     zone: &str,
     cache: &[Verified],
+    named: &[UserProgram],
 ) -> Result<ProgramCheck> {
     let header = read_header(core, program)
         .await?
         .with_context(|| format!("no program is deployed at {program}"))?;
-    Ok(classify(program, &header, cache, zone))
+    let mut out = classify(program, &header, cache, zone);
+    // The user's own name, only where no source names it.
+    if out.name.is_none()
+        && let Some(n) = named
+            .iter()
+            .find(|n| n.zone == zone && n.account == out.account)
+    {
+        out.name = Some(n.name.clone());
+        out.named_by_user = true;
+    }
+    Ok(out)
 }
 
 fn classify(
@@ -267,6 +293,7 @@ fn classify(
         status: Status::Unknown,
         source: None,
         note: "no source is known for this program".to_owned(),
+        named_by_user: false,
     };
     let cached = cache
         .iter()
@@ -495,19 +522,49 @@ fn output(cmd: &mut Command) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// The local rebuild cache (`verified.json` in the data dir). Not secret; it
-/// only upgrades `claimed`/`unknown` to `verified_local` for exact images.
+/// The local rebuild cache (`verified.json`). Not secret; it only upgrades
+/// `claimed`/`unknown` to `verified_local` for exact images. Read from the
+/// wallet's data dir and from the shared one (`~/.logos-kit`, the CLI's
+/// default home), so a program rebuilt with `logos-kit verify-program`
+/// shows as verified in Basecamp too.
 pub fn load_cache(dir: &Path) -> Vec<Verified> {
+    let mut all = read_cache(dir);
+    if let Some(shared) = shared_dir().filter(|s| s != dir) {
+        for v in read_cache(&shared) {
+            if !all.iter().any(|a| a.zone == v.zone && a.account == v.account) {
+                all.push(v);
+            }
+        }
+    }
+    all
+}
+
+fn read_cache(dir: &Path) -> Vec<Verified> {
     std::fs::read(dir.join("verified.json"))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default()
 }
 
+/// Where every Logos Kit wallet on this machine shares its rebuilds.
+pub fn shared_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".logos-kit"))
+}
+
+/// Record a rebuild in `dir` and in the shared cache.
 pub fn save_cache(dir: &Path, entry: Verified) -> Result<()> {
-    let mut all = load_cache(dir);
+    write_cache(dir, &entry)?;
+    if let Some(shared) = shared_dir().filter(|s| s != dir) {
+        std::fs::create_dir_all(&shared)?;
+        write_cache(&shared, &entry)?;
+    }
+    Ok(())
+}
+
+fn write_cache(dir: &Path, entry: &Verified) -> Result<()> {
+    let mut all = read_cache(dir);
     all.retain(|v| !(v.zone == entry.zone && v.account == entry.account));
-    all.push(entry);
+    all.push(entry.clone());
     let tmp = dir.join("verified.json.tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(&all)?)?;
     std::fs::rename(&tmp, dir.join("verified.json"))?;

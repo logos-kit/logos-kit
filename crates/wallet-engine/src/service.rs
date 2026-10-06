@@ -423,12 +423,50 @@ impl Service {
             "state" => self.state(caller),
             "create" => self.create(p),
             "findBackups" => Ok(json!(find_backups())),
+            "programs" => {
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| Ok(json!(s.named_programs())))
+                        .await
+                })
+            }
+            "nameProgram" => {
+                #[derive(Deserialize)]
+                struct P {
+                    account: String,
+                    name: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.name_program(&a.account, &a.name))
+                        .await
+                })?;
+                Ok(Value::Null)
+            }
+            "forgetProgram" => {
+                let a: AccountP = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.forget_program(&a.account))
+                        .await
+                })?;
+                Ok(Value::Null)
+            }
             // Free memory vs what a proof needs now (reads the OS; not polled).
-            "memory" => Ok(json!({
-                "free": crate::proving::available_memory(),
-                "needs": if crate::proving::low_memory() { crate::proving::NEEDS_LOW_MEMORY } else { crate::proving::NEEDS_DEFAULT },
-                "lowMemory": crate::proving::low_memory(),
-            })),
+            "memory" => {
+                use crate::proving as pv;
+                let low = pv::low_memory();
+                Ok(json!({
+                    "free": pv::available_memory(),
+                    "recommended": if low { pv::NEEDS_LOW_MEMORY } else { pv::NEEDS_DEFAULT },
+                    "floor": if low { pv::FLOOR_LOW_MEMORY } else { pv::FLOOR_DEFAULT },
+                    "lowMemory": low,
+                }))
+            }
             "restoreBackup" => self.restore_backup(p),
             "exportBackup" => {
                 let engine = self.engine()?;

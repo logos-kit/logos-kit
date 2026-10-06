@@ -3,8 +3,14 @@
 //!
 //! A private transaction proves inside the host's process (Basecamp, or the
 //! CLI). At risc0's default segment size (2^20 cycles) the privacy circuit
-//! peaks at about 4.3 GB on an M-series Mac; running out of memory there
-//! kills the host, so the wallet checks first and says why it won't start.
+//! peaks at about 4.3 GB resident on an M1 Pro (about 10 GB counting
+//! compressed and swapped pages), so macOS and Linux can still finish with
+//! less free memory than that, only slower. Two thresholds follow:
+//! - below the *recommended* free memory the wallet warns before approval
+//!   and suggests low-memory mode, but proves;
+//! - below the *floor* a proof would very likely be killed (taking the host
+//!   with it), so the wallet refuses and says what to do.
+//!
 //! Low-memory mode proves with 2^18-cycle segments (LEZ patch 0008): less
 //! memory, more time.
 
@@ -14,11 +20,15 @@ use anyhow::Result;
 
 use crate::policy::{Code, Denied};
 
-/// Free memory a default proof needs (peak measured 4.3 GB, plus headroom).
+/// Free memory a default proof should have (peak measured 4.3 GB resident).
 pub const NEEDS_DEFAULT: u64 = 4_600 * MIB;
-/// Free memory a low-memory proof needs (2^18 segments; budget, see
+/// Below this a default proof is refused.
+pub const FLOOR_DEFAULT: u64 = 2_500 * MIB;
+/// Free memory a low-memory proof should have (2^18 segments; budget, see
 /// docs/dev/perf.md for the measured peak).
 pub const NEEDS_LOW_MEMORY: u64 = 2_000 * MIB;
+/// Below this a low-memory proof is refused.
+pub const FLOOR_LOW_MEMORY: u64 = 1_000 * MIB;
 /// Segment size in low-memory mode.
 pub const LOW_MEMORY_PO2: u32 = 18;
 
@@ -42,9 +52,13 @@ pub fn prepare() -> Result<()> {
     lee::privacy_preserving_transaction::circuit::set_segment_limit_po2(
         low.then_some(LOW_MEMORY_PO2),
     );
-    let needs = if low { NEEDS_LOW_MEMORY } else { NEEDS_DEFAULT };
+    let (needs, floor) = if low {
+        (NEEDS_LOW_MEMORY, FLOOR_LOW_MEMORY)
+    } else {
+        (NEEDS_DEFAULT, FLOOR_DEFAULT)
+    };
     if let Some(free) = available_memory()
-        && free < needs
+        && free < floor
     {
         let gb = |b: u64| format!("{:.1} GB", b as f64 / (1024.0 * MIB as f64));
         let advice = if low {

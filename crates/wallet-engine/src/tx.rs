@@ -589,10 +589,12 @@ async fn check_fee(
 
 impl Session {
     pub fn decoders(&self) -> Decoders {
-        Decoders::default().with_rebuilds(
-            &self.zone().id,
-            crate::verify::load_cache(self.data_dir().root()),
-        )
+        Decoders::default()
+            .with_rebuilds(
+                &self.zone().id,
+                crate::verify::load_cache(self.data_dir().root()),
+            )
+            .with_named(self.named_programs())
     }
 
     /// Build `intent` for approval (connects if needed). Checks that the

@@ -301,6 +301,9 @@ struct Meta {
     /// headers and segments): kept out of the account switcher.
     #[serde(default)]
     system: BTreeSet<String>,
+    /// Programs the user named, every zone (approvals show the name).
+    #[serde(default)]
+    programs: Vec<crate::verify::UserProgram>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -983,6 +986,43 @@ impl Session {
         })?;
         info.label = Some(label);
         Ok(info)
+    }
+
+    /// Programs the user named on this zone.
+    pub fn named_programs(&self) -> Vec<crate::verify::UserProgram> {
+        self.meta
+            .programs
+            .iter()
+            .filter(|p| p.zone == self.zone().id)
+            .cloned()
+            .collect()
+    }
+
+    /// Name `account` (a program) on this zone; a new name replaces the old.
+    pub fn name_program(&mut self, account: &str, name: &str) -> Result<()> {
+        let name = name.trim();
+        ensure!(!name.is_empty() && name.chars().count() <= 40, "a program name is 1–40 characters");
+        ensure!(
+            !name.chars().any(char::is_control),
+            "a program name can't contain control characters"
+        );
+        crate::decode::account_id(account)?;
+        let zone = self.zone().id.clone();
+        let entry = crate::verify::UserProgram {
+            zone: zone.clone(),
+            account: account.to_owned(),
+            name: name.to_owned(),
+            added_ms: now_ms(),
+        };
+        self.update_meta(|m| {
+            m.programs.retain(|p| !(p.zone == zone && p.account == entry.account));
+            m.programs.push(entry);
+        })
+    }
+
+    pub fn forget_program(&mut self, account: &str) -> Result<()> {
+        let zone = self.zone().id.clone();
+        self.update_meta(|m| m.programs.retain(|p| !(p.zone == zone && p.account == account)))
     }
 
     /// Made by the wallet for its own use (see `new_system_account`).

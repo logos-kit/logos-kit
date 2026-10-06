@@ -42,6 +42,8 @@ pub struct Decoders {
     /// approval shows a program the user rebuilt as verified.
     pub(crate) zone: String,
     pub(crate) verified: Vec<crate::verify::Verified>,
+    /// Programs the user named (shown as "named by you").
+    pub(crate) named: Vec<crate::verify::UserProgram>,
 }
 
 impl Default for Decoders {
@@ -54,6 +56,7 @@ impl Default for Decoders {
             ],
             zone: String::new(),
             verified: Vec::new(),
+            named: Vec::new(),
         }
     }
 }
@@ -63,6 +66,12 @@ impl Decoders {
     pub fn with_rebuilds(mut self, zone: &str, verified: Vec<crate::verify::Verified>) -> Self {
         zone.clone_into(&mut self.zone);
         self.verified = verified;
+        self
+    }
+
+    /// Show the user's own names for programs no source names.
+    pub fn with_named(mut self, named: Vec<crate::verify::UserProgram>) -> Self {
+        self.named = named;
         self
     }
 

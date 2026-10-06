@@ -68,7 +68,7 @@ nix build .#lgx-portable                    # → result/*.lgx, install it from 
 | For | You need |
 |---|---|
 | The wallet | Logos Basecamp on macOS (Apple silicon) or Linux (x86-64, arm64) |
-| Private transactions | Time and memory for a local proof. Measured on an M1 Pro with 16 GB: 267–337 s for a shield, 469 s fully private, 4.3 GB peak resident memory (about 10 GB counting compressed and swapped pages) |
+| Private transactions | About 5–8 minutes per local proof. Measured on an M1 Pro with 16 GB: 267–337 s for a shield, 469 s fully private, 4.3 GB peak resident memory (about 10 GB counting compressed and swapped pages). Low-memory proving (Settings, or `--low-memory`) needs about 2 GB and takes longer |
 | The CLI | Rust 1.98.1 (`rustup` reads it from `rust-toolchain.toml`) and git; Xcode command-line tools on macOS; `clang`, `libclang-dev`, `cmake`, `pkg-config` and `libssl-dev` on Linux |
 | Building apps and modules | [Nix](https://nixos.org/download) with flakes |
 | Rebuilding a program to verify it | Docker |
@@ -103,7 +103,7 @@ nix build .#lgx-portable                    # → result/*.lgx, install it from 
 5. **Add and name accounts.** Tap the account name at the top, then **Public account** or **Private account**. The pencil renames an account; tapping one switches to it.<br><img src="docs/assets/readme/basecamp-05-accounts.png" width="360" alt="The accounts sheet">
 6. **Receive.** **Receive** shows the address and a QR code. A private account shows a receive code (`lezpriv1:…`) instead: senders need it to pay you privately, and it doesn't reveal your balance.<br><img src="docs/assets/readme/basecamp-06-receive.png" width="360" alt="A private account's receive code">
 7. **Send.** Press **Send**, paste an address or receive code (or pick one of your accounts), choose the asset, press **Continue**, type the amount and press **Review**. Check what will be signed and the fee, then press **Send**.<br><img src="docs/assets/readme/basecamp-07-send.png" width="360" alt="The send review">
-8. **Go private.** Send from a public account to one of your private accounts (a shield). **Prove and send** proves it on your machine, which takes minutes; it can keep running in the background.<br><img src="docs/assets/readme/basecamp-08-private.png" width="360" alt="A private transaction proving">
+8. **Go private.** Send from a public account to one of your private accounts (a shield). **Prove and send** proves it on your machine: about 5–8 minutes, and it can keep running in the background.<br><img src="docs/assets/readme/basecamp-08-private.png" width="360" alt="A private transaction proving">
 9. **Use an app.** Install **Logos Kit Testimonials** from the same catalog. **Connect wallet** opens the wallet: pick the account to share and press **Connect**. Write a line that mentions Logos Kit, press **Post testimonial** and approve in the wallet, which names the app, the program, its verification and the fee. The app then shows **Posted on LEZ** with an explorer link.<br><img src="docs/assets/readme/basecamp-09-connect-app.png" width="640" alt="The Testimonials app and the wallet's approval sheet">
 
 **Settings** holds the network, theme, auto-lock, the recovery phrase and **Connected apps**, where you can revoke an app at any time.
