@@ -579,8 +579,9 @@ pub struct Session {
     backend: Arc<EncryptedBackend>,
     keys: Vault,
     meta: Meta,
-    /// Finished activity for this zone, sealed with the zone key.
-    history: Vault,
+    /// Finished activity for this zone, sealed with the zone key (`None`:
+    /// the file couldn't be opened; activity stays in memory this session).
+    history: Option<Vault>,
     net: Net,
     reveal: RevealThrottle,
     /// Secrets of a private tx sent from here, to record its note on inclusion.
@@ -752,7 +753,7 @@ impl Session {
         }
         data.write_zones_hint(&record.meta.zones)?;
 
-        let history = open_history(&dir, &context, record.secrets.zone_key(&zone.id)?)?;
+        let history = open_history(&dir, &context, record.secrets.zone_key(&zone.id)?);
         let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL)?);
         let meta = record.meta.clone();
         Ok(Self {
@@ -946,20 +947,18 @@ impl Session {
     /// A new account for the user, named "Public account N" / "Private
     /// account N" (the lowest N not taken).
     pub fn new_named_account(&mut self, kind: AccountKind) -> Result<AccountInfo> {
-        let mut info = self.new_account(kind)?;
-        let taken: BTreeSet<String> = self
-            .accounts()?
-            .into_iter()
-            .filter_map(|a| a.label)
-            .collect();
         let word = match kind {
             AccountKind::Public => "Public",
             AccountKind::Private => "Private",
         };
+        // Free across the whole wallet (labels apply to every zone), chosen
+        // before the account exists so a clash can't leave it unnamed.
+        let taken = self.taken_labels()?;
         let label = (1..)
             .map(|n| format!("{word} account {n}"))
             .find(|l| !taken.contains(l))
             .expect("some number is free");
+        let mut info = self.new_account(kind)?;
         self.set_label(&info.account_id, Some(&label))?;
         info.label = Some(label);
         Ok(info)
@@ -968,24 +967,29 @@ impl Session {
     /// A public account the wallet uses itself (a token's definition, a
     /// program's header or segment), labelled and kept out of the switcher.
     pub fn new_system_account(&mut self, label: &str) -> Result<AccountInfo> {
+        let taken = self.taken_labels()?;
+        // Labels are unique and at most 32 characters: a repeat gets a number.
+        let base: String = label.chars().take(28).collect();
+        let label = std::iter::once(base.clone())
+            .chain((2..).map(|n| format!("{base} {n}")))
+            .find(|l| !taken.contains(l))
+            .expect("some number is free");
         let mut info = self.new_account(AccountKind::Public)?;
-        // Labels must be unique; a second "LOGO token ID" gets its short id.
-        let taken = self
-            .accounts()?
-            .iter()
-            .any(|a| a.label.as_deref() == Some(label));
-        let label = if taken {
-            format!("{label} {}", &info.account_id[..6])
-        } else {
-            label.to_owned()
-        };
-        self.set_label(&info.account_id, Some(&label))?;
+        // Hidden first: if labelling fails, the account still stays out of
+        // the switcher.
         let id = info.account_id.clone();
         self.update_meta(|m| {
             m.system.insert(id);
         })?;
+        self.set_label(&info.account_id, Some(&label))?;
         info.label = Some(label);
         Ok(info)
+    }
+
+    fn taken_labels(&self) -> Result<BTreeSet<String>> {
+        let mut taken: BTreeSet<String> = self.meta.labels.values().cloned().collect();
+        taken.extend(self.accounts()?.into_iter().filter_map(|a| a.label));
+        Ok(taken)
     }
 
     /// Programs the user named on this zone.
@@ -1391,13 +1395,22 @@ impl Session {
 
     /// This zone's activity record, as `save_history` wrote it (`Null` if
     /// unreadable).
+    /// Fails when there's no readable record; the caller must then not
+    /// overwrite it.
     pub fn load_history(&self) -> Result<serde_json::Value> {
-        let bytes = self.history.read()?;
-        Ok(serde_json::from_slice(&bytes).unwrap_or_default())
+        let vault = self
+            .history
+            .as_ref()
+            .context("activity history unavailable")?;
+        let bytes = vault.read()?;
+        serde_json::from_slice(&bytes).context("activity history doesn't parse")
     }
 
     pub fn save_history(&self, record: &serde_json::Value) -> Result<()> {
-        self.history.save(&serde_json::to_vec(record)?)
+        match &self.history {
+            Some(vault) => vault.save(&serde_json::to_vec(record)?),
+            None => Ok(()),
+        }
     }
 
     /// Restored from a phrase: past activity is on chain to be found.
@@ -1468,16 +1481,21 @@ async fn first_block_at_or_after(core: &WalletCore, ms: u64) -> Result<u64> {
 /// The zone's activity vault (`<zone>/history`), sealed with the zone key
 /// under its own context. History is a convenience: a vault that won't open
 /// is moved aside (kept, never deleted) and a new one starts.
-fn open_history(dir: &Path, context: &str, key: Option<Zeroizing<[u8; 32]>>) -> Result<Vault> {
+fn open_history(dir: &Path, context: &str, key: Option<Zeroizing<[u8; 32]>>) -> Option<Vault> {
     let hdir = dir.join("history");
     let context = format!("{context}:history");
     // The zone vault was just opened or created with this key.
-    let key = key.context("zone key")?;
+    let key = key?;
     if Vault::exists(&hdir) {
         match Vault::unlock_keyed(&hdir, key.clone(), &context) {
-            Ok((vault, _)) => return Ok(vault),
-            Err(_) => std::fs::rename(&hdir, dir.join(format!("history.unreadable-{}", now_ms())))?,
+            Ok((vault, _)) => return Some(vault),
+            // A file that's there but won't open (damaged, or another
+            // key): kept aside, never deleted, and a new history starts. If
+            // it can't even be moved, this session keeps history in memory.
+            Err(_) => {
+                std::fs::rename(&hdir, dir.join(format!("history.unreadable-{}", now_ms()))).ok()?
+            }
         }
     }
-    Vault::create_keyed(&hdir, key, &context, b"[]")
+    Vault::create_keyed(&hdir, key, &context, br#"{"scanned":0,"items":[]}"#).ok()
 }

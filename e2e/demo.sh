@@ -117,6 +117,20 @@ cleanup() {
 trap cleanup EXIT
 
 LK() { "$BIN" "${ZONE[@]}" "$@"; }
+# A public network can drop out for a while ("can't reach …"). That error is
+# raised before anything is submitted, so the step is retried once, after a
+# pause; any other failure stands.
+LKR() {
+  local out rc
+  out="$(LK "$@" 2>&1)"; rc=$?
+  if [[ "$out" == *"can't reach"* ]]; then
+    say "network unreachable; retrying in 60 s" >&2
+    sleep 60
+    out="$(LK "$@" 2>&1)"; rc=$?
+  fi
+  printf '%s\n' "$out"
+  return $rc
+}
 last() { tail -1; }
 get() { python3 -c "import sys,json; v=json.loads(sys.stdin.read().strip().splitlines()[-1]); print(eval('v'+sys.argv[1]))" "$1" 2>/dev/null; }
 
@@ -172,18 +186,18 @@ if [[ "$FS" == funded ]]; then pass "faucet -> A" "+$(echo "$F" | get "['amount'
 elif [[ "$FS" == outcome_unknown ]] && BAL=$(wait_funded "$A"); then pass "faucet -> A" "balance $BAL lepta (landed after the drip answered)"
 else fail "faucet -> A" "$(echo "$F" | cut -c1-160)"; bold "Cannot continue without funds."; exit 1; fi
 
-ok_outcome "public send A -> B" "$(LK send --from "$A" --to "$B" --amount 1000 --yes --json 2>&1 | last)"
-ok_outcome "shield A -> private P" "$(LK send --from "$A" --to "$P" --amount 5000 --yes --json 2>&1 | last)"
-ok_outcome "private send P -> public B" "$(LK send --from "$P" --to "$B" --amount 100 --yes --json 2>&1 | last)"
-ok_outcome "private send P -> private P2" "$(LK send --from "$P" --to "$P2" --amount 100 --yes --json 2>&1 | last)"
+ok_outcome "public send A -> B" "$(LKR send --from "$A" --to "$B" --amount 1000 --yes --json 2>&1 | last)"
+ok_outcome "shield A -> private P" "$(LKR send --from "$A" --to "$P" --amount 5000 --yes --json 2>&1 | last)"
+ok_outcome "private send P -> public B" "$(LKR send --from "$P" --to "$B" --amount 100 --yes --json 2>&1 | last)"
+ok_outcome "private send P -> private P2" "$(LKR send --from "$P" --to "$P2" --amount 100 --yes --json 2>&1 | last)"
 
-T=$(LK token create --name DEMO --supply 1000000 --holder "$A" --yes --json 2>&1 | last)
+T=$(LKR token create --name DEMO --supply 1000000 --holder "$A" --yes --json 2>&1 | last)
 DEF=$(echo "$T" | get "['definition']")
 [[ -n "$DEF" ]] && pass "token create (holder A)" "definition ${DEF:0:8}…" || fail "token create" "$(echo "$T" | cut -c1-160)"
 if [[ -n "$DEF" ]]; then
-  ok_outcome "token send A -> B (public)" "$(LK send --from "$A" --to "$B" --amount 250 --token "$DEF" --yes --json 2>&1 | last)"
-  ok_outcome "token send A -> P (private)" "$(LK send --from "$A" --to "$P" --amount 10 --token "$DEF" --yes --json 2>&1 | last)"
-  ok_outcome "token send P -> B (from private)" "$(LK send --from "$P" --to "$B" --amount 4 --token "$DEF" --yes --json 2>&1 | last)"
+  ok_outcome "token send A -> B (public)" "$(LKR send --from "$A" --to "$B" --amount 250 --token "$DEF" --yes --json 2>&1 | last)"
+  ok_outcome "token send A -> P (private)" "$(LKR send --from "$A" --to "$P" --amount 10 --token "$DEF" --yes --json 2>&1 | last)"
+  ok_outcome "token send P -> B (from private)" "$(LKR send --from "$P" --to "$B" --amount 4 --token "$DEF" --yes --json 2>&1 | last)"
 fi
 
 PROGRAM_ARGS=()
@@ -193,17 +207,17 @@ if [[ "$MODE" == local ]]; then
   if [[ -n "$PROG" ]]; then pass "testimonial program deploy" "immutable ${PROG:0:8}…"; PROGRAM_ARGS=(--program "$PROG")
   else fail "testimonial program deploy" "$(echo "$D" | cut -c1-160)"; fi
 fi
-ok_outcome "testimonial post (A)" "$(LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --username demo \
+ok_outcome "testimonial post (A)" "$(LKR testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --username demo \
   --text "Logos Kit demo: every wallet flow end to end." --yes --json 2>&1 | last)"
 
 SNAP="$LOGOS_KIT_HOME/snapshots"
-EV=$(LK testimonial evidence ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --snapshot "$SNAP" --json 2>&1 | last)
+EV=$(LKR testimonial evidence ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --snapshot "$SNAP" --json 2>&1 | last)
 N=$(echo "$EV" | get "['distinctAuthors']")
 [[ -n "$N" && "$N" -ge 1 ]] && pass "evidence export" "$N distinct author(s); snapshot $(ls "$SNAP" 2>/dev/null | head -1)" || fail "evidence export" "$(echo "$EV" | cut -c1-160)"
 
 bold "Refusals"
 refused "second post by the same account" "already posted" \
-  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --text "again with Logos Kit" --yes --json
+  LKR testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --text "again with Logos Kit" --yes --json
 refused "post from a private account" "must be public" \
   LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$P" --text "hidden Logos Kit" --yes --json
 refused "send more than the balance" "Can not pay|not enough|Not enough" \

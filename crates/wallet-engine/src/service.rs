@@ -89,8 +89,9 @@ struct Prefs {
 #[serde(rename_all = "camelCase")]
 struct Snapshot {
     accounts: Vec<Value>,
-    /// The chain `accounts` were read on (balances differ per zone).
+    /// The chain and zone `accounts` were read on (balances differ per zone).
     chain: Option<String>,
+    zone: Option<String>,
     updated_ms: u64,
     tip: Option<u64>,
     error: Option<String>,
@@ -1984,16 +1985,18 @@ impl Service {
         match result {
             Ok((synced, accounts, status)) => {
                 let chain = status.as_ref().map(|s| s.zone.chain.clone());
+                let zone = status.as_ref().map(|s| s.zone.id.clone());
                 // Not while a restored wallet is still finding its accounts:
                 // balances rise then as old notes are found, not as new ones arrive.
                 let discovering = status.as_ref().is_some_and(|s| s.discovering);
-                if chain.is_some() && chain == snap.chain && !discovering {
+                if zone.is_some() && zone == snap.zone && !discovering {
                     received = private_increases(&snap.accounts, &accounts)
                         .into_iter()
                         .map(|(account, delta)| (account, delta, snap.updated_ms))
                         .collect();
                 }
                 snap.chain = chain;
+                snap.zone = zone;
                 snap.accounts = accounts;
                 snap.updated_ms = now_ms();
                 match synced {
@@ -2012,9 +2015,12 @@ impl Service {
             Err(e) => snap.error = Some(format!("{e:#}")),
         }
         let tip = snap.tip;
+        let zone = snap.zone.clone();
         drop(snap);
-        for (account, delta, since) in received {
-            engine.record_private_receipt(&account, delta, since, tip);
+        if let Some(zone) = zone {
+            for (account, delta, since) in received {
+                engine.record_private_receipt(&account, delta, since, tip, &zone);
+            }
         }
         self.emit("snapshot_updated", json!({}));
     }
