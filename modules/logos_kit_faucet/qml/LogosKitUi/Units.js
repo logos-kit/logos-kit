@@ -1,9 +1,15 @@
 .pragma library
-// Amount formatting for LEZ. Native LEZ has NO decimals: balances, fees and
-// faucet drops are integers ("1,000,000,000 LEZ"), so nothing here ever adds
-// a decimal point for native. A fungible token may declare `decimals`; only
-// then is a point placed. Amounts stay decimal strings end to end (u128
-// never becomes a JS number, and QML's V4 has no BigInt).
+// Amount formatting. The native token shows in LGO, the official Logos way
+// (logos-blockchain-ui#69): 1 LGO = 10^9 lepta. Lepta stay the wire format:
+// balances, fees and faucet drops arrive and leave as lepta strings, and only
+// the screen says LGO. A fungible token may declare its own `decimals` (0 if
+// none). Amounts stay decimal strings end to end (u128 never becomes a JS
+// number, and QML's V4 has no BigInt): the point is placed and read by
+// slicing strings. Nothing is rounded and trailing zeros are cut, so one
+// lepta reads "0.000000001", never a "0" that claims the balance is empty.
+
+var SYMBOL = "LGO"
+var DECIMALS = 9
 
 function isDigits(s) { return typeof s === "string" && /^[0-9]+$/.test(s) }
 
@@ -17,18 +23,47 @@ function group(raw) {
     return s + out
 }
 
-// A token amount with its declared decimals (0 for native LEZ).
-function token(raw, decimals) {
-    var s = String(raw)
+// Base units with `decimals` places, ungrouped: what an input field holds
+// ("1500000000", 9 -> "1.5"). Anything but digits comes back as it was.
+function plain(raw, decimals) {
+    var s = raw === undefined || raw === null ? "" : String(raw)
     var d = decimals || 0
-    if (!isDigits(s) || d === 0) return group(s)
+    if (!isDigits(s)) return s
+    s = s.replace(/^0+(?=[0-9])/, "")
+    if (d === 0) return s
     while (s.length <= d) s = "0" + s
-    var whole = s.slice(0, s.length - d), frac = s.slice(s.length - d).replace(/0+$/, "")
-    return group(whole) + (frac ? "." + frac : "")
+    var frac = s.slice(s.length - d).replace(/0+$/, "")
+    return s.slice(0, s.length - d) + (frac ? "." + frac : "")
 }
 
-// "12,480 LEZ"
-function lez(raw) { return group(raw) + " LEZ" }
+// A token amount with its declared decimals, the whole part grouped
+// ("1234500", 3 -> "1,234.5"; 0 decimals: an integer).
+function token(raw, decimals) {
+    var p = plain(raw, decimals), i = p.indexOf(".")
+    return i < 0 ? group(p) : group(p.slice(0, i)) + p.slice(i)
+}
+
+// Lepta -> LGO: "1500000000" -> "1.5", "1" -> "0.000000001"
+function lgo(lepta) { return token(lepta, DECIMALS) }
+
+// Lepta -> "1.5 LGO"
+function lgoLabel(lepta) { return lgo(lepta) + " " + SYMBOL }
+
+// Typed text -> base units, or "" if it isn't an amount: digits, at most one
+// "." and at most `decimals` places after it (more is refused, not rounded).
+// "," only as thousands grouping ("1,000.5"): "1,5" is refused, not guessed.
+function parse(text, decimals) {
+    var t = text === undefined || text === null ? "" : String(text).trim()
+    var m = /^([0-9]*|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.([0-9]*))?$/.exec(t)
+    if (!m) return ""
+    var whole = m[1].replace(/,/g, ""), frac = m[2] || "", d = decimals || 0
+    if ((whole === "" && frac === "") || frac.length > d) return ""
+    while (frac.length < d) frac += "0"
+    return (whole + frac).replace(/^0+(?=[0-9])/, "")
+}
+
+// LGO text -> lepta: "1.5" -> "1500000000", "" if it isn't an amount.
+function lepta(text) { return parse(text, DECIMALS) }
 
 // Compare two non-negative integer strings: -1, 0, 1.
 function cmp(a, b) {

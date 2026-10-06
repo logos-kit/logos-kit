@@ -22,8 +22,9 @@ ActivityRow {
         : tx.route === "unshield" ? "unshield" : "send"
     title: tx.title || "Transaction"
     isPrivate: priv
-    amount: tx.amount ? Units.group(tx.amount) : ""
-    symbol: tx.token ? Fmt.short(tx.token) : "LEZ"
+    // Native amounts are lepta, shown in LGO; tokens have no decimals.
+    amount: !tx.amount ? "" : tx.token ? Units.group(tx.amount) : Units.lgo(tx.amount)
+    symbol: tx.token ? Fmt.short(tx.token) : Units.SYMBOL
     status: tx.lifecycle === "rejected" || tx.lifecycle === "expired" ? "declined"
           : tx.lifecycle === "dropped" || tx.outcome === "failure" ? "failed"
           : tx.lifecycle === "included" ? (tx.outcome === "success" ? "included" : "unconfirmed")

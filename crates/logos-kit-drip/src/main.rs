@@ -14,7 +14,7 @@
 //! - `LK_DRIP_KEY` (required): the treasury's private key, hex.
 //! - `LK_DRIP_SEQUENCER` (default `http://127.0.0.1:3040`).
 //! - `LK_DRIP_DATA` ledger directory (default `./drip-data`).
-//! - `LK_DRIP_AMOUNT` LEZ per drop (default 1 000 000 000; LEZ has no decimals).
+//! - `LK_DRIP_AMOUNT` lepta per drop (default 1 000 000 000 = 1 LGO).
 //! - `LK_DRIP_EVERY_SECS` per-account wait (default 3600).
 //! - `LK_DRIP_IP_PER_HOUR` drops per client IP per hour (default 5).
 //! - `LK_DRIP_MAX_PER_HOUR` drops per hour in total (default 200).

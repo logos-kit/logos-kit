@@ -429,7 +429,7 @@ ColumnLayout {
             text: {
                 var r = iv.fundResult && iv.fundResult.result
                 if (!r) return ""
-                if (r.status === "funded") return "+" + Fmt.amount(r.amount, 0) + " LEZ arrived" + (r.shield ? ". Approve moving it into your private account next." : ".")
+                if (r.status === "funded") return "+" + Fmt.lgo(r.amount) + " arrived" + (r.shield ? ". Approve moving it into your private account next." : ".")
                 if (r.status === "rate_limited") return "You can claim again in " + Fmt.mmss(r.retryAfterSeconds) + "."
                 if (r.status === "outcome_unknown") return "Checking whether funds arrived… " + (r.reason || "")
                 return r.reason || "The faucet declined."
@@ -443,7 +443,7 @@ ColumnLayout {
             Btn { Layout.fillWidth: true; large: true; text: "Cancel"; enabled: iv.job === ""; onClicked: iv.cancel() }
             Btn {
                 objectName: "fundsApprove"
-                Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LEZ"; busy: iv.job !== ""
+                Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LGO"; busy: iv.job !== ""
                 onClicked: {
                     iv.busy = true
                     iv.store.call("requestFunds", { account: iv.p.account, requester: iv.requester }, function (v, e) {

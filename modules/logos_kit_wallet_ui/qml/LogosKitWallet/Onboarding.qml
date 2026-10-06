@@ -260,7 +260,7 @@ Item {
                 }
                 Btn {
                     objectName: "readyFunds"
-                    Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LEZ"
+                    Layout.fillWidth: true; large: true; tone: "ink"; icon: "droplet"; text: "Get test LGO"
                     visible: !!ob.store.state.faucet
                     onClicked: {
                         var pub = null

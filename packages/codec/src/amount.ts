@@ -84,12 +84,17 @@ export function add(a: string, b: string): string {
 
 export const compare = (a: string, b: string): -1 | 0 | 1 => cmp(u128(a), u128(b))
 
-/** `raw` in base units → a decimal string with `decimals` places (trailing zeros cut). */
 function checkDecimals(decimals: number): void {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 38)
     throw new Error(`decimals must be an integer 0-38: ${decimals}`)
 }
 
+/**
+ * `raw` in base units → a decimal string with `decimals` places, by string
+ * slicing (nothing rounded, trailing zeros cut). The native token is lepta on
+ * the wire and LGO on screen: `formatUnits(lepta, 9)` ("1" → "0.000000001",
+ * "1500000000" → "1.5").
+ */
 export function formatUnits(raw: string, decimals: number): string {
   checkDecimals(decimals)
   const v = u128(raw)
@@ -100,7 +105,10 @@ export function formatUnits(raw: string, decimals: number): string {
   return frac ? `${whole}.${frac}` : whole
 }
 
-/** A human amount (`"1.5"`) → base units. Refuses more decimals than the asset has. */
+/**
+ * A human amount (`"1.5"`) → base units. Refuses more decimals than the asset
+ * has (never rounds). LGO text → lepta: `parseUnits("1.5", 9)` → "1500000000".
+ */
 export function parseUnits(s: string, decimals: number): string {
   checkDecimals(decimals)
   const m = /^([0-9]+)(?:\.([0-9]*))?$/.exec(s.trim())

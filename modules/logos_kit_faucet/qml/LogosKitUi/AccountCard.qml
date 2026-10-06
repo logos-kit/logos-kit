@@ -12,7 +12,7 @@ Rectangle {
     property string accountId: ""
     property string name: ""
     property string kind: "public"        // public | private
-    property string balance: ""           // raw integer, native LEZ
+    property string balance: ""           // lepta (native), shown in LGO
     property bool checked: false
     property bool multi: true             // check box (true) or radio (false)
     property bool controlled: false       // the parent owns `checked` (keep its binding)
@@ -32,7 +32,7 @@ Rectangle {
     Accessible.role: multi ? Accessible.CheckBox : Accessible.RadioButton
     Accessible.checkable: true
     Accessible.checked: checked
-    Accessible.name: name + ", " + (kind === "private" ? "private" : "public") + " account" + (balance !== "" ? ", " + Units.lez(balance) : "")
+    Accessible.name: name + ", " + (kind === "private" ? "private" : "public") + " account" + (balance !== "" ? ", " + Units.lgoLabel(balance) : "")
     function flip() {
         var next = multi ? !checked : true
         if (!controlled) checked = next
@@ -65,8 +65,8 @@ Rectangle {
                 Badge { text: ac.kind === "private" ? "Private" : "Public"; tone: ac.kind === "private" ? "private" : "neutral"; dot: false; implicitHeight: 20 }
             }
             Txt {
-                text: ac.balance !== "" && ac.idShown ? Units.lez(ac.balance) + " · " + ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
-                    : ac.balance !== "" ? Units.lez(ac.balance)
+                text: ac.balance !== "" && ac.idShown ? Units.lgoLabel(ac.balance) + " · " + ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
+                    : ac.balance !== "" ? Units.lgoLabel(ac.balance)
                     : ac.idShown ? ac.accountId.slice(0, 6) + "…" + ac.accountId.slice(-4)
                     : ac.kind === "private" ? "Balance stays private" : ""
                 tone: "text2"; num: true; font.pixelSize: 12; Layout.fillWidth: true

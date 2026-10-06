@@ -1,52 +1,22 @@
 .pragma library
+.import "../LogosKitUi/Units.js" as Units
 // Pure helpers for the wallet UI: amounts as decimal strings (u128 never
 // becomes a JS number), short ids, times, and the error catalog
 // (docs/design/ux-spec.md §11). No BigInt, no Intl (QML V4).
 
-// Native LEZ has no decimals on chain; amounts are shown in base units.
-var NATIVE_DECIMALS = 0
-
-function isDigits(s) { return typeof s === "string" && /^[0-9]+$/.test(s) }
-
-// "1234567" -> "1,234,567" (decimals: shift the point first).
+// "1234567" -> "1,234,567" (decimals: shift the point first; Units.js does
+// the string work). "—" while there is no figure yet.
 function amount(raw, decimals) {
     if (raw === null || raw === undefined || raw === "") return "—"
     var s = String(raw)
-    if (!isDigits(s)) return "—"
-    s = s.replace(/^0+(?=\d)/, "")
-    var d = decimals || 0
-    var whole = s, frac = ""
-    if (d > 0) {
-        while (s.length <= d) s = "0" + s
-        whole = s.substring(0, s.length - d)
-        frac = s.substring(s.length - d).replace(/0+$/, "")
-    }
-    var out = ""
-    for (var i = 0; i < whole.length; i++) {
-        if (i > 0 && (whole.length - i) % 3 === 0) out += ","
-        out += whole.charAt(i)
-    }
-    return frac ? out + "." + frac : out
+    if (!Units.isDigits(s)) return "—"
+    return Units.token(s, decimals)
 }
 
-// Keypad text ("12", "12.") -> base units, or "" if not a valid amount.
-function toBase(text, decimals) {
-    var t = String(text || "").replace(/,/g, "")
-    if (!/^[0-9]*\.?[0-9]*$/.test(t) || t === "" || t === ".") return ""
-    var parts = t.split(".")
-    var whole = parts[0] || "0", frac = parts[1] || ""
-    var d = decimals || 0
-    if (frac.length > d) return ""
-    while (frac.length < d) frac += "0"
-    var v = (whole + frac).replace(/^0+(?=\d)/, "")
-    return v === "0" ? "" : v
-}
-
-// Compare decimal strings: -1, 0, 1.
-function cmp(a, b) {
-    a = String(a).replace(/^0+(?=\d)/, ""); b = String(b).replace(/^0+(?=\d)/, "")
-    if (a.length !== b.length) return a.length < b.length ? -1 : 1
-    return a < b ? -1 : a > b ? 1 : 0
+// Native lepta -> "1.5 LGO" ("—" while there is no figure yet).
+function lgo(raw) {
+    var a = amount(raw, Units.DECIMALS)
+    return a === "—" ? a : a + " " + Units.SYMBOL
 }
 
 function short(id) {

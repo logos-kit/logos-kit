@@ -2,6 +2,7 @@ import QtQuick
 import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
 // The approval sheet body for a transaction ticket (ux-spec §6): who asks,
 // what is signed, what it means. Balance change first (Tray review). Every
@@ -89,7 +90,7 @@ ColumnLayout {
     TxSummary {
         Layout.fillWidth: true
         isPrivate: av.isPrivate
-        outflow: av.outNative !== "" ? ({ amount: av.outNative, symbol: "LEZ" })
+        outflow: av.outNative !== "" ? ({ amount: av.outNative, symbol: Units.SYMBOL })
                : av.outToken !== "" ? ({ amount: av.outToken, symbol: av.tokenInfo && av.tokenInfo.name ? av.tokenInfo.name : Fmt.short(av.intent.token), definition: av.intent.token })
                : null
         to: av.recipient === "" ? null : ({
@@ -99,13 +100,18 @@ ColumnLayout {
         })
         // A single transfer's decoded line ("5 to CQTd…") repeats the card
         // above. Only then is it dropped: with more than one outflow, or any
-        // other line of that shape, every line stays.
+        // other line of that shape, every line stays. The engine writes a
+        // native amount in lepta ("1500000000 to CQTd…"); it reads in LGO.
         effects: {
             var lines = av.summary.lines || []
             var plain = /^[0-9][0-9,]* (of token \S+ )?to \S+$/
             var hits = lines.filter(function (l) { return plain.test(l) })
-            if (av.recipient === "" || hits.length !== 1 || (av.summary.outflows || []).length !== 1) return lines
-            return lines.filter(function (l) { return l !== hits[0] })
+            if (av.recipient !== "" && hits.length === 1 && (av.summary.outflows || []).length === 1)
+                lines = lines.filter(function (l) { return l !== hits[0] })
+            return lines.map(function (l) {
+                var m = /^([0-9]+) to (\S+)$/.exec(l)
+                return m ? Units.lgoLabel(m[1]) + " to " + m[2] : l
+            })
         }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
         fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee }) : null

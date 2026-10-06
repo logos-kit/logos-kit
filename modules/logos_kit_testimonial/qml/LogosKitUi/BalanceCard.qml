@@ -9,10 +9,11 @@ import "Units.js" as Units
 ColumnLayout {
     id: bc
     property string label: "Total balance"
-    property string value: "0"
-    property string symbol: "LEZ"
+    property string value: "0"         // base units: lepta for LGO
+    property string symbol: "LGO"
+    property int decimals: Units.DECIMALS   // LGO's 9; a token's own (0 if none)
     property string privateLine: ""
-    // Private buckets as three figures (raw integers; empty hides the row).
+    // Private buckets as three figures (base units; empty hides the row).
     property string privSpendable: ""
     property string privPending: ""
     property string privLocked: ""
@@ -37,7 +38,7 @@ ColumnLayout {
             visible: !bc.loading
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
-            NumberTicker { objectName: bc.tickerName; value: Units.group(bc.value); masked: bc.hidden; pixelSize: bc.width < 380 ? 36 : 44; weight: Font.Bold }
+            NumberTicker { objectName: bc.tickerName; value: Units.token(bc.value, bc.decimals); masked: bc.hidden; pixelSize: bc.width < 380 ? 36 : 44; weight: Font.Bold }
             Txt { text: bc.symbol; tone: "text2"; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
         }
     }
@@ -72,7 +73,7 @@ ColumnLayout {
                     anchors.centerIn: parent
                     spacing: 1
                     Txt { text: modelData[0]; tone: index === 0 ? "priv" : "text2"; font.pixelSize: 11; font.weight: Font.DemiBold }
-                    Txt { text: bc.hidden ? "••••" : Units.group(modelData[1] || "0"); num: true; tone: index === 0 ? "priv" : "text"; font.pixelSize: 15; font.weight: Font.DemiBold }
+                    Txt { text: bc.hidden ? "••••" : Units.token(modelData[1] || "0", bc.decimals); num: true; tone: index === 0 ? "priv" : "text"; font.pixelSize: 15; font.weight: Font.DemiBold }
                 }
             }
         }

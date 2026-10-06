@@ -18,7 +18,7 @@ import "logoskit.js" as SDK
 QtObject {
     id: kit
 
-    property string chain: "lez:preview"
+    property string chain: "lez:testnet"
     /** Switch `chain` to the wallet's network (checked on start, when shown, and every 5 s while visible). */
     property bool followWallet: true
     /** Status polling pauses while false (bind it to your view's visibility). */

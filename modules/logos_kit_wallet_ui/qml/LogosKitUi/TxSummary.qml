@@ -9,11 +9,13 @@ import "Units.js" as Units
 // Ported from 21st.dev cnippet-dev/incident-status (id 24943, stacked
 // status sections) and Porto's action preview (ActionPreview.tsx).
 //
-// outflow:  { amount: "1000", symbol: "LEZ", definition: "" }   (raw integer)
+// outflow:  { amount: "1500000000", symbol: "LGO", definition: "" }   (base units:
+//            lepta for the native token, shown in LGO; a token's own, with
+//            its `decimals` if it declares any)
 // to:       { name?: "Savings", address: "3ksne…", kind: "public"|"private"|"program" }
 // effects:  ["Posts a testimonial record owned by …", …]
 // authority:["Mint authority used", …]          (warnings)
-// fee:      { cap: "134400000", payer?: "Main" }
+// fee:      { cap: "134400000", payer?: "Main" }   (lepta)
 // program:  { name, status: "verified"|"claimed"|"unknown", immutable: bool }
 ColumnLayout {
     id: tx
@@ -24,6 +26,8 @@ ColumnLayout {
     property var fee: null
     property var program: null
     property bool isPrivate: false
+    readonly property string outFigure: !outflow ? ""
+        : outflow.definition ? Units.token(outflow.amount, outflow.decimals || 0) : Units.lgo(outflow.amount)
     spacing: 12
 
     // 1. What leaves, and where it goes.
@@ -48,9 +52,9 @@ ColumnLayout {
                     RowLayout {
                         spacing: 6
                         Txt {
-                            text: tx.outflow ? Units.group(tx.outflow.amount) : ""
+                            text: tx.outFigure
                             num: true; font.pixelSize: 26; font.weight: Font.Bold
-                            Accessible.name: tx.outflow ? Units.group(tx.outflow.amount) + " " + tx.outflow.symbol : ""
+                            Accessible.name: tx.outflow ? tx.outFigure + " " + tx.outflow.symbol : ""
                         }
                         Txt { text: tx.outflow ? tx.outflow.symbol : ""; tone: "text2"; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
                     }
@@ -113,7 +117,7 @@ ColumnLayout {
         InfoRow {
             visible: !!tx.fee
             label: "Network fee (max)"
-            value: tx.fee ? "≤ " + Units.lez(tx.fee.cap) + (tx.fee.payer ? " · paid by " + tx.fee.payer : "") : ""
+            value: tx.fee ? "≤ " + Units.lgoLabel(tx.fee.cap) + (tx.fee.payer ? " · paid by " + tx.fee.payer : "") : ""
         }
         Item {
             visible: !!tx.program
