@@ -14,7 +14,7 @@
 //! the block under the cursor still has the same hash; if not, the chain was
 //! reset (testnets are) and the consumer starts over.
 
-use anyhow::{Context as _, Result};
+use anyhow::{ensure, Context as _, Result};
 use common::block::Block;
 use sequencer_service_rpc::{RpcClient as _, SequencerClient};
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ pub enum Step {
     Read { from: u64, to: u64, tip: u64 },
     /// Nothing new.
     UpToDate { tip: u64 },
-    /// The block under the cursor is gone or different: start over from 0.
+    /// The block under the cursor is different: start over from 0.
     Reset { tip: u64 },
 }
 
@@ -92,7 +92,13 @@ impl<'a> Scanner<'a> {
         mut visit: impl FnMut(&Block),
     ) -> Result<(Cursor, Step)> {
         let tip = self.tip().await?;
-        if cursor.block > tip || !self.still_there(cursor).await? {
+        // A node behind us (a lagging replica, or a reset chain still
+        // shorter than what we read) means wait; only a different block
+        // under the cursor means the chain was reset.
+        if cursor.block > tip {
+            return Ok((cursor.clone(), Step::UpToDate { tip }));
+        }
+        if !self.still_there(cursor).await? {
             return Ok((Cursor::default(), Step::Reset { tip }));
         }
         if cursor.block == tip {
@@ -113,10 +119,29 @@ impl<'a> Scanner<'a> {
             blocks.extend(chunk);
             start = end + 1;
         }
-        for block in &blocks {
-            visit(block);
+        // Every block, in order, each on top of the one before: a short
+        // reply is retried next time (never skipped), a fork is a reset.
+        ensure!(
+            blocks.len() as u64 == to - from + 1,
+            "blocks {from}..={to}: the node returned {} of {}",
+            blocks.len(),
+            to - from + 1
+        );
+        for (expected, block) in (from..=to).zip(&blocks) {
+            ensure!(
+                block.header.block_id == expected,
+                "asked for block {expected}, got {}",
+                block.header.block_id
+            );
+            if last_hash
+                .as_deref()
+                .is_some_and(|h| h != block.header.prev_block_hash.to_string())
+            {
+                return Ok((Cursor::default(), Step::Reset { tip }));
+            }
             last_hash = Some(block.header.hash.to_string());
         }
+        blocks.iter().for_each(&mut visit);
         Ok((Cursor::at(to, last_hash), Step::Read { from, to, tip }))
     }
 
@@ -164,7 +189,8 @@ impl<'a> Scanner<'a> {
             .get_block(cursor.block)
             .await
             .with_context(|| format!("block {}", cursor.block))?;
-        Ok(block.is_some_and(|b| b.header.hash.to_string() == *hash))
+        // A node without the block can't say it changed.
+        Ok(block.is_none_or(|b| b.header.hash.to_string() == *hash))
     }
 }
 

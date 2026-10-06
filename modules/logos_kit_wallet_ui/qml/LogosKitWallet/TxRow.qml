@@ -23,14 +23,17 @@ ActivityRow {
         : tx.route === "shield" ? "shield"
         : tx.route === "unshield" ? "unshield" : "send"
     // A token nobody vouched for stays nameless in the feed (ux-tokens-nfts
-    // §3.2): its name could be a lure. Its own page shows the details.
+    // §3.2), whichever way it went: its name could be a lure. Its own page
+    // shows the details.
     readonly property var tok: tx.token && store ? store.tokenAnywhere(tx.token) : null
     readonly property bool untrusted: !!tx.token && (!tok || (tok.tier !== "verified" && tok.tier !== "added"))
-    title: tx.incoming && untrusted ? "Received an unknown token" : (tx.title || "Transaction")
+    title: untrusted && tx.incoming ? "Received an unknown token"
+         : untrusted && kind === "send" ? "Sent an unknown token"
+         : (tx.title || "Transaction")
     isPrivate: priv
     // Native amounts are lepta, shown in LGO; tokens have no decimals.
     amount: !tx.amount || (tx.incoming && untrusted) ? "" : tx.token ? (tok ? store.tokenAmount(tok, tx.amount) : Units.group(tx.amount)) : Units.lgo(tx.amount)
-    symbol: !tx.token ? Units.SYMBOL : tx.incoming && untrusted ? "" : tok ? store.tokenLabel(tok) : store ? store.tokenName(tx.token) : Fmt.short(tx.token)
+    symbol: !tx.token ? Units.SYMBOL : untrusted ? (tx.incoming ? "" : Fmt.short(tx.token)) : tok ? store.tokenLabel(tok) : store ? store.tokenName(tx.token) : Fmt.short(tx.token)
     status: tx.lifecycle === "rejected" || tx.lifecycle === "expired" ? "declined"
           : tx.lifecycle === "dropped" || tx.outcome === "failure" ? "failed"
           : tx.lifecycle === "included" ? (tx.outcome === "success" ? "included" : "unconfirmed")

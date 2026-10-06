@@ -98,9 +98,10 @@ impl Session {
         }
     }
 
-    /// A definition's name, read once per session (definitions can't change).
+    /// A definition's name, read once per session and network (definitions
+    /// can't change; the same address on another network is another token).
     pub async fn cached_definition_name(&mut self, definition: AccountId) -> Option<String> {
-        let key = definition.to_string();
+        let key = format!("{}:{definition}", self.zone().id);
         if let Some(n) = self.token_names.get(&key) {
             return n.clone();
         }
@@ -414,7 +415,7 @@ impl Session {
         let (name, total_supply, metadata_id) = def;
         let definition = id.to_string();
         self.token_names
-            .insert(definition.clone(), Some(name.clone()));
+            .insert(format!("{}:{definition}", self.zone().id), Some(name.clone()));
         let info = self.token_info(&definition, Some(&name));
         let chain = self.zone().chain.clone();
         let trusted = matches!(

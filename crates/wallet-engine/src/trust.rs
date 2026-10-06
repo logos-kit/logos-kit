@@ -181,6 +181,11 @@ const LINKS: &[&str] = &[
 const PROTECTED: &[&str] = &["LGO", "LOGOS", "Logos"];
 
 /// Why `name` looks like spam on `chain`, if it does.
+///
+/// Matching runs on the name as people see it: compatibility forms folded
+/// (fullwidth letters, "․" and "．" are plain ASCII), case folded, and
+/// confusables mapped (UTS-39 skeletons: Cyrillic "а" is "a"), so
+/// "ｃｌａｉｍ", "Clаim" and "L.G.O" don't slip past.
 pub fn spam(chain: &str, name: &str) -> Option<SpamReason> {
     if name.chars().any(hidden_char) {
         return Some(SpamReason::HiddenCharacters);
@@ -188,17 +193,25 @@ pub fn spam(chain: &str, name: &str) -> Option<SpamReason> {
     if name.chars().count() > 32 {
         return Some(SpamReason::TooLong);
     }
-    let lower = name.to_lowercase();
-    if LINKS.iter().any(|l| lower.contains(l)) {
+    let seen = visible(name);
+    let skel = raw_skeleton(&seen);
+    if LINKS
+        .iter()
+        .any(|l| seen.contains(l) || skel.contains(&raw_skeleton(l)))
+    {
         return Some(SpamReason::Link);
     }
-    if lower
+    let bait: Vec<String> = BAIT.iter().map(|b| raw_skeleton(b)).collect();
+    if skel
         .split(|c: char| !c.is_alphanumeric())
-        .any(|w| BAIT.contains(&w))
+        .any(|w| bait.iter().any(|b| b == w))
     {
         return Some(SpamReason::Bait);
     }
-    let own = skeleton(name);
+    let own = letters(name);
+    if own.is_empty() {
+        return None;
+    }
     let listed = listed(chain);
     let names = PROTECTED.iter().map(|p| (*p).to_owned()).chain(
         listed
@@ -206,31 +219,69 @@ pub fn spam(chain: &str, name: &str) -> Option<SpamReason> {
             .flat_map(|t| [t.name.clone(), t.symbol.clone()]),
     );
     for other in names {
-        if skeleton(&other) == own {
+        if letters(&other) == own {
             return Some(SpamReason::Lookalike { of: other });
         }
     }
     None
 }
 
-/// UTS-39 skeleton, case-folded: "LKT", "lkt" and "ⅬКТ" compare equal.
-fn skeleton(s: &str) -> String {
-    let folded: String = unicode_security::confusable_detection::skeleton(s).collect();
-    let folded: String =
-        unicode_security::confusable_detection::skeleton(&folded.to_lowercase()).collect();
-    folded.chars().filter(|c| !c.is_whitespace()).collect()
+/// NFKC, lower case, and the dots NFKC leaves alone ("。", "｡") as ".".
+fn visible(s: &str) -> String {
+    use unicode_normalization::UnicodeNormalization as _;
+    s.nfkc()
+        .collect::<String>()
+        .to_lowercase()
+        .replace(['\u{3002}', '\u{FF61}'], ".")
 }
 
-/// Control characters, bidi overrides and isolates, zero-width characters.
+/// UTS-39 skeleton of `s`, case folded.
+fn raw_skeleton(s: &str) -> String {
+    let folded: String = unicode_security::confusable_detection::skeleton(s).collect();
+    unicode_security::confusable_detection::skeleton(&folded.to_lowercase()).collect()
+}
+
+/// A name's letters as a lookalike compares them: "LKT", "lkt", "ⅬКТ",
+/// "L.K.T" and "LKT2" are the same.
+fn letters(s: &str) -> String {
+    raw_skeleton(&visible(s))
+        .chars()
+        .filter(|c| c.is_alphabetic())
+        .collect()
+}
+
+/// Characters that draw nothing or reorder text: controls (Cc), format
+/// characters (Cf: bidi marks, zero-width, soft hyphen, tags), line and
+/// paragraph separators, and the other default-ignorable or blank-looking
+/// ones (Hangul fillers, variation selectors, braille blank).
 fn hidden_char(c: char) -> bool {
     c.is_control()
         || matches!(
             c,
-            '\u{200B}'..='\u{200F}'
-                | '\u{202A}'..='\u{202E}'
-                | '\u{2060}'..='\u{2064}'
-                | '\u{2066}'..='\u{2069}'
+            '\u{00AD}'
+                | '\u{034F}'
+                | '\u{061C}'
+                | '\u{0600}'..='\u{0605}'
+                | '\u{06DD}'
+                | '\u{070F}'
+                | '\u{08E2}'
+                | '\u{115F}'..='\u{1160}'
+                | '\u{17B4}'..='\u{17B5}'
+                | '\u{180B}'..='\u{180F}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{2028}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{2800}'
+                | '\u{3164}'
+                | '\u{FE00}'..='\u{FE0F}'
                 | '\u{FEFF}'
+                | '\u{FFA0}'
+                | '\u{FFF0}'..='\u{FFFB}'
+                | '\u{110BD}'
+                | '\u{110CD}'
+                | '\u{1BCA0}'..='\u{1BCA3}'
+                | '\u{1D173}'..='\u{1D17A}'
+                | '\u{E0000}'..='\u{E0FFF}'
         )
 }
 
@@ -265,6 +316,26 @@ mod tests {
             Some(SpamReason::Lookalike { of: "LGO".into() })
         );
         assert_eq!(spam(T, "Payroll Token"), None);
+        assert_eq!(spam(T, "Logos Club Points"), None, "a name may contain Logos");
+    }
+
+    #[test]
+    fn spam_rules_see_through_disguises() {
+        for hidden in ["LGO\u{3164}", "\u{061C}Pay", "Pay\u{00AD}roll", "LGO\u{FE0F}", "Pay\u{E0041}", "LGO\u{2800}"] {
+            assert_eq!(spam(T, hidden), Some(SpamReason::HiddenCharacters), "{hidden:?}");
+        }
+        assert_eq!(
+            spam(T, "\u{FF43}\u{FF4C}\u{FF41}\u{FF49}\u{FF4D} at evil\u{FF0E}\u{FF58}\u{FF59}\u{FF5A}"),
+            Some(SpamReason::Link),
+            "fullwidth letters and dot"
+        );
+        assert_eq!(spam(T, "evil\u{3002}xyz"), Some(SpamReason::Link), "ideographic full stop");
+        assert_eq!(spam(T, "Cl\u{0430}im now"), Some(SpamReason::Bait), "Cyrillic a");
+        assert_eq!(spam(T, "\u{FF26}\u{FF32}\u{FF25}\u{FF25} coins"), Some(SpamReason::Bait), "fullwidth FREE");
+        for lookalike in ["LGO.", "L.G.O", "L G O", "LG0"] {
+            assert_eq!(spam(T, lookalike), Some(SpamReason::Lookalike { of: "LGO".into() }), "{lookalike:?}");
+        }
+        assert_eq!(spam(T, "LOGOS2"), Some(SpamReason::Lookalike { of: "LOGOS".into() }));
     }
 
     #[test]

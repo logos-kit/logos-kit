@@ -64,7 +64,7 @@ ColumnLayout {
     property bool lookalikeOk: false
     readonly property bool checkFits: !!check && check.to === to.trim()
     readonly property bool toBlocked: checkFits && (check.kind === "token" || check.kind === "invalid")
-    readonly property bool needsLookalikeOk: checkFits && check.kind === "address" && !!check.lookalike
+    readonly property bool needsLookalikeOk: checkFits && ((check.kind === "address" && !!check.lookalike) || check.kind === "holder")
     readonly property bool toValid: toFormat && !toBlocked && (!needsLookalikeOk || lookalikeOk)
     onToChanged: { lookalikeOk = false; checkTimer.restart() }
     property Timer checkTimer: Timer {
@@ -202,14 +202,15 @@ ColumnLayout {
             Layout.fillWidth: true
             visible: sf.needsLookalikeOk
             tone: "warn"
-            text: sf.needsLookalikeOk ? "This looks like " + Fmt.short(sf.check.lookalike) + ", which you've sent to before, but it's a different address. Scammers send tiny payments from lookalike addresses so you copy the wrong one." : ""
+            text: !sf.needsLookalikeOk ? "" : sf.check.kind === "holder" ? sf.check.message
+                  : "This looks like " + Fmt.short(sf.check.lookalike) + ", which you've sent to before, but it's a different address. Scammers send tiny payments from lookalike addresses so you copy the wrong one."
         }
         CheckRow {
             objectName: "sendLookalikeOk"
             controlled: true
             Layout.fillWidth: true
             visible: sf.needsLookalikeOk
-            text: "I checked every character of the address"
+            text: sf.checkFits && sf.check.kind === "holder" ? "I'm sure this is their wallet address" : "I checked every character of the address"
             checked: sf.lookalikeOk
             onToggled: function (c) { sf.lookalikeOk = c }
         }

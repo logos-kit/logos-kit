@@ -42,6 +42,9 @@ pub const APP_COOLDOWN: Duration = Duration::from_secs(30);
 const MAX_STATUSES: usize = 640;
 /// Finished statuses kept on disk per zone (the activity history).
 const MAX_HISTORY: usize = 500;
+/// How long after landing our transfer into a private account may still
+/// explain a rise in its balance (private syncs lag inclusion).
+const OWN_CREDIT_WINDOW_MS: u64 = 30 * 60 * 1000;
 
 /// A finished status as the history vault stores it: the API form plus who
 /// asked (never sent to apps, so `TxStatus` skips it).
@@ -277,6 +280,9 @@ struct State {
     history_unreadable: bool,
     /// Transactions the faucet made for us, so the incoming scan labels them.
     faucet_hashes: std::collections::HashSet<String>,
+    /// Our transfers into private accounts that a balance rise has already
+    /// accounted for (`record_private_receipt`).
+    credited: std::collections::HashSet<String>,
 }
 
 /// A token found in one of our accounts by the incoming scan.
@@ -529,7 +535,7 @@ impl Engine {
         session.save_history(&record)
     }
 
-    /// A private account's LGO balance rose by `delta` since `since_ms`.
+    /// A private account's LGO balance rose by `delta` since the last snapshot.
     /// Whatever our own sends and shields into it explain is ours; the rest
     /// arrived from someone else, privately (no sender, no transaction we
     /// can name). Our transfers still in flight count as ours, so a shield
@@ -538,7 +544,6 @@ impl Engine {
         &self,
         account: &str,
         delta: u128,
-        since_ms: u64,
         block: Option<u64>,
         zone: &str,
     ) {
@@ -547,9 +552,13 @@ impl Engine {
         if state.zone_id != zone {
             return;
         }
-        // Ours: sent and maybe landed (submitted), or landed since the last
-        // snapshot. A transfer still proving can't have moved the balance.
-        let own: u128 = state
+        // Ours: sent and maybe landed (submitted), or landed recently and not
+        // yet matched to a rise. Private balances can lag their transfer's
+        // inclusion by a sync or two, so landing time alone can't tell.
+        let now = now_ms();
+        let state = &mut *state;
+        state.credited.retain(|h| state.statuses.contains_key(h));
+        let mut ours: Vec<(bool, u64, String, u128)> = state
             .statuses
             .values()
             .filter(|s| {
@@ -557,17 +566,35 @@ impl Engine {
                     && s.zone == zone
                     && s.to.as_deref() == Some(account)
                     && s.token.is_none()
+                    && !state.credited.contains(&s.handle)
             })
             .filter(|s| {
                 s.lifecycle == Lifecycle::Submitted
-                    || (s.lifecycle == Lifecycle::Included && s.phase_started_ms >= since_ms)
+                    || (s.lifecycle == Lifecycle::Included
+                        && now.saturating_sub(s.phase_started_ms) < OWN_CREDIT_WINDOW_MS)
             })
-            .filter_map(|s| s.amount.as_deref().and_then(|a| a.parse::<u128>().ok()))
-            .sum();
-        let Some(rest) = delta.checked_sub(own).filter(|r| *r > 0) else {
+            .filter_map(|s| {
+                let amount = s.amount.as_deref()?.parse::<u128>().ok()?;
+                Some((s.lifecycle != Lifecycle::Included, s.phase_started_ms, s.handle.clone(), amount))
+            })
+            .collect();
+        // Landed first, oldest first. A landed one explains the rise even
+        // when the account also paid something out meanwhile (the rise is
+        // net); one still in flight only when it fits whole.
+        ours.sort();
+        let mut rest = delta;
+        for (in_flight, _, handle, amount) in ours {
+            if rest == 0 {
+                break;
+            }
+            if !in_flight || amount <= rest {
+                rest = rest.saturating_sub(amount);
+                state.credited.insert(handle);
+            }
+        }
+        if rest == 0 {
             return;
-        };
-        let now = now_ms();
+        }
         let Some(chain) = state.chain.clone() else {
             return;
         };
@@ -642,27 +669,35 @@ impl Engine {
         if state.epoch != epoch || state.cursor != cursor {
             return Ok(0);
         }
-        if let chain_index::Step::Reset { tip } = step {
-            // A reset chain: what we read before is gone; read the new one
-            // from its start (it's short).
-            let _ = tip;
+        if matches!(step, chain_index::Step::Reset { .. }) {
+            // A reset chain: what we read from the old one is gone (its
+            // tokens and payments to us); read the new one from its start.
+            let zone_id = state.zone_id.clone();
+            state.seen_tokens.clear();
+            state
+                .statuses
+                .retain(|_, s| !(s.incoming && s.zone == zone_id));
             state.cursor = chain_index::Cursor::default();
             state.history_dirty = true;
             return Ok(0);
         }
         state.scan_behind = step.behind();
+        let mut changed = next != state.cursor;
         let mut added = 0;
         for (i, inc) in found.into_iter().enumerate() {
-            if let Some(def) = &inc.token {
-                state
-                    .seen_tokens
-                    .entry(def.clone())
-                    .or_insert_with(|| SeenToken {
+            if let Some(def) = &inc.token
+                && !state.seen_tokens.contains_key(def)
+            {
+                state.seen_tokens.insert(
+                    def.clone(),
+                    SeenToken {
                         first_block: inc.block,
                         account: inc.account.clone(),
                         holder: inc.holder.clone(),
                         from: inc.from.clone(),
-                    });
+                    },
+                );
+                changed = true;
             }
             // Our own send, or this payment found before (a transaction
             // paying two of our accounts makes two rows).
@@ -700,7 +735,10 @@ impl Engine {
             added += 1;
         }
         state.cursor = next;
-        state.history_dirty = true;
+        // Nothing new: don't rewrite the history vault on every sync.
+        if changed || added > 0 {
+            state.history_dirty = true;
+        }
         Ok(added)
     }
 
@@ -1085,7 +1123,10 @@ impl Engine {
         let public = via.as_deref().unwrap_or(account);
         let id = crate::decode::account_id(public)?;
         let outcome = faucet.fund(id, request_key).await?;
-        if let FundOutcome::Funded { tx_hash, .. } = &outcome {
+        // (A drip that settled after a restart knows no hash.)
+        if let FundOutcome::Funded { tx_hash, .. } = &outcome
+            && !tx_hash.is_empty()
+        {
             let key = hash_key(tx_hash);
             let mut state = self.state();
             // The scan may have found the payment while the drip waited for

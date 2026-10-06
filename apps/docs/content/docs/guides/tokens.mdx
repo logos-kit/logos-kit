@@ -65,7 +65,9 @@ kit.api.getWalletTokens(account).then(function (r) {
 
 The same grants as `getWalletBalance` apply. Spam and tokens the user hid are
 never listed. `tier` is `verified`, `added` or `unknown`; treat `unknown` the
-way the wallet does (no images, a warning). `amount` is in base units: format
+way the wallet does (no images, a warning). A token's `name` is whatever its
+creator typed: show it as plain text (QML `textFormat: Text.PlainText`), never
+as rich text or a link. `amount` is in base units: format
 it with `kit.sdk.formatUnits(t.amount, t.decimals)` when `decimals` is there,
 as whole units otherwise.
 

@@ -80,6 +80,10 @@ export const TokenTier = Type.Union([
 export const TokenEntry = Type.Object({
   /** The token's definition account: its identity. */
   definition: AccountId,
+  /**
+   * Chosen by the token's creator and not checked (for `unknown` tokens,
+   * anyone): show it as plain text, never as rich text, HTML or a link.
+   */
   name: Type.Optional(Type.String({ maxLength: 64 })),
   symbol: Type.Optional(Type.String({ maxLength: 11 })),
   /** Display decimals; absent when unknown (show whole units). */

@@ -1101,7 +1101,7 @@ async fn prepare_transfer(
         if let Some(holder) = lands_in {
             summary
                 .lines
-                .push(lands_in_line(core, holder, programs::token_account_id()).await);
+                .extend(lands_in_lines(core, r.to_id, holder, programs::token_account_id()).await);
         }
         Built {
             route: Some(Route::Public),
@@ -1423,17 +1423,44 @@ pub(crate) async fn recipient_holder(
     Ok(crate::tokens::ata_of(to, def))
 }
 
-/// The review line that says where the tokens land.
-async fn lands_in_line(core: &WalletCore, holder: AccountId, token_program: AccountId) -> String {
+/// The review lines that say where the tokens land, and a warning when the
+/// recipient may itself be a token account.
+async fn lands_in_lines(
+    core: &WalletCore,
+    to: AccountId,
+    holder: AccountId,
+    token_program: AccountId,
+) -> Vec<String> {
     let exists = own_shard(core, holder, false, token_program)
         .await
         .is_ok_and(|b| !b.is_empty());
     let short = decode::shorten_ids(&holder.to_string());
-    if exists {
+    let mut lines = vec![if exists {
         format!("Arrives in the recipient's token account {short}")
     } else {
         format!("Creates the recipient's token account {short} for this token")
+    }];
+    if maybe_token_account(core, to).await {
+        lines.push(format!(
+            "Check the recipient: {} holds a token and has never signed, so it may be someone's token account. Tokens sent to it would be stuck; ask for their wallet address.",
+            decode::shorten_ids(&to.to_string())
+        ));
     }
+    lines
+}
+
+/// `id` holds a token in its own slot and has never signed: it may be
+/// someone's token account (an ATA, which no key controls) pasted as a
+/// recipient. Anything sent to it, or to its own token accounts, is stuck.
+/// (A fresh key account that was sent a token looks the same: a warning,
+/// not a refusal.)
+pub(crate) async fn maybe_token_account(core: &WalletCore, id: AccountId) -> bool {
+    let holds = own_shard(core, id, false, programs::token_account_id())
+        .await
+        .ok()
+        .and_then(|b| holding(&b).ok().flatten())
+        .is_some();
+    holds && nonce_of(core, id).await.is_ok_and(|n| n == 0)
 }
 
 async fn prepare_ata_transfer(
@@ -1448,13 +1475,25 @@ async fn prepare_ata_transfer(
     let ata_program = programs::ata_account_id();
     let ata = crate::tokens::ata_of(owner, def);
     let held = holding(&own_shard(core, ata, false, token_program).await?)?
-        .filter(|h| h.definition_id() == def)
-        .with_context(|| format!("{owner} holds no token {def}"))?;
-    let from_balance = holding_amount(&held);
-    ensure!(
-        from_balance >= amount,
-        "Not enough of this token: {owner} holds {from_balance}."
-    );
+        .filter(|h| h.definition_id() == def);
+    let from_balance = held.as_ref().map_or(0, holding_amount);
+    if from_balance < amount {
+        // Its own slot may hold some too (the caller found too little there).
+        let own = holding(&own_shard(core, owner, false, token_program).await?)?
+            .filter(|h| h.definition_id() == def)
+            .map_or(0, |h| holding_amount(&h));
+        if own > 0 && from_balance > 0 {
+            bail!(
+                "{owner} holds this token in two places: {own} in the account itself and {from_balance} in its token account. One send comes from one of them, so send at most {}.",
+                own.max(from_balance)
+            );
+        }
+        bail!(
+            "Not enough of this token: {owner} holds {}.",
+            own.max(from_balance)
+        );
+    }
+    let held = held.with_context(|| format!("{owner} holds no token {def}"))?;
     // Tokens land in the recipient's own token account for this token (its
     // ATA), created on arrival; NFTs keep their own route (stage N2).
     let lands_in = recipient_holder(core, to, def, held.kind()).await?;
@@ -1499,7 +1538,7 @@ async fn prepare_ata_transfer(
     if lands_in != to {
         summary
             .lines
-            .push(lands_in_line(core, lands_in, token_program).await);
+            .extend(lands_in_lines(core, to, lands_in, token_program).await);
     }
     Ok(Built {
         route: Some(Route::Public),

@@ -9240,6 +9240,7 @@ dependencies = [
  "token_core",
  "token_program",
  "tokio",
+ "unicode-normalization",
  "unicode-security",
  "ureq",
  "wallet",

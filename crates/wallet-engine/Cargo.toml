@@ -45,6 +45,7 @@ ureq.workspace = true
 hex = "0.4.3"
 png = "0.18.1"
 chain-index = { path = "../chain-index" }
+unicode-normalization = "0.1.25"
 unicode-security = "0.1.2"
 
 [dev-dependencies]

@@ -2116,6 +2116,11 @@ impl Service {
             if !matches!(tier, "verified" | "added" | "unknown") || h["kind"] != "fungible" {
                 continue;
             }
+            // Its name couldn't be read, so the spam rules haven't seen it
+            // yet: wait for a sync that reads it.
+            if tier == "unknown" && h["name"].is_null() {
+                continue;
+            }
             let Some(def) = h["definition"].as_str().map(str::to_owned) else {
                 continue;
             };
@@ -2201,10 +2206,7 @@ impl Service {
                 // balances rise then as old notes are found, not as new ones arrive.
                 let discovering = status.as_ref().is_some_and(|s| s.discovering);
                 if zone.is_some() && zone == snap.zone && !discovering {
-                    received = private_increases(&snap.accounts, &accounts)
-                        .into_iter()
-                        .map(|(account, delta)| (account, delta, snap.updated_ms))
-                        .collect();
+                    received = private_increases(&snap.accounts, &accounts);
                 }
                 snap.chain = chain;
                 snap.zone = zone;
@@ -2229,8 +2231,8 @@ impl Service {
         let zone = snap.zone.clone();
         drop(snap);
         if let Some(zone) = zone {
-            for (account, delta, since) in received {
-                engine.record_private_receipt(&account, delta, since, tip, &zone);
+            for (account, delta) in received {
+                engine.record_private_receipt(&account, delta, tip, &zone);
             }
         }
         self.emit("snapshot_updated", json!({}));
@@ -2537,6 +2539,14 @@ async fn check_recipient(s: &mut Session, to: &str, past: &[String]) -> Result<V
             "kind": "token",
             "name": name,
             "message": "That's a token's ID, not a person's address.",
+        }));
+    }
+    if let Some(core) = s.core()
+        && crate::tx::maybe_token_account(core, id).await
+    {
+        return Ok(json!({
+            "kind": "holder",
+            "message": "This address holds a token and has never signed, so it may be someone's token account. Anything sent to a token account is stuck. Ask for their wallet address.",
         }));
     }
     let lookalike = past.iter().find(|p| {
