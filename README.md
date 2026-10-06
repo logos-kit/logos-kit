@@ -68,7 +68,7 @@ nix build .#lgx-portable                    # → result/*.lgx, install it from 
 | For | You need |
 |---|---|
 | The wallet | Logos Basecamp on macOS (Apple silicon) or Linux (x86-64, arm64) |
-| Private transactions | About 5–8 minutes per local proof. Measured on an M1 Pro with 16 GB: 267–337 s for a shield, 469 s fully private, 4.3 GB peak resident memory (about 10 GB counting compressed and swapped pages). Low-memory proving (Settings, or `--low-memory`) needs about 2 GB and takes longer |
+| Private transactions | About 5–8 minutes per local proof. Measured on an M1 Pro with 16 GB: 267–337 s for a shield, 469 s fully private, 4.3 GB peak resident memory (about 10 GB counting compressed and swapped pages). Low-memory proving (Settings, or `--low-memory`) needs about half the memory and takes longer |
 | The CLI | Rust 1.98.1 (`rustup` reads it from `rust-toolchain.toml`) and git; Xcode command-line tools on macOS; `clang`, `libclang-dev`, `cmake`, `pkg-config` and `libssl-dev` on Linux |
 | Building apps and modules | [Nix](https://nixos.org/download) with flakes |
 | Rebuilding a program to verify it | Docker |

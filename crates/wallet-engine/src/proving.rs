@@ -20,15 +20,16 @@ use anyhow::Result;
 
 use crate::policy::{Code, Denied};
 
-/// Free memory a default proof should have (peak measured 4.3 GB resident).
+/// Free memory a default proof should have (M1 Pro, measured: 3.3–4.3 GB
+/// resident, ~9.9 GB footprint counting compressed and swapped pages).
 pub const NEEDS_DEFAULT: u64 = 4_600 * MIB;
 /// Below this a default proof is refused.
 pub const FLOOR_DEFAULT: u64 = 2_500 * MIB;
-/// Free memory a low-memory proof should have (2^18 segments; budget, see
-/// docs/dev/perf.md for the measured peak).
-pub const NEEDS_LOW_MEMORY: u64 = 2_000 * MIB;
+/// Free memory a low-memory proof should have (2^18 segments, measured:
+/// ~3.0 GB resident, ~5.5 GB footprint; docs/dev/perf.md).
+pub const NEEDS_LOW_MEMORY: u64 = 3_000 * MIB;
 /// Below this a low-memory proof is refused.
-pub const FLOOR_LOW_MEMORY: u64 = 1_000 * MIB;
+pub const FLOOR_LOW_MEMORY: u64 = 1_500 * MIB;
 /// Segment size in low-memory mode.
 pub const LOW_MEMORY_PO2: u32 = 18;
 

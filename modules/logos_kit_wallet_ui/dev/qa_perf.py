@@ -3,16 +3,19 @@
 # Send review (engine build vs. the sheet appearing). Prints one PERF line per
 # figure; run it on an idle machine.
 #
-#   HOME=$(mktemp -d) QT_QPA_PLATFORM=offscreen uv run --python .qt/q692/bin/python \
+#   [QA_ZONE=lez-local] HOME=$(mktemp -d) QT_QPA_PLATFORM=offscreen uv run --python .qt/q692/bin/python \
 #     modules/logos_kit_wallet_ui/dev/harness.py --script modules/logos_kit_wallet_ui/dev/qa_perf.py
-import statistics, time
+import os, statistics, time
 
 PW = "correct horse 42"
 e = d.engine
+# QA_ZONE=lez-local measures against a local sequencer (e2e/standalone.sh).
+ZONE = os.environ.get("QA_ZONE", "lez-testnet")
+e.call("ui_setPrefs", {"zone": ZONE})
 
 
 def perf(name, ms):
-    print(f"PERF {name} {ms:.0f} ms", flush=True)
+    print(f"PERF {name} {ms:.1f} ms", flush=True)
 
 
 def ms_since(t):
@@ -43,8 +46,11 @@ pub = [a for a in created["accounts"] if a["kind"] == "public"][0]["accountId"]
 priv = [a for a in created["accounts"] if a["kind"] == "private"][0]["accountId"]
 t = time.perf_counter()
 d.wait(lambda: e.call("ui_snapshot", {})["value"].get("tip"), 180, "first sync")
-perf("first sync to the testnet tip", ms_since(t))
+perf(f"first sync to the tip ({ZONE})", ms_since(t))
 d.wait(lambda: d.find("balance") is not None, 60, "home")
+job = e.call("ui_requestFunds", {"account": pub})["value"]["job"]
+d.wait(lambda: e.call("ui_fundStatus", {"job": job})["value"]["state"] != "running", 300, "faucet")
+d.wait(lambda: any(a["accountId"] == pub and a.get("native") not in (None, "0") for a in e.call("ui_snapshot", {})["value"]["accounts"]), 300, "funded")
 d.pump(2000)
 
 # Account switch: until the header shows the other account.

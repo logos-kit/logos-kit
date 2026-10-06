@@ -174,7 +174,7 @@ ColumnLayout {
         objectName: "lowMemoryRow"
         glyph: "zap"
         title: "Low-memory proving"
-        description: "Private transactions use about 2 GB of memory instead of 4.6 GB, and take longer."
+        description: "Private transactions use about half the memory, and can take longer."
         chevron: false
         Toggle {
             objectName: "lowMemoryToggle"
