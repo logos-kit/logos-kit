@@ -16,7 +16,7 @@
 
 use anyhow::{Context as _, Result, ensure};
 use common::block::Block;
-use sequencer_service_rpc::{RpcClient as _, SequencerClient};
+use sequencer_service_rpc::{RpcClient, SequencerClient};
 use serde::{Deserialize, Serialize};
 
 /// Blocks per `getBlockRange` call.
@@ -111,12 +111,7 @@ impl<'a> Scanner<'a> {
         let mut blocks = Vec::new();
         while start <= to {
             let end = (start + CHUNK - 1).min(to);
-            let chunk = self
-                .client
-                .get_block_range(start, end)
-                .await
-                .with_context(|| format!("blocks {start}..={end}"))?;
-            blocks.extend(chunk);
+            blocks.extend(get_blocks(self.client, start, end).await?);
             start = end + 1;
         }
         // Every block, in order, each on top of the one before: a short
@@ -192,6 +187,30 @@ impl<'a> Scanner<'a> {
         // A node without the block can't say it changed.
         Ok(block.is_none_or(|b| b.header.hash.to_string() == *hash))
     }
+}
+
+/// Blocks `start..=end` in order. A node that can't serve a range in time
+/// (blocks with private transactions carry ~225 KB proofs, so a range can be
+/// many megabytes) is asked for it in halves, down to single blocks.
+pub async fn get_blocks<C>(client: &C, start: u64, end: u64) -> Result<Vec<Block>>
+where
+    C: RpcClient + Sync,
+{
+    let mut out = Vec::new();
+    // A stack of ranges still to read, the next one on top.
+    let mut todo = vec![(start, end)];
+    while let Some((s, e)) = todo.pop() {
+        match client.get_block_range(s, e).await {
+            Ok(blocks) => out.extend(blocks),
+            Err(_) if e > s => {
+                let mid = s + (e - s) / 2;
+                todo.push((mid + 1, e));
+                todo.push((s, mid));
+            }
+            Err(err) => return Err(err).with_context(|| format!("block {s}")),
+        }
+    }
+    Ok(out)
 }
 
 /// A block's time in unix milliseconds (LEZ block times are milliseconds;
