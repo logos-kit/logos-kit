@@ -1,5 +1,5 @@
 module logos_kit_wallet {
-  version "0.1.3"
+  version "0.2.0"
   description "Logos Kit wallet engine for the Logos Execution Zone: keys, accounts, approvals, proving"
 
   method ping() -> tstr description "Health check."
