@@ -54,8 +54,8 @@ struct Cli {
     #[arg(long, global = true)]
     ack_unknown: bool,
     /// Prove private transactions in smaller pieces: about half the memory,
-    /// and slower.
-    #[arg(long, global = true, env = "LOGOS_KIT_LOW_MEMORY")]
+    /// and slower. `LOGOS_KIT_LOW_MEMORY=1` (or true, yes, on) does the same.
+    #[arg(long, global = true, env = "LOGOS_KIT_LOW_MEMORY", value_parser = clap::builder::FalseyValueParser::new())]
     low_memory: bool,
     #[command(subcommand)]
     command: Command,
