@@ -128,27 +128,36 @@ ColumnLayout {
             Layout.fillWidth: true
             implicitHeight: prow.implicitHeight + 18
             Rectangle { width: parent.width; height: 1; color: Theme.line }
-            RowLayout {
+            // Name on one line, its verification under it (badges never clip).
+            ColumnLayout {
                 id: prow
                 anchors.left: parent.left; anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
-                Txt { text: "Program"; tone: "text2"; font.pixelSize: 14 }
-                Item { Layout.fillWidth: true }
-                Txt { text: tx.program ? tx.program.name : ""; font.pixelSize: 14; font.weight: Font.Medium; elide: Text.ElideMiddle; Layout.maximumWidth: 150 }
-                Badge {
-                    text: !tx.program ? "" : tx.program.status === "builtin" ? "Built into LEZ"
-                        : tx.program.status === "verified" ? "Verified source"
-                        : tx.program.status === "claimed" ? "Source claimed"
-                        : tx.program.status === "mismatch" ? "Source mismatch" : "Unverified"
-                    tone: !tx.program ? "neutral" : (tx.program.status === "verified" || tx.program.status === "builtin") ? "ok" : tx.program.status === "claimed" ? "warn" : "danger"
-                    dot: false
+                spacing: 6
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Txt { text: "Program"; tone: "text2"; font.pixelSize: 14 }
+                    Item { Layout.fillWidth: true }
+                    Txt { text: tx.program ? tx.program.name : ""; font.pixelSize: 14; font.weight: Font.Medium; elide: Text.ElideMiddle; Layout.maximumWidth: prow.width - 90 }
                 }
-                Badge {
-                    visible: !!tx.program && tx.program.status !== "builtin"
-                    text: tx.program && tx.program.immutable ? "Immutable" : "Upgradeable"
-                    tone: tx.program && tx.program.immutable ? "neutral" : "warn"
-                    dot: false
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 6
+                    Badge {
+                        text: !tx.program ? "" : tx.program.status === "builtin" ? "Built into LEZ"
+                            : tx.program.status === "verified" ? "Verified source"
+                            : tx.program.status === "claimed" ? "Source claimed"
+                            : tx.program.status === "mismatch" ? "Source mismatch" : "Unverified"
+                        tone: !tx.program ? "neutral" : (tx.program.status === "verified" || tx.program.status === "builtin") ? "ok" : tx.program.status === "claimed" ? "warn" : "danger"
+                        dot: false
+                    }
+                    Badge {
+                        visible: !!tx.program && tx.program.status !== "builtin"
+                        text: tx.program && tx.program.immutable ? "Immutable" : "Upgradeable"
+                        tone: tx.program && tx.program.immutable ? "neutral" : "warn"
+                        dot: false
+                    }
                 }
             }
         }

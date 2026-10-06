@@ -43,7 +43,7 @@ d.shot("02-accounts", settle=1500)
 d.click("fcRequest")
 approve_funds()
 d.wait(lambda: shown("fcDone"), 60, "funded")
-assert "1,000,000,000" in d.prop("fcAmount", "text"), d.prop("fcAmount", "text")
+assert "1 LGO" in d.prop("fcAmount", "text"), d.prop("fcAmount", "text")   # 10^9 lepta
 d.shot("03-funded", settle=2500)
 d.click("fcAgain")
 
