@@ -364,14 +364,27 @@ impl FaucetBackend for HttpFaucet {
                 .max_redirects(0)
                 .build()
                 .new_agent();
-            let mut resp = agent.post(&url).send_json(body)?;
-            let outcome: FundOutcome = resp
-                .body_mut()
-                .with_config()
-                .limit(64 * 1024)
-                .read_json()
-                .context("faucet reply")?;
-            Ok(outcome)
+            let reply = agent.post(&url).send_json(body).and_then(|mut resp| {
+                resp.body_mut()
+                    .with_config()
+                    .limit(64 * 1024)
+                    .read_json::<FundOutcome>()
+            });
+            match reply {
+                Ok(outcome) => Ok(outcome),
+                // Nothing reached the drip: safe to ask again.
+                Err(
+                    e @ (ureq::Error::HostNotFound
+                    | ureq::Error::ConnectionFailed
+                    | ureq::Error::Timeout(ureq::Timeout::Resolve | ureq::Timeout::Connect)),
+                ) => Err(anyhow::Error::from(e).context("faucet unreachable")),
+                // The request may have reached it, and the drip may still pay
+                // (a slow block, a busy drip): never ask again blindly.
+                Err(e) => Ok(FundOutcome::OutcomeUnknown {
+                    reason: format!("the faucet didn't answer in time ({e}); it may still send"),
+                    tx_hash: None,
+                }),
+            }
         })
         .await?
     }
