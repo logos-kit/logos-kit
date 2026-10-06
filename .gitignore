@@ -32,8 +32,16 @@ coverage/
 /tmp/
 *.log
 
-# Logos AI skills are copied locally from refs/tooling/logos-ai-skills (no licence upstream): never commit them
-/.claude/skills/logos-*
+# AI workspace folders stay local: the λPrize submission check rejects a repo
+# that contains any of them (lambda-prize .github/scripts/validate-submission.sh).
+# The Logos AI skills in .claude/skills are copied from refs/tooling/logos-ai-skills
+# and have no upstream licence, so they must never be committed either.
+.claude/
+.cursor/
+.aider/
+.copilot/
+.windsurf/
+.bolt/
 
 # Linux lgx builds (from agari-box)
 /dist-linux/
