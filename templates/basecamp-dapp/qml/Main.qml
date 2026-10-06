@@ -2,14 +2,14 @@ import QtQuick
 import QtQuick.Layouts
 import "LogosKit"      // the SDK: kit.api.connect(), .transfer(), .watchTransaction(), …
 import "LogosKitUi"    // optional: the wallet's look (Theme, Btn, Card, Pipeline, AddressChip, …)
-import "LogosKitUi/Units.js" as Units   // integer-string amounts (native LEZ has no decimals)
+import "LogosKitUi/Units.js" as Units   // lepta on the wire, LGO on screen (1 LGO = 10^9 lepta)
 
 // A Basecamp app on the Logos Execution Zone, built with Logos Kit.
 //
 // What it shows, in order:
 //   1. connect: the wallet asks the user which account to share
 //   2. read: the shared account's balance
-//   3. funds in the flow: an empty account gets test LEZ without leaving the app
+//   3. funds in the flow: an empty account gets test LGO without leaving the app
 //   4. propose: a transfer the user approves in the wallet (fee shown there)
 //   5. receipt: follow the transaction until it is final
 //
@@ -101,7 +101,7 @@ Item {
     function send() {
         root.phase = "approving"
         root.message = ""
-        root.sent = { amount: amount.text.trim(), before: root.balance }
+        root.sent = { amount: Units.lepta(amount.text.trim()), before: root.balance }
         // Resolves once the user approved in the wallet; the handle follows it from there.
         kit.api.transfer(root.account, to.text.trim(), root.sent.amount).then(live(function (r) {
             root.follow(r.handle)
@@ -150,7 +150,7 @@ Item {
     Timer { id: refreshLater; interval: 2000; onTriggered: root.refresh() }
 
     readonly property bool validSend: kit.sdk !== undefined && kit.sdk.isAccountId(to.text.trim())
-        && /^[1-9][0-9]*$/.test(amount.text.trim())
+        && Units.lepta(amount.text.trim()) !== "" && Units.lepta(amount.text.trim()) !== "0"
 
     Rectangle { anchors.fill: parent; color: Theme.bg }
 
@@ -183,7 +183,7 @@ Item {
             ColumnLayout {
                 width: parent.width
                 spacing: 14
-                Txt { text: "Send LEZ from Basecamp"; font.pixelSize: 24; font.weight: Font.Bold; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.fillWidth: true }
+                Txt { text: "Send LGO from Basecamp"; font.pixelSize: 24; font.weight: Font.Bold; wrapMode: Text.Wrap; elide: Text.ElideNone; Layout.fillWidth: true }
                 Txt {
                     Layout.fillWidth: true
                     text: "A starter app for the Logos Kit SDK. Your keys stay in the wallet: this app only proposes, and you approve every transaction there."
@@ -194,7 +194,7 @@ Item {
                     compact: true
                     stages: [
                         { label: "Connect", detail: "The wallet asks which account to share", status: "active" },
-                        { label: "Get test LEZ", detail: "Right here, if the account is empty", status: "pending" },
+                        { label: "Get test LGO", detail: "Right here, if the account is empty", status: "pending" },
                         { label: "Send", detail: "You approve it in the wallet, fee shown first", status: "pending" },
                         { label: "Receipt", detail: "Followed until the block, outcome checked", status: "pending" }
                     ]
@@ -226,13 +226,13 @@ Item {
                 }
                 RowLayout {
                     spacing: 8
-                    Txt { objectName: "balance"; text: root.balance === "" ? "–" : Units.group(root.balance); font.pixelSize: 34; font.weight: Font.Bold; num: true }
-                    Txt { text: "LEZ"; tone: "text2"; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
+                    Txt { objectName: "balance"; text: root.balance === "" ? "–" : Units.lgo(root.balance); font.pixelSize: 34; font.weight: Font.Bold; num: true }
+                    Txt { text: Units.SYMBOL; tone: "text2"; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
                 }
                 Btn {
                     objectName: "funds"
                     visible: root.balance === "0"
-                    text: root.phase === "funding" ? "Getting test LEZ…" : "Get test LEZ"
+                    text: root.phase === "funding" ? "Getting test LGO…" : "Get test LGO"
                     icon: "droplet"
                     tone: "ink"
                     busy: root.phase === "funding"
@@ -249,11 +249,11 @@ Item {
             ColumnLayout {
                 width: parent.width
                 spacing: 10
-                Txt { text: "Send LEZ"; font.pixelSize: 17; font.weight: Font.DemiBold }
+                Txt { text: "Send LGO"; font.pixelSize: 17; font.weight: Font.DemiBold }
                 Txt { text: "Recipient"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
                 Field { id: to; objectName: "to"; Layout.fillWidth: true; mono: true; placeholderText: "Public account address" }
-                Txt { text: "Amount (whole LEZ: native LEZ has no decimals)"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
-                Field { id: amount; objectName: "amount"; Layout.fillWidth: true; placeholderText: "e.g. 42"; inputMethodHints: Qt.ImhDigitsOnly }
+                Txt { text: "Amount in LGO"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                Field { id: amount; objectName: "amount"; Layout.fillWidth: true; placeholderText: "e.g. 0.5"; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                 Btn {
                     objectName: "send"
                     Layout.fillWidth: true
@@ -279,7 +279,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     SuccessCheck { visible: root.phase === "done"; size: 40 }
-                    Txt { text: root.phase === "done" ? "Sent " + (root.sent ? Units.group(root.sent.amount) : "") + " LEZ" : "Transaction"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    Txt { text: root.phase === "done" ? "Sent " + (root.sent ? Units.lgoLabel(root.sent.amount) : "") : "Transaction"; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
                     Badge {
                         objectName: "lifecycle"
                         text: root.phase === "done" ? "Confirmed" : root.phase === "failed" ? "Failed" : root.phase === "unconfirmed" ? "Not confirmed" : root.receipt ? root.receipt.lifecycle : "Waiting"
