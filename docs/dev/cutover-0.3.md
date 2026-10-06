@@ -149,11 +149,11 @@ The testnet becomes the default. Preview stays listed until it's retired.
 
 ## 10. Start the evidence
 
-- [ ] Take the first snapshot:
+- [x] Take the first snapshot (2026-10-06: 1 distinct author, tip block 12,014):
   ```sh
   LOGOS_KIT_ZONE=lez-testnet target/release/logos-kit testimonial evidence --snapshot adoption/snapshots --json
   ```
-- [ ] Schedule it daily: a workflow that runs the CLI and commits `adoption/snapshots/<submission>-<date>.json`. The monthly counts go into `adoption/tracker.md`.
+- [x] Schedule it daily: `daily.yml` runs the export for every `testimonial` deployment in `registry/programs.json` and commits `snapshots/<zone>/<submission>-<date>.json` to the `evidence` branch, with the block-scan cache so each run resumes from the last. The monthly counts go into `adoption/tracker.md`.
 - [ ] Announce the switch, using the drafts in `adoption/drafts/`. **Only with the maintainer's go-ahead.**
 
 ## Rollback
