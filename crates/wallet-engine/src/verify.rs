@@ -227,7 +227,11 @@ pub async fn check(core: &WalletCore, program: AccountId) -> Result<ProgramCheck
 
 impl crate::decode::Decoders {
     /// [`check`] for an approval: upgraded by the local rebuilds it carries.
-    pub(crate) async fn check(&self, core: &WalletCore, program: AccountId) -> Result<ProgramCheck> {
+    pub(crate) async fn check(
+        &self,
+        core: &WalletCore,
+        program: AccountId,
+    ) -> Result<ProgramCheck> {
         check_cached(core, program, &self.zone, &self.verified).await
     }
 }

@@ -29,7 +29,16 @@ echo "info zone $LOGOS_KIT_ZONE  A=$A  B=$B  P=$P"
 
 step "faucet (drip) -> A"
 F=$("$LK" faucet "$A" --yes --json | last); echo "$F"
-[[ $(echo "$F" | get "['status']") == funded ]] || { echo "FAIL faucet" >&2; exit 1; }
+S=$(echo "$F" | get "['status']")
+# A slow network can include the drop after the drip stops watching
+# ("outcome_unknown"): then the balance is the proof, as in the wallet.
+if [[ $S == outcome_unknown ]]; then
+  for _ in $(seq 1 60); do
+    [[ $("$LK" balance "$A" --json | last | get "['balance']") != 0 ]] && S=funded && break
+    sleep 15
+  done
+fi
+[[ $S == funded ]] || { echo "FAIL faucet ($S)" >&2; exit 1; }
 
 if (( NATIVE )); then
 step "public send A -> B"
