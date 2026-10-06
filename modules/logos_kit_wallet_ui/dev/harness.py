@@ -8,6 +8,11 @@ identity hop are exercised in Basecamp (QA step 4 in docs/dev/PLAN.md).
 
     uv run --python .qt/q692/bin/python modules/logos_kit_wallet_ui/dev/harness.py \
         [--data DIR] [--width 480] [--height 780] [--script steps.py] [--shots DIR]
+
+Scripted walks: set QT_QPA_PLATFORM=offscreen. An on-screen window takes
+real clicks and keys: a click on the scrim or an Escape closes the open
+sheet, and the walk then waits for a button that's gone. Offscreen shots
+are 1x. Marketing shots run on-screen for 2x.
 """
 import argparse, ctypes, json, os, sys, tempfile, time, pathlib
 

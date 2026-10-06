@@ -170,7 +170,7 @@ ColumnLayout {
             })
         }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
-        fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee, now: av.review.fee.estimate || "" }) : null
+        fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee, now: av.review.fee.estimate || "", exact: !!av.review.fee.exact }) : null
         // A native transfer runs in the chain itself (no program header).
         program: !av.program ? (av.outFlow && !av.outFlow.definition && av.intent.kind === "transfer"
                                 ? ({ name: "Native transfer", status: "builtin", immutable: true }) : null)

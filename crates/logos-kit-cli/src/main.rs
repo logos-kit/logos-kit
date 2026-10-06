@@ -588,7 +588,8 @@ fn show_review(review: &Review) {
         (Some(max), Some(payer)) => {
             match &review.fee.estimate {
                 Some(now) => println!(
-                    "  fee       up to {} at today's rate (cap {}), paid by {payer}",
+                    "  fee       {}{} at today's rate (cap {}), paid by {payer}",
+                    if review.fee.exact { "" } else { "up to " },
                     as_lgo(now),
                     as_lgo(max)
                 ),

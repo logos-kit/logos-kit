@@ -87,7 +87,7 @@ The wallet shows three figures:
 
 | Where | Figure | Source |
 |---|---|---|
-| Approval sheet, "Network fee" | **Up to** the fee at today's base fees: gas limit × execution base fee + bytes × storage base fee | `getFeeState` when the review is built |
+| Approval sheet, "Network fee" | The fee at today's base fees. A native transfer runs outside the zkVM at zero cycles, so its fee is exact: bytes × storage base fee + tip. A program call shows **up to**, pricing its cycles at the gas limit, because they're only known once it runs | `getFeeState` when the review is built |
 | Approval sheet, technical details | The **fee cap** (`maxFee`) the payer signs, the gas limit and the base fee | The transaction itself |
 | After inclusion (public native sends) | The **fee paid** | How much the sender's balance dropped beyond the amount |
 

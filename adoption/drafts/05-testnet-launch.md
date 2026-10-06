@@ -1,4 +1,4 @@
-<!-- DRAFTS: need the maintainer's go-ahead before anything is posted. Post AFTER the 0.2.0 catalog release is live (PR #3 merged, catalog moved). Every fact below is verified; re-check the version numbers on the day. -->
+<!-- DRAFTS: need the maintainer's go-ahead before anything is posted. Post AFTER the 0.3.0 catalog release is live (the ui/wallet-v3 PR merged, catalog moved) and the docs site is redeployed with the new landing. Every fact below is verified; re-check the version numbers on the day. -->
 
 # Logos Kit on testnet 0.3: launch posts
 
@@ -14,8 +14,9 @@ Logos Kit is a wallet for the Logos Execution Zone, plus the SDK your Basecamp a
 
 **For people trying LEZ**
 - Public and private accounts, as many as you like. Private balances are visible only to you; private sends are proved on your own machine.
-- Every approval says what it does: who pays whom, which program, whether the program's source is verified, the fee cap, and which app is asking.
+- Every approval says what it does: who pays whom, which program, whether the program's source is verified, the network fee, and which app is asking.
 - Get test LGO from inside the wallet: one click, 1 LGO an hour.
+- Light and dark themes; one screen per job, with no clutter.
 - Install in Basecamp: Settings → Package Repositories → add
   `https://raw.githubusercontent.com/logos-kit/logos-kit-modules/refs/heads/main/logos-repo.json`
   then install **Logos Kit Wallet** (and the **Testimonials** and **Faucet** apps).
@@ -64,7 +65,7 @@ If it works for you, leave a one-line testimonial in the **Testimonials** app. I
 
 2/ Public and private accounts. Private balances are visible only to you, and private sends are proved on your own machine before anything leaves it.
 
-3/ Every approval says what it does: who pays whom, which program, whether its source is verified, the fee cap, and which app is asking. No raw calldata.
+3/ Every approval says what it does: who pays whom, which program, whether its source is verified, the network fee, and which app is asking. No raw calldata.
 
 4/ Builders: `nix flake init -t github:logos-kit/logos-kit#dapp` gives you connect, balances, in-flow test funds and receipts. Docs: logos-kit-docs.vercel.app
 

@@ -15,7 +15,7 @@ import "Units.js" as Units
 // to:       { name?: "Savings", address: "3ksne…", kind: "public"|"private"|"program" }
 // effects:  ["Posts a testimonial record owned by …", …]
 // authority:["Mint authority used", …]          (warnings)
-// fee:      { cap: "134400000", now?: "16003200", payer?: "Main" }   (lepta)
+// fee:      { cap: "134400000", now?: "2968", exact?: true, payer?: "Main" }   (lepta)
 // program:  { name, status: "verified"|"claimed"|"unknown", immutable: bool }
 ColumnLayout {
     id: tx
@@ -121,9 +121,10 @@ ColumnLayout {
         InfoRow {
             visible: !!tx.fee
             label: "Network fee"
-            // Today's rate when the wallet has it (gas used is at most the
-            // limit, so the charge is at most this); the signed cap otherwise.
-            value: tx.fee ? "Up to " + Units.lgoLabel(tx.fee.now || tx.fee.cap) + (tx.fee.payer ? " · paid by " + tx.fee.payer : "") : ""
+            // At today's rate: exact for a native transfer (it runs at zero
+            // cycles), a ceiling for a program call; the signed cap otherwise.
+            value: tx.fee ? (tx.fee.now && tx.fee.exact ? "" : "Up to ") + Units.lgoLabel(tx.fee.now || tx.fee.cap)
+                            + (tx.fee.payer ? " · paid by " + tx.fee.payer : "") : ""
         }
         Item {
             visible: !!tx.program
