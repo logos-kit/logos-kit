@@ -4,6 +4,7 @@ import { installQmlHost } from './qml-shims.js'
 
 // biome-ignore lint/performance/noBarrelFile: the bundle's single entry
 export {
+  associatedTokenAccount,
   formatUnits,
   isAccountId,
   nativeTransfer,

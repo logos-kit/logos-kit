@@ -3,6 +3,7 @@
 // `lez_signAndSendTransaction` takes, and what the wallet decodes back.
 import {
   type AccountId,
+  ATA_PROGRAM,
   accountBytes,
   NATIVE_TOKEN_PROGRAM,
   publicPda,
@@ -35,6 +36,19 @@ export function nativeTransfer(from: AccountId, to: AccountId, amount: string): 
     ],
     data: new Writer().u8(0).u128(amount).toBytes(),
   }
+}
+
+/**
+ * The associated token account (ATA) of `owner` for token `definition`: a
+ * PDA of the ATA program, `sha256(owner ‖ definition ‖ token program)` as the
+ * seed. Logos Kit sends public token payments here, so any account can hold
+ * any number of tokens; LEZ creates it when the first tokens arrive.
+ */
+export function associatedTokenAccount(owner: AccountId, definition: AccountId): AccountId {
+  const seed = sha256(
+    concat(accountBytes(owner), accountBytes(definition), accountBytes(TOKEN_PROGRAM)),
+  )
+  return publicPda(ATA_PROGRAM, seed)
 }
 
 export type TokenKind = 'fungible' | 'nft_master' | 'nft_copy'

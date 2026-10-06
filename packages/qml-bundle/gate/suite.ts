@@ -3,6 +3,7 @@
 import { parseJson } from '@logos-kit/client'
 import {
   add,
+  associatedTokenAccount,
   encodeMessage,
   encodeTransaction,
   formatUnits,
@@ -64,6 +65,11 @@ export async function run(host: Host): Promise<void> {
   log('tx bytes match LEZ', toHex(encodeTransaction(tx)) === s.transaction.borsh)
   log('tx hash matches LEZ', transactionHash(tx) === s.rpc.txHash)
   log('RPC param matches LEZ', sendTransactionParam(tx) === s.rpc.sendTransactionParam)
+  const ata = programs.associatedTokenAccount
+  log(
+    'token account address matches LEZ',
+    associatedTokenAccount(ata.owner, ata.definition) === ata.ata,
+  )
   const t = programs.testimonial[0] as (typeof programs.testimonial)[number]
   const post = testimonialPost({
     program: t.program,

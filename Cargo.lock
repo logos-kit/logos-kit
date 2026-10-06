@@ -9809,6 +9809,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "associated_token_account_core",
  "base64 0.22.1",
  "bip39",
  "borsh",

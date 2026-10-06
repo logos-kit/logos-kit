@@ -5,6 +5,7 @@ import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js'
 import { describe, expect, it } from 'vitest'
 import {
   ATA_PROGRAM,
+  associatedTokenAccount,
   decodeMessage,
   decodeTransaction,
   encodeMessage,
@@ -110,6 +111,10 @@ describe('programs', () => {
     expect(TOKEN_PROGRAM).toBe(prv.builtins.token)
     expect(ATA_PROGRAM).toBe(prv.builtins.associatedTokenAccount)
     expect(PROGRAM_LOADER).toBe(prv.builtins.programLoader)
+  })
+  it('associated token account address', () => {
+    const v = prv.associatedTokenAccount
+    expect(associatedTokenAccount(v.owner, v.definition)).toBe(v.ata)
   })
   it('native and token transfer data', () => {
     expect(toHex(nativeTransfer('1', '1', prv.nativeTransfer.amount).data)).toBe(
