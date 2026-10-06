@@ -616,8 +616,10 @@ async fn transact(cli: &Cli, intent: Intent, expect: Option<Route>) -> Result<()
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
     let ticket = engine.request_tx(&owner, None, intent).await?;
-    approve_ticket(cli, &engine, &pw, ticket, expect).await?;
-    engine.lock().await
+    let approved = approve_ticket(cli, &engine, &pw, ticket, expect).await;
+    // Lock (which writes the activity history) whether or not it went through.
+    engine.lock().await?;
+    approved.map(|_| ())
 }
 
 async fn approve_ticket(
@@ -834,7 +836,11 @@ async fn token(cli: &Cli, cmd: &TokenCmd) -> Result<()> {
             let engine = Engine::new(session, Config::default());
             let owner = Caller::LocalOwner;
             let ticket = engine.request_tx(&owner, None, intent).await?;
-            let status = approve_ticket(cli, &engine, &pw, ticket, None).await?;
+            let approved = approve_ticket(cli, &engine, &pw, ticket, None).await;
+            if approved.is_err() {
+                engine.lock().await?;
+            }
+            let status = approved?;
             engine
                 .with_session(async |s| s.track_token(&definition))
                 .await?;

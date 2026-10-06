@@ -63,6 +63,9 @@ const LOCAL_GENESIS_KEY: &str = "7f273098f25b71e6c005a9519f2678da8d1c7f01f6a2777
 /// Proving time on a desktop CPU, from the S3 benchmarks (seconds).
 const ETA_SHIELD_S: u64 = 330;
 const ETA_PRIVATE_S: u64 = 420;
+/// The one proof-time figure every screen, the README and the docs quote
+/// (measured shields: 267–337 s on an M-series Mac, ~4.3 GB peak).
+pub const PROOF_TIME: &str = "about 4–7 minutes";
 
 static SERVICE: OnceLock<Service> = OnceLock::new();
 
@@ -84,6 +87,8 @@ struct Prefs {
 #[serde(rename_all = "camelCase")]
 struct Snapshot {
     accounts: Vec<Value>,
+    /// The chain `accounts` were read on (balances differ per zone).
+    chain: Option<String>,
     updated_ms: u64,
     tip: Option<u64>,
     error: Option<String>,
@@ -165,7 +170,9 @@ fn valid_module_name(n: &str) -> bool {
 /// RPC detail stay in the wallet); the wallet UI gets the full chain.
 fn error_json(e: &anyhow::Error, caller: &Caller) -> Value {
     let code = policy::code_of(e);
-    let message = if caller.is_owner() || code != Code::Internal {
+    let message = if caller.is_owner() {
+        crate::decode::shorten_ids(&format!("{e:#}"))
+    } else if code != Code::Internal {
         format!("{e:#}")
     } else {
         "the wallet hit an internal error".to_owned()
@@ -478,6 +485,25 @@ impl Service {
                 })?;
                 self.refresh.notify_one();
                 Ok(Value::Null)
+            }
+            "checkRecipient" => {
+                #[derive(Deserialize)]
+                struct P {
+                    to: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                let past: Vec<String> = engine
+                    .statuses(&Caller::LocalOwner)
+                    .into_iter()
+                    .filter(|s| !s.incoming && s.lifecycle == Lifecycle::Included)
+                    .filter_map(|s| s.to)
+                    .collect();
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| check_recipient(s, a.to.trim(), &past).await)
+                        .await
+                })
             }
             "receive" => {
                 let a: AccountP = params(p)?;
@@ -878,6 +904,11 @@ impl Service {
             "motion": prefs.motion.clone().unwrap_or_else(|| "system".into()),
             "systemReducedMotion": system_reduced_motion(),
             "faucet": faucet_label(&zone, &prefs),
+            // The fee cap a public transaction reserves (LEZ wallets size it
+            // from the gas limit; the real fee is at most this). Send's Max
+            // leaves it behind.
+            "feeCap": wallet::DEFAULT_MAX_FEE.to_string(),
+            "proofTime": PROOF_TIME,
             "status": status,
             "busy": busy,
             "pending": pending,
@@ -1820,9 +1851,24 @@ impl Service {
                 Ok((synced, accounts, status))
             })
             .await;
+        // Payments into our accounts since the last read (the activity's
+        // incoming rows); a failure only delays them to the next sync.
+        let _ = engine.scan_incoming().await;
         let mut snap = lock(&self.snapshot);
+        let mut received = Vec::new();
         match result {
             Ok((synced, accounts, status)) => {
+                let chain = status.as_ref().map(|s| s.zone.chain.clone());
+                // Not while a restored wallet is still finding its accounts:
+                // balances rise then as old notes are found, not as new ones arrive.
+                let discovering = status.as_ref().is_some_and(|s| s.discovering);
+                if chain.is_some() && chain == snap.chain && !discovering {
+                    received = private_increases(&snap.accounts, &accounts)
+                        .into_iter()
+                        .map(|(account, delta)| (account, delta, snap.updated_ms))
+                        .collect();
+                }
+                snap.chain = chain;
                 snap.accounts = accounts;
                 snap.updated_ms = now_ms();
                 match synced {
@@ -1840,7 +1886,11 @@ impl Service {
             }
             Err(e) => snap.error = Some(format!("{e:#}")),
         }
+        let tip = snap.tip;
         drop(snap);
+        for (account, delta, since) in received {
+            engine.record_private_receipt(&account, delta, since, tip);
+        }
         self.emit("snapshot_updated", json!({}));
     }
 }
@@ -1857,6 +1907,30 @@ fn tip_of(s: crate::session::ZoneStatus) -> ZoneStatusTip {
         NetStatus::Online { tip } => tip,
         _ => s.synced_block,
     })
+}
+
+/// Private accounts whose LGO balance went up between two snapshots, with
+/// the increase. Private receipts arrive as notes the sync decrypts, and the
+/// LEZ sync reports no per-note events, so a rise is how the wallet notices.
+fn private_increases(before: &[Value], after: &[Value]) -> Vec<(String, u128)> {
+    let native = |a: &Value| {
+        a.get("native")
+            .and_then(Value::as_str)
+            .and_then(|n| n.parse::<u128>().ok())
+    };
+    after
+        .iter()
+        .filter(|a| a.get("kind").and_then(Value::as_str) == Some("private"))
+        .filter_map(|a| {
+            let id = a.get("accountId")?.as_str()?;
+            let old = before
+                .iter()
+                .find(|b| b.get("accountId").and_then(Value::as_str) == Some(id))
+                .and_then(native)?;
+            let new = native(a)?;
+            (new > old).then(|| (id.to_owned(), new - old))
+        })
+        .collect()
 }
 
 async fn background(svc: &'static Service, engine: Arc<Engine>, generation: u64) {
@@ -2000,15 +2074,67 @@ fn receive_code(npk: &str, vpk: &str) -> Result<Value> {
         "unexpected key sizes for a receive code"
     );
     let code = format!("{RECEIVE_PREFIX}{}", URL_SAFE_NO_PAD.encode(&bytes));
-    let h = Sha256::digest(&bytes);
+    Ok(json!({
+        "kind": "private",
+        "code": code,
+        "fingerprint": code_fingerprint(&bytes),
+    }))
+}
+
+/// What people compare out loud: "K7-QX", from the code's key bytes. The
+/// receiver's screen and the sender's paste show the same four characters.
+fn code_fingerprint(bytes: &[u8]) -> String {
+    let h = Sha256::digest(bytes);
     let fp: String = h[..4]
         .iter()
         .map(|b| CROCKFORD[usize::from(b & 31)] as char)
         .collect();
+    format!("{}-{}", &fp[..2], &fp[2..])
+}
+
+/// What a pasted recipient is, before the amount step: a private code (with
+/// its fingerprint), one of our accounts, a token's ID (never a person), or
+/// an address, with whether we've sent to it before and whether it looks
+/// like one we have (same first 4 and last 4, different middle: address
+/// poisoning).
+async fn check_recipient(s: &mut Session, to: &str, past: &[String]) -> Result<Value> {
+    if to.starts_with(RECEIVE_PREFIX) {
+        let body = to.strip_prefix(RECEIVE_PREFIX).unwrap_or_default();
+        return Ok(match URL_SAFE_NO_PAD.decode(body) {
+            Ok(bytes) if bytes.len() == RECEIVE_LEN => {
+                json!({ "kind": "code", "fingerprint": code_fingerprint(&bytes) })
+            }
+            _ => {
+                json!({ "kind": "invalid", "message": "This private receive code is damaged or incomplete." })
+            }
+        });
+    }
+    let Ok(id) = crate::decode::account_id(to) else {
+        return Ok(json!({ "kind": "invalid", "message": "That isn't a LEZ address." }));
+    };
+    if let Some(own) = s.accounts()?.into_iter().find(|a| a.account_id == to) {
+        return Ok(json!({ "kind": "own", "accountId": own.account_id, "accountKind": own.kind }));
+    }
+    if let Some(core) = s.core()
+        && let Some(name) = crate::tokens::definition_name(core, id).await
+    {
+        return Ok(json!({
+            "kind": "token",
+            "name": name,
+            "message": "That's a token's ID, not a person's address.",
+        }));
+    }
+    let lookalike = past.iter().find(|p| {
+        p.as_str() != to
+            && p.len() > 8
+            && to.len() > 8
+            && p[..4] == to[..4]
+            && p[p.len() - 4..] == to[to.len() - 4..]
+    });
     Ok(json!({
-        "kind": "private",
-        "code": code,
-        "fingerprint": format!("{}-{}", &fp[..2], &fp[2..]),
+        "kind": "address",
+        "firstTime": !past.iter().any(|p| p == to),
+        "lookalike": lookalike,
     }))
 }
 

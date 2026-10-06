@@ -572,6 +572,8 @@ pub struct Session {
     backend: Arc<EncryptedBackend>,
     keys: Vault,
     meta: Meta,
+    /// Finished activity for this zone, sealed with the zone key.
+    history: Vault,
     net: Net,
     reveal: RevealThrottle,
     /// Secrets of a private tx sent from here, to record its note on inclusion.
@@ -743,6 +745,7 @@ impl Session {
         }
         data.write_zones_hint(&record.meta.zones)?;
 
+        let history = open_history(&dir, &context, record.secrets.zone_key(&zone.id)?)?;
         let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL)?);
         let meta = record.meta.clone();
         Ok(Self {
@@ -754,6 +757,7 @@ impl Session {
             backend,
             keys,
             meta,
+            history,
             net: Net::Idle,
             reveal: RevealThrottle::default(),
             pending_note: None,
@@ -1283,6 +1287,22 @@ impl Session {
         Ok(())
     }
 
+    /// This zone's activity record, as `save_history` wrote it (`Null` if
+    /// unreadable).
+    pub fn load_history(&self) -> Result<serde_json::Value> {
+        let bytes = self.history.read()?;
+        Ok(serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    pub fn save_history(&self, record: &serde_json::Value) -> Result<()> {
+        self.history.save(&serde_json::to_vec(record)?)
+    }
+
+    /// Restored from a phrase: past activity is on chain to be found.
+    pub const fn is_restored(&self) -> bool {
+        self.meta.restored
+    }
+
     // -- persistence ---------------------------------------------------------
 
     /// Write the current storage to the vault now (not debounced).
@@ -1341,4 +1361,21 @@ async fn first_block_at_or_after(core: &WalletCore, ms: u64) -> Result<u64> {
         }
     }
     Ok(lo)
+}
+
+/// The zone's activity vault (`<zone>/history`), sealed with the zone key
+/// under its own context. History is a convenience: a vault that won't open
+/// is moved aside (kept, never deleted) and a new one starts.
+fn open_history(dir: &Path, context: &str, key: Option<Zeroizing<[u8; 32]>>) -> Result<Vault> {
+    let hdir = dir.join("history");
+    let context = format!("{context}:history");
+    // The zone vault was just opened or created with this key.
+    let key = key.context("zone key")?;
+    if Vault::exists(&hdir) {
+        match Vault::unlock_keyed(&hdir, key.clone(), &context) {
+            Ok((vault, _)) => return Ok(vault),
+            Err(_) => std::fs::rename(&hdir, dir.join(format!("history.unreadable-{}", now_ms())))?,
+        }
+    }
+    Vault::create_keyed(&hdir, key, &context, b"[]")
 }

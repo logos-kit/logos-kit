@@ -47,9 +47,31 @@ ColumnLayout {
         for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return ts[i].name || ""
         return ""
     }
-    readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(base, balance) > 0
+    readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(reservesFee ? Units.add(base, feeCap) : base, balance) > 0
     readonly property bool isCode: to.trim().indexOf("lezpriv1:") === 0
-    readonly property bool toValid: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
+    readonly property bool toFormat: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
+    // The engine's read of the recipient (checkRecipient): a code's
+    // fingerprint, a token ID pasted by mistake, a lookalike of an address
+    // we've paid, or a first-time address.
+    property var check: null
+    property bool lookalikeOk: false
+    readonly property bool checkFits: !!check && check.to === to.trim()
+    readonly property bool toBlocked: checkFits && (check.kind === "token" || check.kind === "invalid")
+    readonly property bool needsLookalikeOk: checkFits && check.kind === "address" && !!check.lookalike
+    readonly property bool toValid: toFormat && !toBlocked && (!needsLookalikeOk || lookalikeOk)
+    onToChanged: { lookalikeOk = false; checkTimer.restart() }
+    property Timer checkTimer: Timer {
+        interval: 250
+        onTriggered: {
+            var t = sf.to.trim()
+            if (!sf.toFormat) { sf.check = null; return }
+            sf.store.call("checkRecipient", { to: t }, function (v, e) {
+                if (e || !v || t !== sf.to.trim()) return
+                v.to = t
+                sf.check = v
+            })
+        }
+    }
     readonly property var toOwn: {
         for (var i = 0; i < store.accounts.length; i++) if (store.accounts[i].accountId === to.trim()) return store.accounts[i]
         return null
@@ -64,7 +86,7 @@ ColumnLayout {
     }
 
     function go(s, d) { problem = ""; dir = d || 1; step = s }
-    function reset() { step = "to"; to = ""; token = ""; amountText = ""; ticket = null; handle = ""; problem = ""; busy = false }
+    function reset() { step = "to"; to = ""; token = ""; amountText = ""; ticket = null; handle = ""; problem = ""; busy = false; check = null; lookalikeOk = false }
 
     function key(k) {
         var a = amountText
@@ -79,8 +101,15 @@ ColumnLayout {
         if (a.length > 30 || (a !== "" && Units.parse(a, decimals) === "")) return
         amountText = a
     }
-    // Max: the whole balance, as the field shows it (LGO for native).
-    function useMax() { amountText = Units.plain(balance, decimals) }
+    // A public LGO send pays its fee from the same balance, and the
+    // transaction reserves the whole fee cap up front; private sends and
+    // tokens don't.
+    readonly property string feeCap: store.state.feeCap || "0"
+    readonly property bool reservesFee: token === "" && !fromPrivate
+    // Max: everything that can go, as the field shows it (LGO for native).
+    function useMax() {
+        amountText = Units.plain(reservesFee ? Units.sub(balance, feeCap) : balance, decimals)
+    }
     Keys.onPressed: function (e) {
         if (step !== "amount") return
         if (e.text >= "0" && e.text <= "9" && e.text.length === 1) { key(e.text); e.accepted = true }
@@ -145,9 +174,44 @@ ColumnLayout {
             placeholderText: "Account address or private receive code"
             text: sf.to
             onTextChanged: sf.to = text
-            invalid: text.trim() !== "" && !sf.toValid
+            invalid: text.trim() !== "" && (!sf.toFormat || sf.toBlocked)
         }
-        Txt { visible: sf.isCode; text: "Private payment: only you and the recipient will see it."; tone: "priv"; font.pixelSize: 12 }
+        Txt {
+            objectName: "sendCodeFingerprint"
+            Layout.fillWidth: true
+            visible: sf.isCode && sf.checkFits && sf.check.kind === "code"
+            text: sf.checkFits && sf.check.fingerprint ? "Code ends " + sf.check.fingerprint + ". Check it matches the receiver's screen. Only you and the recipient will see this payment." : ""
+            tone: "priv"; font.pixelSize: 12; wrapMode: Text.Wrap
+        }
+        Notice {
+            objectName: "sendToProblem"
+            Layout.fillWidth: true
+            visible: sf.toBlocked
+            tone: "danger"
+            text: sf.toBlocked ? sf.check.message : ""
+        }
+        Notice {
+            objectName: "sendLookalike"
+            Layout.fillWidth: true
+            visible: sf.needsLookalikeOk
+            tone: "warn"
+            text: sf.needsLookalikeOk ? "This looks like " + Fmt.short(sf.check.lookalike) + ", which you've sent to before, but it's a different address. Scammers send tiny payments from lookalike addresses so you copy the wrong one." : ""
+        }
+        CheckRow {
+            objectName: "sendLookalikeOk"
+            controlled: true
+            Layout.fillWidth: true
+            visible: sf.needsLookalikeOk
+            text: "I checked every character of the address"
+            checked: sf.lookalikeOk
+            onToggled: function (c) { sf.lookalikeOk = c }
+        }
+        Txt {
+            Layout.fillWidth: true
+            visible: sf.checkFits && sf.check.kind === "address" && sf.check.firstTime && !sf.needsLookalikeOk
+            text: "First time sending to this address."
+            tone: "text3"; font.pixelSize: 12
+        }
         Txt { text: "Or one of your accounts"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 6 }
         Repeater {
             model: sf.store.accounts
@@ -242,6 +306,17 @@ ColumnLayout {
                     }
                 }
             }
+        }
+        Txt {
+            objectName: "sendFeeNote"
+            Layout.fillWidth: true
+            visible: sf.reservesFee && sf.feeCap !== "0"
+            text: sf.tooMuch && sf.base !== "" && Units.cmp(sf.base, sf.balance) <= 0
+                ? "That leaves too little for the fee. Keep at least " + Units.lgoLabel(sf.feeCap) + "."
+                : "Max leaves up to " + Units.lgoLabel(sf.feeCap) + " for the fee. You keep whatever isn't used."
+            tone: sf.tooMuch && sf.base !== "" ? "warn" : "text3"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
         }
         Btn { id: reviewBtn; objectName: "sendReview"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Review"; busy: sf.busy; enabled: sf.base !== "" && !sf.tooMuch; onClicked: sf.prepare() }
     }

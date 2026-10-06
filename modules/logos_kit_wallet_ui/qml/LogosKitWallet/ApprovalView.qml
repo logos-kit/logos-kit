@@ -171,9 +171,10 @@ ColumnLayout {
         }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
         fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee, now: av.review.fee.estimate || "", exact: !!av.review.fee.exact }) : null
-        // A native transfer runs in the chain itself (no program header).
-        program: !av.program ? (av.outFlow && !av.outFlow.definition && av.intent.kind === "transfer"
-                                ? ({ name: "Native transfer", status: "builtin", immutable: true }) : null)
+        // A native transfer runs in the chain itself (no program header),
+        // whether the wallet's Send built it or an app proposed it.
+        program: !av.program ? (av.outFlow && !av.outFlow.definition
+                                ? ({ name: "Native transfer · Built into LEZ", status: "builtin", immutable: true }) : null)
             : ({
             name: (av.program.name || "Unknown program") + " · " + Fmt.short(av.program.account),
             status: av.program.status === "verified_local" ? "verified" : av.program.status === "claimed" ? "claimed"
@@ -195,7 +196,7 @@ ColumnLayout {
                  : "Only you"
             tone: av.isPrivate ? "priv" : "text"
         }
-        InfoRow { visible: av.isPrivate; label: "Proof"; value: "On this device · " + (av.route === "shield" ? "5–6" : "6–8") + " min" }
+        InfoRow { visible: av.isPrivate; label: "Proof"; value: "On this device · " + (av.store.state.proofTime || "a few minutes") }
         InfoRow { visible: !(av.review.fee && av.review.fee.maxFee); label: "Network fee"; value: av.isPrivate ? "None (private)" : "Not available yet" }
     }
 

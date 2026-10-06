@@ -151,7 +151,7 @@ impl Intent {
 }
 
 /// How a transfer travels.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Route {
     Public,
@@ -544,6 +544,17 @@ fn fee_of(message: &lee::public_transaction::Message) -> Fee {
     })
 }
 
+/// Lepta as LGO text: 1 LGO = 10^9 lepta, trailing zeros trimmed.
+pub(crate) fn lgo(lepta: u128) -> String {
+    let whole = lepta / 1_000_000_000;
+    let frac = lepta % 1_000_000_000;
+    if frac == 0 {
+        return format!("{whole} LGO");
+    }
+    let frac = format!("{frac:09}");
+    format!("{whole}.{} LGO", frac.trim_end_matches('0'))
+}
+
 /// The fee payer can cover `max_fee` on top of what `sender` sends natively.
 async fn check_fee(
     core: &WalletCore,
@@ -558,16 +569,19 @@ async fn check_fee(
     if f.payer == sender {
         ensure!(
             sender_balance >= native_out.saturating_add(f.max_fee),
-            "not enough to cover {native_out} plus a fee of up to {}",
-            f.max_fee
+            "Not enough LGO. This needs {} plus up to {} for the fee, and the account has {}.",
+            lgo(native_out),
+            lgo(f.max_fee),
+            lgo(sender_balance)
         );
     } else {
         let payer = core.get_account_balance(f.payer).await?;
         ensure!(
             payer >= f.max_fee,
-            "fee payer {} can't cover a fee of up to {}",
+            "The account paying the fee ({}) has {}, and the fee can be up to {}.",
             f.payer,
-            f.max_fee
+            lgo(payer),
+            lgo(f.max_fee)
         );
     }
     Ok(())
@@ -981,7 +995,7 @@ async fn prepare_transfer(
             let held = held.with_context(|| format!("{from_id} holds no tokens"))?;
             ensure!(
                 held.definition_id() == def,
-                "{from_id} holds token {}, not {def}",
+                "{from_id} holds a different token ({}), not {def}.",
                 held.definition_id()
             );
             let descriptor = TokenDescriptor {
@@ -1363,12 +1377,12 @@ async fn prepare_ata_transfer(
     let from_balance = holding_amount(&held);
     ensure!(
         from_balance >= amount,
-        "{owner} holds only {from_balance} of token {def}"
+        "Not enough of this token: {owner} holds {from_balance}."
     );
     let recipient = holding(&own_shard(core, to, false, token_program).await?)?;
     ensure!(
         recipient.is_none_or(|h| h.definition_id() == def),
-        "{to} already holds another token in its token slot"
+        "The recipient's account already holds a different token, and a LEZ account holds one token at a time."
     );
     let check = decoders.check(core, ata_program).await?;
     let data =

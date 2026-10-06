@@ -597,6 +597,34 @@ pub fn private_effects(message: &PrivateMessage) -> Vec<PublicEffect> {
     out
 }
 
+/// Long base58 ids in a message, shortened the way the UI shows them
+/// ("7Hk2Qe…9Qpa"), so error copy stays readable.
+pub fn shorten_ids(message: &str) -> String {
+    const B58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let mut out = String::with_capacity(message.len());
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        if run.len() >= 32 {
+            out.push_str(&run[..6]);
+            out.push('…');
+            out.push_str(&run[run.len() - 4..]);
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    };
+    for c in message.chars() {
+        if B58.contains(c) {
+            run.push(c);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
 /// Parse an account id the way every caller-facing API does.
 pub fn account_id(s: &str) -> anyhow::Result<AccountId> {
     AccountId::from_str(s).map_err(|e| anyhow::anyhow!("not a LEZ account id: {s} ({e})"))

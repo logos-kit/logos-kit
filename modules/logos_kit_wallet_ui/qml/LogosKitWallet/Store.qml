@@ -79,6 +79,15 @@ QtObject {
         var a = apps[requester]
         return a && a.displayName ? a.displayName : requester
     }
+    // A token's name from any account's holdings; the short ID otherwise.
+    function tokenName(definition) {
+        for (var i = 0; i < accounts.length; i++) {
+            var ts = accounts[i].tokens || []
+            for (var j = 0; j < ts.length; j++)
+                if (ts[j].definition === definition && ts[j].name) return ts[j].name
+        }
+        return Fmt.short(definition)
+    }
     // Installed from a signed package (Basecamp keeps its manifest.sig).
     function appSigned(requester) {
         var a = apps[requester]

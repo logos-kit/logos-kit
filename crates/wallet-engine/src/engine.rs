@@ -22,7 +22,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chacha20poly1305::aead::{OsRng, rand_core::RngCore as _};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     auto_lock::AutoLock,
@@ -40,8 +40,20 @@ pub const REQUEST_TTL: Duration = Duration::from_secs(5 * 60);
 pub const APP_COOLDOWN: Duration = Duration::from_secs(30);
 /// Statuses kept for reads; the oldest finished ones go first.
 const MAX_STATUSES: usize = 256;
+/// Finished statuses kept on disk per zone (the activity history).
+const MAX_HISTORY: usize = 500;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+/// A finished status as the history vault stores it: the API form plus who
+/// asked (never sent to apps, so `TxStatus` skips it).
+#[derive(Serialize, Deserialize)]
+struct StoredStatus {
+    #[serde(flatten)]
+    status: TxStatus,
+    #[serde(default)]
+    requester: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     AwaitingApproval,
@@ -55,7 +67,7 @@ pub enum Lifecycle {
     Expired,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Outcome {
     Success,
@@ -65,7 +77,7 @@ pub enum Outcome {
 
 /// Where `outcome` comes from. Only an event or a check on our own account
 /// counts; otherwise the outcome stays unknown.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum OutcomeSource {
     OwnAccountInvariant,
@@ -73,7 +85,7 @@ pub enum OutcomeSource {
 }
 
 /// `lez_getTransactionStatus` result (plus `error` for the wallet's own UI).
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxStatus {
     pub handle: String,
@@ -113,6 +125,9 @@ pub struct TxStatus {
     /// balance: the 0.3 RPC reports no gas used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_paid: Option<String>,
+    /// A payment someone else made to us, found in a block (owner only).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub incoming: bool,
     #[serde(skip)]
     requester: Option<String>,
 }
@@ -137,6 +152,7 @@ impl TxStatus {
             to: None,
             token: None,
             fee_paid: None,
+            incoming: false,
             requester,
         }
     }
@@ -240,6 +256,12 @@ struct State {
     epoch: u64,
     /// App → when it may ask again.
     cooldown: HashMap<String, Instant>,
+    /// A status changed since the history was last written.
+    history_dirty: bool,
+    /// Blocks `1..=scanned` have been read for incoming payments (0: never).
+    scanned: u64,
+    /// The current session's chain (set when its history loads).
+    chain: Option<String>,
 }
 
 impl State {
@@ -257,6 +279,59 @@ impl State {
             }
         }
         self.statuses.insert(status.handle.clone(), status);
+        self.history_dirty = true;
+    }
+
+    /// The history record for `chain`: the scan position and the finished
+    /// statuses, newest first.
+    fn history(&self, chain: &str) -> serde_json::Value {
+        serde_json::json!({ "scanned": self.scanned, "items": self.history_items(chain) })
+    }
+
+    fn history_items(&self, chain: &str) -> Vec<serde_json::Value> {
+        let mut done: Vec<&TxStatus> = self
+            .statuses
+            .values()
+            .filter(|s| s.is_final() && s.chain == chain)
+            .collect();
+        done.sort_by_key(|s| std::cmp::Reverse(s.phase_started_ms));
+        done.into_iter()
+            .take(MAX_HISTORY)
+            .filter_map(|s| {
+                serde_json::to_value(StoredStatus {
+                    status: s.clone(),
+                    requester: s.requester.clone(),
+                })
+                .ok()
+            })
+            .collect()
+    }
+
+    /// Bring back `session`'s history. Finished statuses of other zones leave
+    /// memory (they're on disk); anything still running stays.
+    fn load_history(&mut self, session: &Session) {
+        let chain = session.zone().chain.clone();
+        self.chain = Some(chain.clone());
+        self.statuses
+            .retain(|_, s| !s.is_final() || s.chain == chain);
+        let record = session.load_history().unwrap_or_default();
+        self.scanned = record
+            .get("scanned")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let items = record
+            .get("items")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for v in items {
+            if let Ok(stored) = serde_json::from_value::<StoredStatus>(v) {
+                let mut status = stored.status;
+                status.requester = stored.requester;
+                self.statuses.entry(status.handle.clone()).or_insert(status);
+            }
+        }
+        self.history_dirty = false;
     }
 }
 
@@ -330,12 +405,164 @@ fn tx_hash_hex(hash: &str) -> String {
 
 impl Engine {
     pub fn new(session: Session, config: Config) -> Self {
+        let mut state = State::default();
+        state.load_history(&session);
         Self {
             wallet: tokio::sync::Mutex::new(AutoLock::new(session)),
             touched: std::sync::atomic::AtomicBool::new(false),
-            state: Mutex::new(State::default()),
+            state: Mutex::new(state),
             config,
         }
+    }
+
+    /// Write the zone's finished activity if anything changed. Called by the
+    /// host's tick, on lock and on zone switch; the CLI calls it before exit.
+    pub async fn flush_history(&self) -> Result<()> {
+        let mut wallet = self.wallet.lock().await;
+        let Ok(session) = wallet.session() else {
+            return Ok(());
+        };
+        Self::flush_into(&self.state, session)
+    }
+
+    fn flush_into(state: &Mutex<State>, session: &Session) -> Result<()> {
+        let record = {
+            let mut state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !state.history_dirty {
+                return Ok(());
+            }
+            state.history_dirty = false;
+            state.history(&session.zone().chain)
+        };
+        session.save_history(&record)
+    }
+
+    /// A private account's LGO balance rose by `delta` since `since_ms`.
+    /// Whatever our own sends and shields into it explain is ours; the rest
+    /// arrived from someone else, privately (no sender, no transaction we
+    /// can name). Our transfers still in flight count as ours, so a shield
+    /// that lands just before its status updates isn't mistaken for a gift.
+    pub fn record_private_receipt(
+        &self,
+        account: &str,
+        delta: u128,
+        since_ms: u64,
+        block: Option<u64>,
+    ) {
+        let mut state = self.state();
+        let own: u128 = state
+            .statuses
+            .values()
+            .filter(|s| !s.incoming && s.to.as_deref() == Some(account) && s.token.is_none())
+            .filter(|s| {
+                !s.is_final()
+                    || (s.phase_started_ms >= since_ms && s.lifecycle == Lifecycle::Included)
+            })
+            .filter_map(|s| s.amount.as_deref().and_then(|a| a.parse::<u128>().ok()))
+            .sum();
+        let Some(rest) = delta.checked_sub(own).filter(|r| *r > 0) else {
+            return;
+        };
+        let now = now_ms();
+        let Some(chain) = state.chain.clone() else {
+            return;
+        };
+        let mut status = TxStatus::new(&format!("in:private:{account}:{now}"), &chain, None);
+        status.lifecycle = Lifecycle::Included;
+        status.outcome = Outcome::Success;
+        status.block = block;
+        status.phase_started_ms = now;
+        status.title = Some("Received privately".to_owned());
+        status.to = Some(account.to_owned());
+        status.amount = Some(rest.to_string());
+        status.route = Some(tx::Route::Private);
+        status.incoming = true;
+        state.insert_status(status);
+    }
+
+    /// Read the blocks since the last scan for payments into our public
+    /// accounts and add them to the activity (see `incoming`). Network reads
+    /// happen without the wallet lock. A new wallet starts at today's tip; a
+    /// restored one reads from block 1, `incoming::STEP` blocks per call.
+    pub async fn scan_incoming(&self) -> Result<usize> {
+        let (client, mine, decoders, chain, from_genesis, epoch) = {
+            let mut wallet = self.wallet.lock().await;
+            let s = wallet.session()?;
+            let Some(core) = s.core() else {
+                return Ok(0);
+            };
+            let mine: std::collections::HashSet<lee::AccountId> = s
+                .accounts()?
+                .iter()
+                .filter(|a| a.kind == AccountKind::Public)
+                .filter_map(|a| crate::decode::account_id(&a.account_id).ok())
+                .collect();
+            (
+                core.helm_owned(),
+                mine,
+                s.decoders(),
+                s.zone().chain.clone(),
+                s.is_restored(),
+                self.state().epoch,
+            )
+        };
+        let tip = {
+            use sequencer_service_rpc::RpcClient as _;
+            client.get_last_block_id().await?
+        };
+        let from = {
+            let mut state = self.state();
+            if state.scanned > tip {
+                // The chain was reset under us.
+                state.scanned = 0;
+            }
+            if state.scanned == 0 && !from_genesis {
+                state.scanned = tip;
+                state.history_dirty = true;
+                return Ok(0);
+            }
+            state.scanned + 1
+        };
+        if from > tip || mine.is_empty() {
+            return Ok(0);
+        }
+        let to = tip.min(from + crate::incoming::STEP - 1);
+        let found = crate::incoming::scan(&client, from, to, &mine, &decoders).await?;
+        let mut state = self.state();
+        if state.epoch != epoch {
+            return Ok(0);
+        }
+        let mut added = 0;
+        for (i, inc) in found.into_iter().enumerate() {
+            // Our own faucet claim is already a row with this hash.
+            let known = state
+                .statuses
+                .values()
+                .any(|s| s.tx_hash.as_deref() == Some(inc.tx_hash.as_str()));
+            if known {
+                continue;
+            }
+            let handle = format!("in:{}:{i}", inc.tx_hash);
+            let mut status = TxStatus::new(&handle, &chain, None);
+            status.lifecycle = Lifecycle::Included;
+            status.outcome = Outcome::Success;
+            status.tx_hash = Some(inc.tx_hash);
+            status.block = Some(inc.block);
+            status.phase_started_ms = inc.timestamp_ms;
+            status.title = Some("Received".to_owned());
+            status.from = inc.from;
+            status.to = Some(inc.account);
+            status.amount = Some(inc.amount);
+            status.token = inc.token;
+            status.incoming = true;
+            state.insert_status(status);
+            added += 1;
+        }
+        state.scanned = to;
+        state.history_dirty = true;
+        Ok(added)
     }
 
     fn state(&self) -> std::sync::MutexGuard<'_, State> {
@@ -357,7 +584,11 @@ impl Engine {
     /// Lock now; the pending request expires with it.
     pub async fn lock(&self) -> Result<()> {
         self.expire_pending("wallet locked");
-        self.wallet.lock().await.lock()
+        let mut wallet = self.wallet.lock().await;
+        if let Ok(session) = wallet.session() {
+            let _ = Self::flush_into(&self.state, session);
+        }
+        wallet.lock()
     }
 
     /// Host timer: auto-lock when idle (also expires the pending request).
@@ -374,6 +605,10 @@ impl Engine {
         {
             wallet.touch();
         }
+        if let Ok(session) = wallet.session() {
+            // Before an auto-lock can drop the session.
+            let _ = Self::flush_into(&self.state, session);
+        }
         let locked = wallet.tick()?;
         drop(wallet);
         if locked {
@@ -385,7 +620,12 @@ impl Engine {
     /// Switch to another unlocked session (zone switch, unlock after lock).
     pub async fn set_session(&self, session: Session) -> Result<()> {
         self.expire_pending("wallet or zone changed");
-        self.wallet.lock().await.set(session)
+        let mut wallet = self.wallet.lock().await;
+        if let Ok(old) = wallet.session() {
+            let _ = Self::flush_into(&self.state, old);
+        }
+        self.state().load_history(&session);
+        wallet.set(session)
     }
 
     fn expire_pending(&self, why: &str) {
@@ -404,6 +644,7 @@ impl Engine {
             s.phase_started_ms = now_ms();
             s.error = error.map(str::to_owned);
         }
+        state.history_dirty = true;
         if let Some(app) = &p.requester {
             state
                 .cooldown
@@ -1115,6 +1356,7 @@ impl Engine {
             .expect("status exists for every request");
         f(status);
         let snapshot = status.clone();
+        state.history_dirty = true;
         drop(state);
         progress(&snapshot);
         snapshot
@@ -1143,7 +1385,7 @@ impl Engine {
         self.update(handle, progress, |s| {
             s.lifecycle = lifecycle;
             s.phase_started_ms = now_ms();
-            s.error = Some(format!("{e:#}"));
+            s.error = Some(crate::decode::shorten_ids(&format!("{e:#}")));
             s.error_code = Some(code);
         });
         e

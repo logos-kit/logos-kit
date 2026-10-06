@@ -212,7 +212,7 @@ Item {
                 }
                 Repeater {
                     model: home.visibleActivity
-                    TxRow { tx: modelData; onClicked: home.openStatus(modelData) }
+                    TxRow { tx: modelData; store: home.store; onClicked: home.openStatus(modelData) }
                 }
             }
             EmptyState {
