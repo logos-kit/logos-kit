@@ -123,7 +123,7 @@ Layout, sizes and hierarchy are in [`lp0001-screens.md`](lp0001-screens.md). Thi
 | only LGO | LGO row + "Tokens you receive show up here." + **Add a token** |
 | offline / stale | rows from cache + "As of block 12,104 · Retrying" under the total |
 | a token's name can't be read | the row keeps the short Token ID as its name, with "Name unavailable" |
-| squatted own slot (an unknown token sits in your account's own token slot) | a warning row at the top: "A token you didn't ask for is using this account's token slot. Clear it" (§2.6) |
+| an unknown token sits in your account's own token slot | nothing extra: it folds into Unknown like any other (decision D4) |
 
 ### 2.2 Unknown and Hidden
 
@@ -180,15 +180,13 @@ One screen with three tabs: **Unknown (N) · Spam (N) · Hidden (N)**.
   - Spam: the reason + "Logos Kit hid this automatically." + **Show anyway**
 - **⋯ menu:** Pin · Hide · Copy Token ID · Open in explorer.
 
-### 2.6 Create a test token, and clear a squatted slot
+### 2.6 Create a test token, and a squatted slot
 
 **Create:** name (≤ 32 bytes, counter), supply (whole number; "Decimals aren't stored on chain. 1,000,000 with 6 decimals shows as 1.000000."), holder (public accounts with LGO for the fee), decimals (stored locally, offered to recipients via the metadata we write when the user opts in).
 - Preflight: if the holder's own token slot is in use, the token goes to the holder's token account (ATA) instead, and the sheet says so.
 - After: the new definition account is labelled "LOGO token ID" and hidden from the account switcher; the holder is selected; the token is pinned and marked "Created by you".
 
-**Clear a squatted slot** (an unknown token occupies your account's own slot, so a legacy-style send of another token to that slot would fail):
-- Explain: "Someone sent an unknown token straight into this account's token slot. That slot holds one token at a time, so it blocks old-style sends. Your balances in other tokens aren't affected."
-- Action **Clear slot**: re-initialises the slot with your signature, which removes the unknown token's balance ("The unknown token is removed from this account. Nothing else changes.") → approval → done. Decision D4.
+**A squatted slot** (an unknown token sitting in the account's own slot): shown and hidden like any unknown token. Its details explain: "Someone sent this token straight into this account's own token slot. Tokens sent with Logos Kit go to separate token accounts, so this doesn't block them." No "Clear slot" action: LEZ can't release a slot (decision D4).
 
 ### 2.7 Send: token additions to `ux-spec.md` §3
 
@@ -353,7 +351,6 @@ Plain copy shown to the user. Codes are the engine's; apps get protocol codes (`
 | recipient is an NFT | That's an NFT, not an address. |
 | decimals exceed the token's | LKT has 2 decimals. |
 | recipient's own slot holds another token (legacy send) | They can't receive this token at that address yet. Logos Kit will send it to their token account instead. |
-| own slot squatted | A token you didn't ask for is using this account's token slot. |
 | not enough LGO for the fee | You need 0.0005 LGO more to cover the fee. |
 | NFT listed | This item is listed on the Market. Cancel the listing first. |
 | proof: no private item | You don't have a private item from {collection}. |
@@ -401,7 +398,6 @@ Rules:
 | Hide / show / pin | `token hide <id>` · `token unhide <id>` · `token pin <id>` · `token unpin <id>` |
 | Token detail | `token info <id>` |
 | Create a test token | `token create --name … --supply … [--decimals N] [--from <account>]` |
-| Clear squatted slot | `token clear-slot [--account <a>]` |
 | Faucet (LGO + LKT, Pass) | `faucet` · `faucet --token` · `faucet --pass` |
 | Collectibles | `nft list` · `nft collections` · `nft show <collection|item>` |
 | NFT send / make private | `nft send <item> --to <addr|code>` · `nft make-private <item>` |

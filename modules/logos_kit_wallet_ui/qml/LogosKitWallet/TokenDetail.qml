@@ -121,6 +121,14 @@ ColumnLayout {
             : td.tier === "hidden" ? "You hid this token. Nothing was deleted."
             : "Unverified. Anyone can create a token with any name. Don't follow links in its name or metadata."
     }
+    // An unknown token in the account's own slot (decision D4).
+    Txt {
+        visible: !!td.row && (td.tier === "unknown" || td.tier === "spam") && td.row.holders.some(function (h) { return h.via === "account" })
+        Layout.fillWidth: true
+        wrapMode: Text.Wrap
+        tone: "text3"; font.pixelSize: 12
+        text: "Someone sent this token straight into this account's own token slot. Tokens sent with Logos Kit go to separate token accounts, so this doesn't block them."
+    }
     Notice {
         visible: !!td.preview && !!td.preview.imitates
         Layout.fillWidth: true
