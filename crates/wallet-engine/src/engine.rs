@@ -575,7 +575,12 @@ impl Engine {
             })
             .filter_map(|s| {
                 let amount = s.amount.as_deref()?.parse::<u128>().ok()?;
-                Some((s.lifecycle != Lifecycle::Included, s.phase_started_ms, s.handle.clone(), amount))
+                Some((
+                    s.lifecycle != Lifecycle::Included,
+                    s.phase_started_ms,
+                    s.handle.clone(),
+                    amount,
+                ))
             })
             .collect();
         // Landed first, oldest first. A landed one explains the rise even

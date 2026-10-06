@@ -316,26 +316,63 @@ mod tests {
             Some(SpamReason::Lookalike { of: "LGO".into() })
         );
         assert_eq!(spam(T, "Payroll Token"), None);
-        assert_eq!(spam(T, "Logos Club Points"), None, "a name may contain Logos");
+        assert_eq!(
+            spam(T, "Logos Club Points"),
+            None,
+            "a name may contain Logos"
+        );
     }
 
     #[test]
     fn spam_rules_see_through_disguises() {
-        for hidden in ["LGO\u{3164}", "\u{061C}Pay", "Pay\u{00AD}roll", "LGO\u{FE0F}", "Pay\u{E0041}", "LGO\u{2800}"] {
-            assert_eq!(spam(T, hidden), Some(SpamReason::HiddenCharacters), "{hidden:?}");
+        for hidden in [
+            "LGO\u{3164}",
+            "\u{061C}Pay",
+            "Pay\u{00AD}roll",
+            "LGO\u{FE0F}",
+            "Pay\u{E0041}",
+            "LGO\u{2800}",
+        ] {
+            assert_eq!(
+                spam(T, hidden),
+                Some(SpamReason::HiddenCharacters),
+                "{hidden:?}"
+            );
         }
         assert_eq!(
-            spam(T, "\u{FF43}\u{FF4C}\u{FF41}\u{FF49}\u{FF4D} at evil\u{FF0E}\u{FF58}\u{FF59}\u{FF5A}"),
+            spam(
+                T,
+                "\u{FF43}\u{FF4C}\u{FF41}\u{FF49}\u{FF4D} at evil\u{FF0E}\u{FF58}\u{FF59}\u{FF5A}"
+            ),
             Some(SpamReason::Link),
             "fullwidth letters and dot"
         );
-        assert_eq!(spam(T, "evil\u{3002}xyz"), Some(SpamReason::Link), "ideographic full stop");
-        assert_eq!(spam(T, "Cl\u{0430}im now"), Some(SpamReason::Bait), "Cyrillic a");
-        assert_eq!(spam(T, "\u{FF26}\u{FF32}\u{FF25}\u{FF25} coins"), Some(SpamReason::Bait), "fullwidth FREE");
+        assert_eq!(
+            spam(T, "evil\u{3002}xyz"),
+            Some(SpamReason::Link),
+            "ideographic full stop"
+        );
+        assert_eq!(
+            spam(T, "Cl\u{0430}im now"),
+            Some(SpamReason::Bait),
+            "Cyrillic a"
+        );
+        assert_eq!(
+            spam(T, "\u{FF26}\u{FF32}\u{FF25}\u{FF25} coins"),
+            Some(SpamReason::Bait),
+            "fullwidth FREE"
+        );
         for lookalike in ["LGO.", "L.G.O", "L G O", "LG0"] {
-            assert_eq!(spam(T, lookalike), Some(SpamReason::Lookalike { of: "LGO".into() }), "{lookalike:?}");
+            assert_eq!(
+                spam(T, lookalike),
+                Some(SpamReason::Lookalike { of: "LGO".into() }),
+                "{lookalike:?}"
+            );
         }
-        assert_eq!(spam(T, "LOGOS2"), Some(SpamReason::Lookalike { of: "LOGOS".into() }));
+        assert_eq!(
+            spam(T, "LOGOS2"),
+            Some(SpamReason::Lookalike { of: "LOGOS".into() })
+        );
     }
 
     #[test]

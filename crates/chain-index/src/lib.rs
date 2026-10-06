@@ -14,7 +14,7 @@
 //! the block under the cursor still has the same hash; if not, the chain was
 //! reset (testnets are) and the consumer starts over.
 
-use anyhow::{ensure, Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use common::block::Block;
 use sequencer_service_rpc::{RpcClient as _, SequencerClient};
 use serde::{Deserialize, Serialize};

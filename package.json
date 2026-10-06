@@ -35,6 +35,6 @@
     "vitest": "catalog:"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm biome check --staged --no-errors-on-unmatched"
+    "pre-commit": "pnpm biome check --staged --no-errors-on-unmatched && (git diff --cached --quiet -- '*.rs' || cargo fmt --all --check 2>/dev/null)"
   }
 }

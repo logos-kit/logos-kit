@@ -414,8 +414,10 @@ impl Session {
         };
         let (name, total_supply, metadata_id) = def;
         let definition = id.to_string();
-        self.token_names
-            .insert(format!("{}:{definition}", self.zone().id), Some(name.clone()));
+        self.token_names.insert(
+            format!("{}:{definition}", self.zone().id),
+            Some(name.clone()),
+        );
         let info = self.token_info(&definition, Some(&name));
         let chain = self.zone().chain.clone();
         let trusted = matches!(
