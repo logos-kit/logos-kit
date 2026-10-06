@@ -72,5 +72,13 @@ ColumnLayout {
                       : "Anyone can send LGO to this address. Payments to it are public."
     }
     Btn { visible: rv.payload !== ""; Layout.fillWidth: true; Layout.topMargin: 6; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
+    Btn {
+        objectName: "receiveExplorer"
+        visible: !rv.priv && rv.payload !== "" && !!rv.store.state.explorer
+        Layout.fillWidth: true
+        icon: "external"
+        text: "View account in explorer"
+        onClicked: rv.store.call("openExplorer", { chain: rv.store.zone.chain, account: rv.payload }, function (v, e) { if (e) rv.store.toast(Fmt.errorText(e), "danger") })
+    }
     ErrorCard { visible: rv.problem !== ""; title: "Couldn't load your receive details"; body: rv.problem; onRetry: rv.load() }
 }

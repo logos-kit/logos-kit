@@ -53,6 +53,10 @@ struct Cli {
     /// With --yes: also approve a call the wallet can't decode.
     #[arg(long, global = true)]
     ack_unknown: bool,
+    /// Prove private transactions with smaller segments: about 2 GB of free
+    /// memory instead of 4.6 GB, and slower.
+    #[arg(long, global = true, env = "LOGOS_KIT_LOW_MEMORY")]
+    low_memory: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -830,7 +834,9 @@ async fn token(cli: &Cli, cmd: &TokenCmd) -> Result<()> {
                 "--json needs --yes (run without --json to review first)"
             );
             let (mut session, pw) = open(cli).await?;
-            let definition = session.new_account(AccountKind::Public)?.account_id;
+            let definition = session
+                .new_system_account(&format!("{name} token ID"))?
+                .account_id;
             let intent =
                 wallet_engine::tokens::create_token_intent(holder, &definition, name, *supply)?;
             let engine = Engine::new(session, Config::default());
@@ -1401,7 +1407,7 @@ async fn run(cli: Cli) -> Result<()> {
                     } else {
                         AccountKind::Public
                     };
-                    let a = session.new_account(kind)?;
+                    let a = session.new_named_account(kind)?;
                     print(&cli, &serde_json::to_value(&a)?, || {
                         println!("{}", a.account_id);
                     });
@@ -1613,6 +1619,7 @@ async fn run(cli: Cli) -> Result<()> {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    wallet_engine::proving::set_low_memory(cli.low_memory);
     let json = cli.json;
     if let Err(e) = run(cli).await {
         let code = code_of(&e) as i64;

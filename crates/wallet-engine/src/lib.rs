@@ -15,6 +15,7 @@ pub mod ffi;
 pub mod incoming;
 pub mod message;
 pub mod policy;
+pub mod proving;
 pub mod service;
 pub mod session;
 pub mod testimonial;

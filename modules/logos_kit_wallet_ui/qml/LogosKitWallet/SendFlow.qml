@@ -214,7 +214,7 @@ ColumnLayout {
         }
         Txt { text: "Or one of your accounts"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 6 }
         Repeater {
-            model: sf.store.accounts
+            model: sf.store.userAccounts
             AccountCard {
                 visible: !sf.from || modelData.accountId !== sf.from.accountId
                 multi: false

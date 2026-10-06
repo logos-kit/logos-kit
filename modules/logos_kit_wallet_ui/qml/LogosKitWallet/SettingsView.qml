@@ -12,7 +12,22 @@ ColumnLayout {
     property string problem: ""
     property string note: ""
     property string switchTo: ""
+    property bool addingZone: false
+    property bool changingPassword: false
     width: parent ? parent.width : 400
+
+    // What each permission lets an app do, in the words the connect sheet uses.
+    readonly property var capWords: ({
+        accounts: "see the accounts you picked",
+        read_public: "see public balances",
+        read_private: "see private balances",
+        propose_tx: "ask you to approve transactions",
+        sign_message: "ask you to sign messages",
+        request_proof: "ask for membership proofs"
+    })
+    function capText(caps) {
+        return caps.map(function (c) { return st.capWords[c] || c.replace(/_/g, " ") }).join(", ")
+    }
     spacing: 10
 
     function load() {
@@ -77,6 +92,43 @@ ColumnLayout {
         }
     }
 
+    Btn {
+        objectName: "addZoneOpen"
+        visible: !st.addingZone
+        Layout.fillWidth: true
+        icon: "plus"
+        text: "Add a network"
+        onClicked: st.addingZone = true
+    }
+    ColumnLayout {
+        visible: st.addingZone
+        Layout.fillWidth: true
+        spacing: 6
+        Field { id: zoneName; objectName: "addZoneName"; Layout.fillWidth: true; placeholderText: "Name, e.g. My devnet" }
+        Field { id: zoneUrl; objectName: "addZoneUrl"; Layout.fillWidth: true; mono: true; placeholderText: "Sequencer URL (https://…)" }
+        Txt { Layout.fillWidth: true; text: "Logos Kit makes a separate set of accounts for each network. Your recovery phrase covers all of them."; tone: "text3"; font.pixelSize: 12; wrapMode: Text.Wrap }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            Btn { Layout.fillWidth: true; text: "Cancel"; onClicked: { st.addingZone = false; zoneName.text = ""; zoneUrl.text = "" } }
+            Btn {
+                objectName: "addZoneSave"
+                Layout.fillWidth: true
+                tone: "ink"
+                text: "Add"
+                readonly property string slug: zoneName.text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+                enabled: slug.length > 0 && /^https?:\/\/\S+$/.test(zoneUrl.text.trim())
+                onClicked: st.store.call("addZone", { id: "lez-" + slug, chain: "lez:" + slug, sequencer: zoneUrl.text.trim() }, function (v, e) {
+                    if (e) { st.problem = Fmt.errorText(e); return }
+                    st.problem = ""
+                    st.note = "Added " + zoneName.text.trim() + ". Switch to it above."
+                    st.addingZone = false; zoneName.text = ""; zoneUrl.text = ""
+                    st.store.refreshState()
+                })
+            }
+        }
+    }
+
     // -- appearance ---------------------------------------------------------------------
     Section { text: "Appearance" }
     SettingsRow {
@@ -113,7 +165,8 @@ ColumnLayout {
     Section { text: "Privacy" }
     Notice { tone: "private"; text: "Logos Kit makes no analytics or third-party calls. It talks only to the endpoints below." }
     InfoRow { label: "Sequencer"; value: st.store.zone.sequencer || ""; mono: true }
-    InfoRow { label: "Faucet"; value: st.store.state.faucet || "None (off)" }
+    InfoRow { label: "Faucet"; value: st.store.state.faucetHost || "None (off)"; mono: !!st.store.state.faucetHost }
+    InfoRow { visible: !!st.store.state.explorer; label: "Explorer"; value: "Only when you open a link" }
     InfoRow { label: "Proving"; value: "On this device" }
 
     // -- security ----------------------------------------------------------------------------
@@ -160,6 +213,57 @@ ColumnLayout {
     }
     Btn { visible: st.words.length > 0; Layout.fillWidth: true; text: "Hide phrase"; onClicked: st.words = [] }
 
+    SettingsRow {
+        objectName: "changePasswordRow"
+        glyph: "lock"
+        title: "Password"
+        description: "Unlocks this wallet on this device"
+        chevron: false
+        Btn { text: st.changingPassword ? "Cancel" : "Change"; onClicked: { st.changingPassword = !st.changingPassword; curPw.text = ""; newPw.text = ""; newPw2.text = "" } }
+    }
+    ColumnLayout {
+        visible: st.changingPassword
+        Layout.fillWidth: true
+        spacing: 6
+        Field { id: curPw; objectName: "pwCurrent"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Current password" }
+        Field { id: newPw; objectName: "pwNew"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "New password" }
+        PasswordStrength { Layout.fillWidth: true; password: newPw.text }
+        Field { id: newPw2; objectName: "pwNew2"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "New password again"; invalid: newPw2.text !== "" && newPw2.text !== newPw.text }
+        Btn {
+            objectName: "pwSave"
+            Layout.fillWidth: true
+            tone: "ink"
+            text: "Change password"
+            enabled: curPw.text.length > 0 && newPw.text.length >= 10 && newPw.text === newPw2.text
+            onClicked: st.store.call("changePassword", { current: curPw.text, new: newPw.text }, function (v, e) {
+                curPw.text = ""; newPw.text = ""; newPw2.text = ""
+                if (e) { st.problem = Fmt.errorText(e); return }
+                st.problem = ""
+                st.changingPassword = false
+                st.note = "Password changed. Your recovery phrase didn't change."
+            }, 60000)
+        }
+    }
+
+    // -- backup -----------------------------------------------------------------------------
+    Section { text: "Backup" }
+    SettingsRow {
+        objectName: "backupRow"
+        glyph: "download"
+        title: "Encrypted backup"
+        description: "Saves your accounts, labels, connected apps and history to a file. It opens only with your password."
+        chevron: false
+        Btn {
+            objectName: "backupSave"
+            text: "Save"
+            onClicked: st.store.call("exportBackup", {}, function (v, e) {
+                if (e) { st.problem = Fmt.errorText(e); return }
+                st.problem = ""
+                st.note = "Saved to " + v.path + ". Keep your recovery phrase too: a backup needs the password it was made with."
+            }, 60000)
+        }
+    }
+
     // -- connected apps -------------------------------------------------------------------------
     Section { text: "Connected apps" }
     EmptyState {
@@ -190,7 +294,7 @@ ColumnLayout {
                     Txt { text: modelData.requester; mono: true; tone: "text3"; font.pixelSize: 11; Layout.fillWidth: true }
                     Txt {
                         Layout.fillWidth: true
-                        text: modelData.accounts.length + " account" + (modelData.accounts.length === 1 ? "" : "s") + " · " + modelData.caps.join(", ").replace(/_/g, " ")
+                        text: "Can " + st.capText(modelData.caps) + " · " + modelData.accounts.length + " account" + (modelData.accounts.length === 1 ? "" : "s")
                         tone: "text2"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
                     }
                 }

@@ -383,7 +383,7 @@ Item {
                         Notice {
                             visible: !!root.selected && root.selected.kind === "private"
                             tone: "private"
-                            text: "Private accounts are funded in two steps: the faucet pays one of your public accounts, then you approve moving it in privately. The proof takes about 4–7 minutes on this computer."
+                            text: "Private accounts are funded in two steps: the faucet pays one of your public accounts, then you approve moving it in privately. The proof takes about 5–8 minutes on this computer."
                         }
                         Btn {
                             objectName: "fcRequest"
@@ -478,7 +478,7 @@ Item {
                                 var reached = lc === "awaiting_approval" ? 1 : (lc === "building" || lc === "proving" || lc === "signing") ? 2 : lc === "submitted" ? 3 : 4
                                 function at(i) { return reached > i ? "done" : reached === i ? "active" : "pending" }
                                 var proving = { label: "Proving on this computer", status: at(2), progress: reached === 2 ? -1 : undefined,
-                                                detail: "Keeps the move private.", estimate: "About 4–7 minutes" }
+                                                detail: "Keeps the move private.", estimate: "About 5–8 minutes" }
                                 if (reached === 2 && root.shield && root.shield.startedAt) proving.elapsed = root.mmss((root.now - root.shield.startedAt) / 1000)
                                 return [
                                     { label: "Faucet paid your public account", status: "done" },

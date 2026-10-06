@@ -18,8 +18,13 @@ QtObject {
     // ui_state
     property var state: ({})
     property bool loaded: false
-    // The core didn't answer at all (not installed, crashed, still starting).
+    // The core didn't answer at all (not installed, crashed). Basecamp's
+    // first start can take 16–40 s before our module loads, so for the
+    // first minute a silent core counts as starting, not as broken.
     property string unreachable: ""
+    readonly property real startedMs: Date.now()
+    property real nowMs: Date.now()
+    readonly property bool slowStart: !loaded && unreachable === "" && nowMs - startedMs > 20000
     readonly property bool initialized: state.initialized === true
     readonly property bool unlocked: state.unlocked === true
     readonly property var zone: state.zone || ({})
@@ -34,6 +39,10 @@ QtObject {
     property var tip: null
     property string syncError: ""
     property var activity: []
+
+    // The user's own accounts: without the ones the wallet made for itself
+    // (token IDs, program accounts), which stay in Settings → Accounts.
+    readonly property var userAccounts: accounts.filter(function (a) { return !a.system })
 
     // The account the home screen shows.
     property string selected: ""
@@ -152,8 +161,9 @@ QtObject {
 
     function refreshState(cb) {
         call("state", {}, function (v, e) {
+            store.nowMs = Date.now()
             if (e) {
-                if (!store.loaded) store.unreachable = Fmt.errorText(e)
+                if (!store.loaded && store.nowMs - store.startedMs > 60000) store.unreachable = Fmt.errorText(e)
                 if (cb) cb(false)
                 return
             }
@@ -191,9 +201,10 @@ QtObject {
                 // Start on the first public account: it's the one the faucet
                 // funds and the one that pays fees, so a new user lands on
                 // their test LGO, not on an empty private balance.
-                for (var i = 0; i < store.accounts.length; i++)
-                    if (store.accounts[i].kind === "public") { store.selected = store.accounts[i].accountId; break }
-                if (store.selected === "") store.selected = store.accounts[0].accountId
+                var mine = store.userAccounts.length ? store.userAccounts : store.accounts
+                for (var i = 0; i < mine.length; i++)
+                    if (mine[i].kind === "public") { store.selected = mine[i].accountId; break }
+                if (store.selected === "") store.selected = mine[0].accountId
             }
         })
         call("activity", {}, function (v, e) { if (!e && v) store.setActivity(v) })

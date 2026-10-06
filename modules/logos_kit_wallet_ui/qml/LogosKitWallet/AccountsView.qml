@@ -28,7 +28,7 @@ ColumnLayout {
     Txt { text: "Accounts"; font.pixelSize: 20; font.weight: Font.Bold }
     Txt { Layout.fillWidth: true; text: "Public accounts are visible on-chain and pay fees. Private accounts are seen only by you."; tone: "text2"; font.pixelSize: 13; wrapMode: Text.Wrap; elide: Text.ElideNone }
     Repeater {
-        model: av.store.accounts
+        model: av.store.userAccounts
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 6

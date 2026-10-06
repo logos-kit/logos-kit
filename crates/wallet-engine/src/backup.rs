@@ -39,7 +39,8 @@ fn allowed(path: &str) -> bool {
     };
     match parts[..] {
         ["zones.json"] | ["keys", "vault.json"] => true,
-        ["zones", id, "vault.json" | "wallet_config.json"] => zone_ok(id),
+        ["zones", id, "vault.json" | "wallet_config.json"]
+        | ["zones", id, "history", "vault.json"] => zone_ok(id),
         _ => false,
     }
 }
@@ -55,7 +56,7 @@ impl DataDir {
             for entry in std::fs::read_dir(&zones)? {
                 let entry = entry?;
                 let id = entry.file_name().to_string_lossy().into_owned();
-                for f in ["vault.json", "wallet_config.json"] {
+                for f in ["vault.json", "wallet_config.json", "history/vault.json"] {
                     let rel = format!("zones/{id}/{f}");
                     if allowed(&rel) && entry.path().join(f).is_file() {
                         files.push(rel);
@@ -167,5 +168,7 @@ mod tests {
         assert!(!allowed("zones/Lez/vault.json"));
         assert!(!allowed("/etc/passwd"));
         assert!(!allowed("zones/lez-local/.session.lock"));
+        assert!(allowed("zones/lez-local/history/vault.json"));
+        assert!(!allowed("zones/lez-local/history/other.json"));
     }
 }

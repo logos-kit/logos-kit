@@ -25,7 +25,7 @@ use testimonial_core::{Instruction, Stats, Testimonial};
 use wallet::{WalletCore, program_facades::program_loader::ProgramLoader};
 
 use crate::{
-    session::{AccountKind, Session},
+    session::Session,
     tx::{CallAccount, Intent},
     verify::{self, ProgramCheck, Source, Status},
 };
@@ -534,7 +534,7 @@ impl Session {
             .len()
             .div_ceil(program_loader_core::MAX_SEGMENT_DATA_LEN);
         let mut fresh = || -> Result<AccountId> {
-            let id = self.new_account(AccountKind::Public)?.account_id;
+            let id = self.new_system_account("Program account")?.account_id;
             crate::decode::account_id(&id)
         };
         let header = fresh()?;

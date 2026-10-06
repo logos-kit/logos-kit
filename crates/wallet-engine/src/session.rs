@@ -297,6 +297,10 @@ struct Meta {
     /// Base64 key for per-app private account handles (made on first use).
     #[serde(default)]
     handle_key: Option<String>,
+    /// Accounts the wallet made for its own use (token IDs, program
+    /// headers and segments): kept out of the account switcher.
+    #[serde(default)]
+    system: BTreeSet<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -934,6 +938,57 @@ impl Session {
             path: Some(path.to_string()),
             label: None,
         })
+    }
+
+    /// A new account for the user, named "Public account N" / "Private
+    /// account N" (the lowest N not taken).
+    pub fn new_named_account(&mut self, kind: AccountKind) -> Result<AccountInfo> {
+        let mut info = self.new_account(kind)?;
+        let taken: BTreeSet<String> = self
+            .accounts()?
+            .into_iter()
+            .filter_map(|a| a.label)
+            .collect();
+        let word = match kind {
+            AccountKind::Public => "Public",
+            AccountKind::Private => "Private",
+        };
+        let label = (1..)
+            .map(|n| format!("{word} account {n}"))
+            .find(|l| !taken.contains(l))
+            .expect("some number is free");
+        self.set_label(&info.account_id, Some(&label))?;
+        info.label = Some(label);
+        Ok(info)
+    }
+
+    /// A public account the wallet uses itself (a token's definition, a
+    /// program's header or segment), labelled and kept out of the switcher.
+    pub fn new_system_account(&mut self, label: &str) -> Result<AccountInfo> {
+        let mut info = self.new_account(AccountKind::Public)?;
+        // Labels must be unique; a second "LOGO token ID" gets its short id.
+        let taken = self
+            .accounts()?
+            .iter()
+            .any(|a| a.label.as_deref() == Some(label));
+        let label = if taken {
+            format!("{label} {}", &info.account_id[..6])
+        } else {
+            label.to_owned()
+        };
+        self.set_label(&info.account_id, Some(&label))?;
+        let id = info.account_id.clone();
+        self.update_meta(|m| {
+            m.system.insert(id);
+        })?;
+        info.label = Some(label);
+        Ok(info)
+    }
+
+    /// Made by the wallet for its own use (see `new_system_account`).
+    pub fn is_system_account(&self, account_id: &str) -> bool {
+        self.meta.system.contains(account_id)
+            || self.tracked_tokens().iter().any(|t| t == account_id)
     }
 
     /// Import a public account by its private key (hex), e.g. a key from

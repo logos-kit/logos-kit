@@ -289,10 +289,13 @@ impl State {
     }
 
     fn history_items(&self, chain: &str) -> Vec<serde_json::Value> {
+        // Finished rows, plus ones in flight past approval, so a restart can
+        // say what happened to them (a request awaiting approval never
+        // outlives the session).
         let mut done: Vec<&TxStatus> = self
             .statuses
             .values()
-            .filter(|s| s.is_final() && s.chain == chain)
+            .filter(|s| s.lifecycle != Lifecycle::AwaitingApproval && s.chain == chain)
             .collect();
         done.sort_by_key(|s| std::cmp::Reverse(s.phase_started_ms));
         done.into_iter()
@@ -328,6 +331,26 @@ impl State {
             if let Ok(stored) = serde_json::from_value::<StoredStatus>(v) {
                 let mut status = stored.status;
                 status.requester = stored.requester;
+                // In flight when the wallet closed (a quit, a crash, or the
+                // OS stopping it for memory while it proved).
+                match status.lifecycle {
+                    Lifecycle::Building | Lifecycle::Proving => {
+                        status.lifecycle = Lifecycle::Dropped;
+                        status.error_code = Some(Code::ProofFailed as i64);
+                        status.error = Some(
+                            "The proof stopped when the wallet closed. Nothing was sent."
+                                .to_owned(),
+                        );
+                    }
+                    Lifecycle::Signing | Lifecycle::Submitted => {
+                        status.lifecycle = Lifecycle::Expired;
+                        status.error = Some(
+                            "The wallet closed before it saw the result. It may still have landed: check the balance or the explorer."
+                                .to_owned(),
+                        );
+                    }
+                    _ => {}
+                }
                 self.statuses.entry(status.handle.clone()).or_insert(status);
             }
         }
@@ -419,7 +442,7 @@ impl Engine {
     /// host's tick, on lock and on zone switch; the CLI calls it before exit.
     pub async fn flush_history(&self) -> Result<()> {
         let mut wallet = self.wallet.lock().await;
-        let Ok(session) = wallet.session() else {
+        let Some(session) = wallet.peek() else {
             return Ok(());
         };
         Self::flush_into(&self.state, session)
@@ -585,7 +608,7 @@ impl Engine {
     pub async fn lock(&self) -> Result<()> {
         self.expire_pending("wallet locked");
         let mut wallet = self.wallet.lock().await;
-        if let Ok(session) = wallet.session() {
+        if let Some(session) = wallet.peek() {
             let _ = Self::flush_into(&self.state, session);
         }
         wallet.lock()
@@ -595,19 +618,20 @@ impl Engine {
     /// Not while a proof runs: the user is waiting on it, and locking would
     /// throw the proof away.
     pub async fn tick(&self) -> Result<bool> {
+        let mut wallet = self.wallet.lock().await;
+        // Write the history first, also while a proof runs: if the OS stops
+        // the host mid-proof, the next start can say what happened to it.
+        if let Some(session) = wallet.peek() {
+            let _ = Self::flush_into(&self.state, session);
+        }
         if self.state().proving.is_some() {
             return Ok(false);
         }
-        let mut wallet = self.wallet.lock().await;
         if self
             .touched
             .swap(false, std::sync::atomic::Ordering::SeqCst)
         {
             wallet.touch();
-        }
-        if let Ok(session) = wallet.session() {
-            // Before an auto-lock can drop the session.
-            let _ = Self::flush_into(&self.state, session);
         }
         let locked = wallet.tick()?;
         drop(wallet);
@@ -621,7 +645,7 @@ impl Engine {
     pub async fn set_session(&self, session: Session) -> Result<()> {
         self.expire_pending("wallet or zone changed");
         let mut wallet = self.wallet.lock().await;
-        if let Ok(old) = wallet.session() {
+        if let Some(old) = wallet.peek() {
             let _ = Self::flush_into(&self.state, old);
         }
         self.state().load_history(&session);
@@ -1412,8 +1436,10 @@ impl Engine {
                 let mut state = self.state();
                 if state.proving.is_some() {
                     drop(state);
-                    let e =
-                        Denied::err(Code::RequestPending, "another transaction is being proved");
+                    let e = Denied::err(
+                        Code::RequestPending,
+                        "Another private transaction is being proved. Try again when it finishes.",
+                    );
                     return Err(self.fail(handle, Lifecycle::Dropped, e, progress));
                 }
                 state.proving = Some(handle.to_owned());
@@ -1429,6 +1455,11 @@ impl Engine {
                     .ok(),
                 None => None,
             };
+            // Enough free memory, and the segment size for it (`proving`).
+            if let Err(e) = crate::proving::prepare() {
+                drop(slot);
+                return Err(self.fail(handle, Lifecycle::Dropped, e, progress));
+            }
             self.phase(handle, Lifecycle::Proving, progress);
             let proved = tokio::task::spawn_blocking(move || job.run()).await;
             let cancelled = self.state().cancelled.iter().any(|h| h == handle);

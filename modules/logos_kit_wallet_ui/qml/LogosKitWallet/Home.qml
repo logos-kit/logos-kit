@@ -16,6 +16,7 @@ Item {
     signal accounts()
     signal settings()
     signal openStatus(var status)
+    signal privateInfo()
 
     readonly property var acct: store.current
     readonly property bool priv: !!acct && acct.kind === "private"
@@ -156,6 +157,18 @@ Item {
                 ActionTile { objectName: "homeSend"; glyph: "arrowUp"; text: "Send"; tone: "ink"; onClicked: home.send() }
                 ActionTile { objectName: "homeReceive"; glyph: "arrowDown"; text: "Receive"; onClicked: home.receive() }
                 ActionTile { objectName: "homeFunds"; glyph: "droplet"; text: "Test LGO"; enabled: !!home.store.state.faucet; opacity: enabled ? 1 : 0.4; onClicked: home.funds() }
+            }
+
+            Txt {
+                objectName: "privateInfoLink"
+                visible: home.priv
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 12
+                text: "How private accounts work ›"
+                tone: "text2"
+                font.pixelSize: 13
+                font.underline: privLinkMouse.containsMouse
+                MouseArea { id: privLinkMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: home.privateInfo() }
             }
 
             // -- tokens ----------------------------------------------------------------

@@ -64,8 +64,8 @@ const LOCAL_GENESIS_KEY: &str = "7f273098f25b71e6c005a9519f2678da8d1c7f01f6a2777
 const ETA_SHIELD_S: u64 = 330;
 const ETA_PRIVATE_S: u64 = 420;
 /// The one proof-time figure every screen, the README and the docs quote
-/// (measured shields: 267–337 s on an M-series Mac, ~4.3 GB peak).
-pub const PROOF_TIME: &str = "about 4–7 minutes";
+/// (measured on an M1 Pro: a shield 267–337 s, a private send 469 s; ~4.3 GB peak).
+pub const PROOF_TIME: &str = "about 5–8 minutes";
 
 static SERVICE: OnceLock<Service> = OnceLock::new();
 
@@ -81,6 +81,8 @@ struct Prefs {
     motion: Option<String>,
     /// Zone id → drip service URL.
     faucets: HashMap<String, String>,
+    /// Prove with smaller segments: less memory, more time (`proving`).
+    low_memory: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -264,10 +266,11 @@ impl Service {
             .build()
             .context("tokio runtime")?;
         let data = DataDir::new(root);
-        let prefs = std::fs::read(data.root().join("ui-prefs.json"))
+        let prefs: Prefs = std::fs::read(data.root().join("ui-prefs.json"))
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
+        crate::proving::set_low_memory(prefs.low_memory);
         Ok(Self {
             rt,
             data,
@@ -419,6 +422,33 @@ impl Service {
         match method {
             "state" => self.state(caller),
             "create" => self.create(p),
+            "findBackups" => Ok(json!(find_backups())),
+            // Free memory vs what a proof needs now (reads the OS; not polled).
+            "memory" => Ok(json!({
+                "free": crate::proving::available_memory(),
+                "needs": if crate::proving::low_memory() { crate::proving::NEEDS_LOW_MEMORY } else { crate::proving::NEEDS_DEFAULT },
+                "lowMemory": crate::proving::low_memory(),
+            })),
+            "restoreBackup" => self.restore_backup(p),
+            "exportBackup" => {
+                let engine = self.engine()?;
+                let bundle =
+                    self.block(async { engine.with_session(async |s| s.export_backup()).await })?;
+                let dir = backup_dirs()
+                    .into_iter()
+                    .next()
+                    .context("no Downloads, Documents or Desktop folder to save the backup in")?;
+                let day = civil_date(now_ms());
+                let name = (1..)
+                    .map(|n| match n {
+                        1 => format!("logos-kit-backup-{day}.json"),
+                        n => format!("logos-kit-backup-{day}-{n}.json"),
+                    })
+                    .find(|n| !dir.join(n).exists())
+                    .expect("some name is free");
+                crate::vault::atomic_write(&dir, &name, &bundle)?;
+                Ok(json!({ "path": dir.join(name).display().to_string() }))
+            }
             "restore" => self.restore(p),
             "unlock" => self.unlock(p),
             "lock" => {
@@ -457,11 +487,15 @@ impl Service {
                 let info = self.block(async {
                     engine
                         .with_session(async |s| {
-                            let info = s.new_account(a.kind)?;
-                            if let Some(l) = a.label.as_deref().filter(|l| !l.is_empty()) {
-                                s.set_label(&info.account_id, Some(l))?;
+                            match a.label.as_deref().filter(|l| !l.is_empty()) {
+                                Some(l) => {
+                                    let mut info = s.new_account(a.kind)?;
+                                    s.set_label(&info.account_id, Some(l))?;
+                                    info.label = Some(l.to_owned());
+                                    Ok(info)
+                                }
+                                None => s.new_named_account(a.kind),
                             }
-                            Ok(info)
                         })
                         .await
                 })?;
@@ -726,6 +760,8 @@ impl Service {
                     /// The zone to open (while locked; unlocked, use switchZone).
                     #[serde(default)]
                     zone: Option<String>,
+                    #[serde(default)]
+                    low_memory: Option<bool>,
                 }
                 let a: P = params(p)?;
                 let mut prefs = lock(&self.prefs).clone();
@@ -757,6 +793,10 @@ impl Service {
                         invalid("theme is dark or light")
                     );
                     prefs.theme = Some(t);
+                }
+                if let Some(on) = a.low_memory {
+                    prefs.low_memory = on;
+                    crate::proving::set_low_memory(on);
                 }
                 if let Some((zone, url)) = a.faucet {
                     match url.filter(|u| !u.is_empty()) {
@@ -839,6 +879,8 @@ impl Service {
                 })?;
                 Ok(json!({ "tip": tip }))
             }
+            // The wallet's own explorer links (rate-limited like apps', no grant needed).
+            "openExplorer" => self.open_explorer(p, caller),
             "openUrl" => {
                 #[derive(Deserialize)]
                 struct P {
@@ -904,11 +946,20 @@ impl Service {
             "motion": prefs.motion.clone().unwrap_or_else(|| "system".into()),
             "systemReducedMotion": system_reduced_motion(),
             "faucet": faucet_label(&zone, &prefs),
+            // Where faucet requests go (Settings → Privacy lists it).
+            "faucetHost": prefs
+                .faucets
+                .get(&zone.id)
+                .map(String::as_str)
+                .or_else(|| zone.builtin_faucet())
+                .map(|u| u.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or("").to_owned()),
             // The fee cap a public transaction reserves (LEZ wallets size it
             // from the gas limit; the real fee is at most this). Send's Max
             // leaves it behind.
             "feeCap": wallet::DEFAULT_MAX_FEE.to_string(),
             "proofTime": PROOF_TIME,
+            "lowMemory": prefs.low_memory,
+            "explorer": explorer_base(&zone.chain).is_some(),
             "status": status,
             "busy": busy,
             "pending": pending,
@@ -941,6 +992,41 @@ impl Service {
             "words": phrase.split_whitespace().collect::<Vec<_>>(),
             "accounts": accounts,
         }))
+    }
+
+    /// Restore an encrypted backup into this (empty) device, then unlock it.
+    /// Only files `findBackups` lists can be restored, and a wrong password
+    /// leaves nothing behind.
+    fn restore_backup(&'static self, p: &Value) -> Result<Value> {
+        #[derive(Deserialize)]
+        struct P {
+            path: String,
+            password: String,
+        }
+        let a: P = params(p)?;
+        ensure!(
+            !self.data.is_initialized(),
+            invalid("this device already has a wallet")
+        );
+        ensure!(
+            find_backups().iter().any(|b| b["path"] == a.path.as_str()),
+            invalid("pick one of the backups the wallet found")
+        );
+        let bundle = std::fs::read(&a.path).with_context(|| a.path.clone())?;
+        let written = self.data.import_backup(&bundle)?;
+        match Session::unlock(self.data.clone(), &a.password, self.current_zone()) {
+            Ok(session) => {
+                self.open(session)?;
+                Ok(Value::Null)
+            }
+            Err(_) => {
+                crate::backup::remove_written(self.data.root(), &written);
+                Err(Denied::err(
+                    Code::Unauthorized,
+                    "the backup didn't open with that password",
+                ))
+            }
+        }
     }
 
     fn restore(&'static self, p: &Value) -> Result<Value> {
@@ -1840,6 +1926,7 @@ impl Service {
                     accounts.push(json!({
                         "accountId": a.account_id,
                         "kind": a.kind,
+                        "system": s.is_system_account(&a.account_id),
                         "label": a.label,
                         "path": a.path,
                         "native": native.map(|n| n.to_string()),
@@ -2060,6 +2147,70 @@ fn name_defaults(s: &mut Session) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Where backups are saved and looked for: the user's Downloads, Documents
+/// and Desktop folders (the QML sandbox has no file picker).
+fn backup_dirs() -> Vec<std::path::PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+        return Vec::new();
+    };
+    ["Downloads", "Documents", "Desktop"]
+        .iter()
+        .map(|d| home.join(d))
+        .filter(|p| p.is_dir())
+        .collect()
+}
+
+/// `logos-kit-backup*.json` files in `backup_dirs`, newest first.
+fn find_backups() -> Vec<Value> {
+    let mut found: Vec<(u64, Value)> = Vec::new();
+    for dir in backup_dirs() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let Ok(meta) = e.metadata() else { continue };
+            if !(name.starts_with("logos-kit-backup") && name.ends_with(".json"))
+                || !meta.is_file()
+                || meta.len() > 256 * 1024 * 1024
+            {
+                continue;
+            }
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_millis() as u64);
+            found.push((
+                modified,
+                json!({
+                    "path": e.path().display().to_string(),
+                    "name": name,
+                    "folder": dir.file_name().map(|f| f.to_string_lossy().into_owned()),
+                    "modifiedMs": modified,
+                    "bytes": meta.len(),
+                }),
+            ));
+        }
+    }
+    found.sort_by_key(|(m, _)| std::cmp::Reverse(*m));
+    found.into_iter().map(|(_, v)| v).collect()
+}
+
+/// `YYYY-MM-DD` (UTC) for a unix time in ms (days-to-civil, H. Hinnant).
+fn civil_date(ms: u64) -> String {
+    let z = (ms / 86_400_000) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// A private account's receive code: `lezpriv1:` + base64url(npk ‖ vpk). The
@@ -2473,6 +2624,13 @@ mod tests {
         assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
         assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
         assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
+    }
+
+    #[test]
+    fn civil_date_matches_known_days() {
+        assert_eq!(super::civil_date(0), "1970-01-01");
+        assert_eq!(super::civil_date(1_791_244_800_000), "2026-10-06");
+        assert_eq!(super::civil_date(951_782_400_000), "2000-02-29");
     }
 
     #[test]
