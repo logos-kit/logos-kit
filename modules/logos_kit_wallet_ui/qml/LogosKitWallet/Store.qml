@@ -179,9 +179,11 @@ QtObject {
             store.tip = v.tip
             store.syncError = v.error || ""
             if (store.selected === "" && store.accounts.length > 0) {
-                // Start on the first private account (Tray home shows the private balance).
+                // Start on the first public account: it's the one the faucet
+                // funds and the one that pays fees, so a new user lands on
+                // their test LGO, not on an empty private balance.
                 for (var i = 0; i < store.accounts.length; i++)
-                    if (store.accounts[i].kind === "private") { store.selected = store.accounts[i].accountId; break }
+                    if (store.accounts[i].kind === "public") { store.selected = store.accounts[i].accountId; break }
                 if (store.selected === "") store.selected = store.accounts[0].accountId
             }
         })

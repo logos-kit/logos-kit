@@ -99,12 +99,25 @@ Item {
                 Item { implicitHeight: 8 }
                 Btn { objectName: "createWallet"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Create wallet"; onClicked: ob.go("password") }
                 Btn { objectName: "restoreWallet"; Layout.fillWidth: true; large: true; text: "Restore from recovery phrase"; onClicked: ob.go("restore") }
-                // Zones are data: the local sequencer is for development.
+                // Zones are data. The testnet is the default; the others are for
+                // development, so they wait behind "Advanced".
+                property bool advanced: false
+                Txt {
+                    objectName: "welcomeAdvanced"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 8
+                    visible: (ob.store.state.zones || []).length > 1 && !parent.advanced && ob.store.zone.chain === "lez:testnet"
+                    text: "Advanced: choose a network"
+                    tone: "text3"
+                    font.pixelSize: 12
+                    font.underline: advMouse.containsMouse
+                    MouseArea { id: advMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.parent.advanced = true }
+                }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 8
                     spacing: 6
-                    visible: (ob.store.state.zones || []).length > 1
+                    visible: (ob.store.state.zones || []).length > 1 && (parent.advanced || ob.store.zone.chain !== "lez:testnet")
                     Txt { Layout.alignment: Qt.AlignHCenter; text: "Network"; tone: "text3"; font.pixelSize: 12 }
                     SegmentedControl {
                         Layout.alignment: Qt.AlignHCenter
@@ -264,8 +277,8 @@ Item {
                     visible: !!ob.store.state.faucet
                     onClicked: {
                         var pub = null
-                        for (var i = 0; i < ob.accounts.length; i++) if (ob.accounts[i].kind === "public") pub = ob.accounts[i]
-                        if (pub) ob.store.requestFunds(pub.accountId)
+                        for (var i = 0; i < ob.accounts.length && !pub; i++) if (ob.accounts[i].kind === "public") pub = ob.accounts[i]
+                        if (pub) { ob.store.selected = pub.accountId; ob.store.requestFunds(pub.accountId) }
                         ob.go("welcome")
                         ob.done()
                     }
