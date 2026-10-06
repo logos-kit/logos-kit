@@ -59,3 +59,6 @@ templates/basecamp-dapp/flake.lock
 .vercel
 .env*
 .21st-inbox/
+
+# Refero reference screenshots: local only (fetch by ID, see docs/design/lp0001-screens.md)
+/docs/design/refs/lp0001/

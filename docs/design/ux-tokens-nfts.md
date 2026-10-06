@@ -111,7 +111,7 @@ Layout, sizes and hierarchy are in [`lp0001-screens.md`](lp0001-screens.md). Thi
 4. A last row: **"Hidden · Unknown (N) ›"** when either count is above zero.
 5. A text link under the list: **Manage tokens**.
 
-**Row:** 36 px logo (bundled logo, or the initials circle) · name over amount+symbol · a check mark after the name for Verified, an **"Added"** chip for Added by you · a lock glyph on the logo for balances held privately. Zero balances are hidden except LGO and pinned tokens.
+**Row:** 36 px logo (bundled logo, or the initials circle) · name over symbol on the left · the amount right-aligned in tabular figures (it takes the column where Family shows dollar values) · a check mark after the name for Verified, an **"Added"** chip for Added by you · a lock glyph on the logo for balances held privately. Zero balances are hidden except LGO and pinned tokens.
 
 **Total:** the header total counts LGO plus Verified and Added tokens only (no prices: shown as "LGO balance" on testnet; see decision D9).
 
@@ -248,6 +248,7 @@ Never hide an NFT because its image failed. The tile keeps its square and shows:
 - Requested by: the attested app identity (same block as connect).
 - **They'll learn:** "Someone holds an item from **Logos Kit Pass**" · "The proof is for **members-wall:post**" · "It's valid until **14:32**".
 - **They won't learn:** "Which wallet or account" · "Which item" · "Your balances or other holdings".
+- Both lists draw their marks in ink, not green (`Permissions.qml` uses `Theme.ok` today; the proof sheet must not).
 - **Using:** which private NFT (a picker if more than one in that collection). Anonymity line (only if the count is knowable; open question O2 in the decision log): "You're one of about 240 private holders." If fewer than 20: warning "Few people hold this privately, so this proof says less about you than usual, but more than you might expect."
 - **Time:** "Takes about 5–8 minutes on this Mac." If a newer proof exists for this item: "+ about 6 minutes to refresh the item first, so older proofs stop working." Offer another item from the same collection when available.
 - Buttons: **Prove** (arms after 500 ms) · **Decline**.
