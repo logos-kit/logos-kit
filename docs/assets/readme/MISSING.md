@@ -15,15 +15,11 @@ the README picks no dark variants.
 |---|---|---|
 | `hero.gif` | The whole connect → pick → approve → landed loop, about 10–15 s, 1440 px wide or less, under 5 MB: an app's **Connect wallet**, the wallet's "Share which accounts?" sheet with one account picked and **Connect**, the app's **Post testimonial**, the wallet's approval sheet (app name, program, verification, fee) and **Approve**, then the app's **Posted on LEZ** | `apps/docs/public/shots/testimonial-basecamp.webp`, `ledger/connect-dark.webp`, `ledger/approval-dark.webp` |
 | `cli.gif` | A terminal recording (for example a VHS tape): `logos-kit init`, `account new`, `faucet`, `send … --amount 0.25` with its review and `Approve? [y/N]`, then a `shield` showing "proving locally" (cut the wait) and the final "tx … in block … (outcome: Success)" | none |
-| `basecamp-01-install.png` | Basecamp's **Applications** list with the Logos Kit catalog added and **Logos Kit Wallet** showing **Install** (window) | `apps/docs/public/shots/catalog-install.webp` |
-| `basecamp-02-create.png` | The wallet's welcome screen: **Create wallet**, **Restore from recovery phrase**, the network picker | `apps/docs/public/shots/wallet-welcome.webp` (pre-Ledger) |
-| `basecamp-03-phrase.png` | The 24-word phrase grid after **Reveal**, with **I've saved it** (throwaway wallet) | `apps/docs/public/shots/wallet-phrase.webp` (pre-Ledger) |
-| `basecamp-04-test-lgo.png` | Home after **Test LGO**: "Public balance", 1 LGO, the Send / Receive / Test LGO tiles, and the faucet row in Activity | `apps/docs/public/shots/ledger/home-light.webp` (no activity row) |
-| `basecamp-05-accounts.png` | The accounts sheet with two public and one private account, one being renamed, and the **Public account** / **Private account** buttons | `apps/docs/public/shots/wallet-accounts.webp` (pre-Ledger) |
-| `basecamp-06-receive.png` | **Receive** on a private account: "Receive privately", the QR code, "Code ends …" and **Copy receive code** | `apps/docs/public/shots/ledger/receive-dark.webp` (dark) |
-| `basecamp-07-send.png` | The review of a public send: amount, the full destination, the fee and **Send** | `apps/docs/public/shots/ledger/review-light.webp` |
-| `basecamp-08-private.png` | A shield proving: the progress steps, the "On this device" proof row and **Keep running in background** | `apps/docs/public/shots/ledger/proving-dark.webp` (dark) |
 | `basecamp-09-connect-app.png` | Basecamp with Logos Kit Testimonials and the wallet's approval sheet for a post: the app's name and icon, the program and its verification, the fee (window) | `apps/docs/public/shots/testimonial-basecamp.webp` (after posting) |
+
+Made from the real wallet (`modules/logos_kit_wallet_ui/dev/qa_readme.py`, light, 2×, on the testnet):
+`basecamp-02-create.png` … `basecamp-08-private.png`. `basecamp-01-install.png` is the real Basecamp
+install run (`e2e/catalog-install-gui.sh`, `docs/reviews/a/catalog/`).
 
 Present already: `logo-light.svg` (the official Logos mark, black, on the
 Ledger light surface `#f5f5f7`) and `logo-dark.svg` (a copy of the shipped app

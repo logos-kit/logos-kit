@@ -31,6 +31,17 @@ Item {
         }
         return out
     }
+    // The faucet's payment is in the activity (found in a block).
+    readonly property bool fundingLanded: {
+        var r = store.funding && store.funding.result
+        if (!r || !r.txHash) return false
+        var k = String(r.txHash).replace(/^0x/, "").toLowerCase()
+        for (var i = 0; i < store.activity.length; i++) {
+            var h = store.activity[i].txHash
+            if (h && String(h).replace(/^0x/, "").toLowerCase() === k) return true
+        }
+        return false
+    }
     // Private buckets, from the transactions in flight (native only).
     function inFlight(s) { return s.lifecycle !== "included" && s.lifecycle !== "dropped" && s.lifecycle !== "awaiting_approval" && !s.token }
     readonly property string pendingIn: {
@@ -214,7 +225,8 @@ Item {
                 // The latest faucet request (a job, not a transaction).
                 ActivityRow {
                     objectName: "fundingRow"
-                    visible: home.store.funding !== null
+                    // Until the payment shows up as its own activity row.
+                    visible: home.store.funding !== null && !home.fundingLanded
                     readonly property var f: home.store.funding || ({})
                     readonly property var r: f.result || ({})
                     kind: "faucet"

@@ -262,6 +262,13 @@ struct State {
     scanned: u64,
     /// The current session's chain (set when its history loads).
     chain: Option<String>,
+    /// Transactions the faucet made for us, so the incoming scan labels them.
+    faucet_hashes: std::collections::HashSet<String>,
+}
+
+/// A transaction hash compared across sources (drip answer, block).
+fn hash_key(h: &str) -> String {
+    h.trim().trim_start_matches("0x").to_ascii_lowercase()
 }
 
 impl State {
@@ -559,14 +566,16 @@ impl Engine {
         }
         let mut added = 0;
         for (i, inc) in found.into_iter().enumerate() {
-            // Our own faucet claim is already a row with this hash.
+            // Already a row (one of ours, or found before).
+            let key = hash_key(&inc.tx_hash);
             let known = state
                 .statuses
                 .values()
-                .any(|s| s.tx_hash.as_deref() == Some(inc.tx_hash.as_str()));
+                .any(|s| s.tx_hash.as_deref().map(hash_key).as_deref() == Some(key.as_str()));
             if known {
                 continue;
             }
+            let from_faucet = state.faucet_hashes.contains(&key);
             let handle = format!("in:{}:{i}", inc.tx_hash);
             let mut status = TxStatus::new(&handle, &chain, None);
             status.lifecycle = Lifecycle::Included;
@@ -574,7 +583,14 @@ impl Engine {
             status.tx_hash = Some(inc.tx_hash);
             status.block = Some(inc.block);
             status.phase_started_ms = inc.timestamp_ms;
-            status.title = Some("Received".to_owned());
+            status.title = Some(
+                if from_faucet {
+                    "Test LGO from the faucet"
+                } else {
+                    "Received"
+                }
+                .to_owned(),
+            );
             status.from = inc.from;
             status.to = Some(inc.account);
             status.amount = Some(inc.amount);
@@ -948,6 +964,22 @@ impl Engine {
         let public = via.as_deref().unwrap_or(account);
         let id = crate::decode::account_id(public)?;
         let outcome = faucet.fund(id, request_key).await?;
+        if let FundOutcome::Funded { tx_hash, .. } = &outcome {
+            let key = hash_key(tx_hash);
+            let mut state = self.state();
+            // The scan may have found the payment while the drip waited for
+            // its block: label that row now.
+            let mut relabelled = false;
+            for s in state.statuses.values_mut() {
+                if s.incoming && s.tx_hash.as_deref().map(hash_key).as_deref() == Some(key.as_str())
+                {
+                    s.title = Some("Test LGO from the faucet".to_owned());
+                    relabelled = true;
+                }
+            }
+            state.history_dirty |= relabelled;
+            state.faucet_hashes.insert(key);
+        }
         let (mut shield, mut shield_error) = (None, None);
         if let (FundOutcome::Funded { amount, .. }, true) = (&outcome, target_private) {
             // The funds arrived either way: report them even if the shield

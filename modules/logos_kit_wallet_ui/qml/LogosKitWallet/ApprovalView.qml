@@ -180,7 +180,7 @@ ColumnLayout {
         // A native transfer runs in the chain itself (no program header),
         // whether the wallet's Send built it or an app proposed it.
         program: !av.program ? (av.outFlow && !av.outFlow.definition
-                                ? ({ name: "Native transfer · Built into LEZ", status: "builtin", immutable: true }) : null)
+                                ? ({ name: "Native transfer", status: "builtin", immutable: true }) : null)
             : ({
             name: (av.program.name ? av.program.name + (av.program.namedByUser ? " (named by you)" : "") : "Unknown program") + " · " + Fmt.short(av.program.account),
             status: av.program.status === "verified_local" ? "verified" : av.program.status === "claimed" ? "claimed"

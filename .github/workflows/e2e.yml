@@ -79,6 +79,8 @@ jobs:
         run: e2e/cli.sh
       - name: Testimonial deploy, posts, re-page, evidence
         run: e2e/testimonial.sh
+      - name: Tokens on every route, faucet to private, backup restore
+        run: e2e/tokens.sh
       - name: Engine E2E (sync, approvals, stale approval)
         env:
           RISC0_DEV_MODE: "1"

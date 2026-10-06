@@ -17,7 +17,7 @@ ActivityRow {
     readonly property bool final_: Fmt.isFinal(status)
     readonly property string t: (tx.title || "").toLowerCase()
 
-    kind: tx.incoming ? "receive"
+    kind: tx.incoming ? (t.indexOf("test lgo") === 0 ? "faucet" : "receive")
         : t.indexOf("connect") === 0 ? "call"
         : t.indexOf("testimonial") >= 0 ? "testimonial"
         : tx.route === "shield" ? "shield"

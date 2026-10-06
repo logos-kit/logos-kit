@@ -241,14 +241,14 @@ ColumnLayout {
         spacing: 6
         Field { id: curPw; objectName: "pwCurrent"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Current password" }
         Field { id: newPw; objectName: "pwNew"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "New password" }
-        PasswordStrength { Layout.fillWidth: true; password: newPw.text }
+        PasswordStrength { Layout.fillWidth: true; password: newPw.text; minLength: 8 }
         Field { id: newPw2; objectName: "pwNew2"; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "New password again"; invalid: newPw2.text !== "" && newPw2.text !== newPw.text }
         Btn {
             objectName: "pwSave"
             Layout.fillWidth: true
             tone: "ink"
             text: "Change password"
-            enabled: curPw.text.length > 0 && newPw.text.length >= 10 && newPw.text === newPw2.text
+            enabled: curPw.text.length > 0 && Fmt.password_ok(newPw.text) && newPw.text === newPw2.text
             onClicked: st.store.call("changePassword", { current: curPw.text, new: newPw.text }, function (v, e) {
                 curPw.text = ""; newPw.text = ""; newPw2.text = ""
                 if (e) { st.problem = Fmt.errorText(e); return }

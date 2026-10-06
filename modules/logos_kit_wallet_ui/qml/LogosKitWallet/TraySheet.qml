@@ -55,6 +55,7 @@ Item {
 
     Rectangle {
         id: panel
+        objectName: "sheetPanel"
         width: Math.min(sheet.width - 20, sheet.maxWidth)
         x: (sheet.width - width) / 2
         readonly property real wanted: head.height + holder.implicitHeight + 24
