@@ -25,6 +25,10 @@ awaiting_approval → building → proving → signing → submitted → include
 | `included` | In a block (`block.id`). **Final** for watchers. |
 | `rejected` · `dropped` · `expired` | Didn't happen. `error` says why. |
 
+On the official testnet a transaction can take a minute or more to be
+included. The wallet waits up to about 6 minutes before it reports a send as
+not included.
+
 The protocol reserves `finalized`, but the wallet doesn't report it yet.
 
 ## Outcomes: included is not "it worked"
@@ -52,11 +56,29 @@ so keys never leave it.
 The wallet shows progress and lets the user close the sheet; the proof keeps
 running. Only one proof runs at a time.
 
+## Amounts: LGO and lepta
+
+The native token is LOGOS, symbol **LGO**: 1 LGO = 10^9 lepta. LEZ is the
+name of the execution zone (the network), not of the token.
+
+| Where | Unit |
+|---|---|
+| The wire, JSON, the SDK (`transfer`, `getWalletBalance`, `requestFunds` results) | lepta, as strings |
+| The wallet, the apps, the CLI's human output | LGO, up to 9 decimals |
+| The CLI's `--json` output | lepta |
+| The CLI's `send --amount` | lepta (`42`) or LGO (`2.5`, `2.5LGO`, `3 LGO`) |
+
+LGO is shown with up to 9 decimals, nothing rounded and trailing zeros
+trimmed: 1 lepta is `0.000000001 LGO`. This follows the official Logos UI
+convention (`logos-blockchain-ui` PR #69). In an app, show lepta with
+`kit.sdk.formatUnits(amount, 9)` and parse what the user typed with
+`kit.sdk.parseUnits(text, 9)`.
+
 ## Fees
 
 Every transaction declares a **fee cap** (`maxFee`) that the payer approves. The
-approval sheet shows it. Native LEZ has no decimals: fees and balances are
-whole LEZ.
+approval sheet shows it. Fees are paid in the native token: lepta on the wire,
+LGO on screen.
 
 ## Re-checks at signing
 

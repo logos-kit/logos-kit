@@ -62,9 +62,10 @@ jobs:
           b=programs/testimonial/artifacts/build.json
           commit=$(jq -er .source.commit "$b"); tag=$(jq -er .source.dockerTag "$b")
           guest=$(jq -er .source.guestPath "$b"); want=$(jq -er .imageId "$b")
-          # Every registry entry for the testimonial names the same build.
+          # The current build is registered (older deploys on other chains,
+          # e.g. the preview network's rc1 image, keep their own entries).
           jq -e --arg w "$want" --arg c "$commit" \
-            'map(select(.name == "testimonial")) | length > 0 and all(.imageId == $w and .source.commit == $c)' \
+            'map(select(.name == "testimonial")) | any(.imageId == $w and .source.commit == $c)' \
             registry/programs.json > /dev/null \
             || { echo "::error::registry/programs.json disagrees with $b"; exit 1; }
           src="$RUNNER_TEMP/src"; git init -q "$src"

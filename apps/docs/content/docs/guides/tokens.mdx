@@ -19,7 +19,7 @@ like native ones. The approval sheet shows the token, the amount and the
 destination.
 
 A public token send is confirmed from the sender's token balance (it drops by
-exactly the amount; fees are paid in LEZ).
+exactly the amount; fees are paid in LGO, the native token).
 
 ## Build the call yourself
 
@@ -37,6 +37,8 @@ logos-kit token create --name KIT --supply 1000000 --holder <public account>
 logos-kit token list
 ```
 
-Amounts are raw integers, as strings. Native LEZ has no decimals; if your
-token defines decimals for display, `kit.sdk.formatUnits(amount, decimals)`
-formats them.
+Amounts are raw integers, as strings: a token's base units (the CLI's
+`--amount` with `--token` takes a whole number of them). If your token defines
+decimals for display, `kit.sdk.formatUnits(amount, decimals)` formats them.
+The native token is different: its amounts are lepta, shown as LGO with
+`kit.sdk.formatUnits(amount, 9)` (1 LGO = 10^9 lepta).

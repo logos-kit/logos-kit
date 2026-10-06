@@ -52,14 +52,30 @@ and show "not confirmed yet" until then ([Transactions](/docs/concepts/transacti
 </Accordion>
 <Accordion title="The faucet says rate_limited">
 
-The preview faucet gives each account one drop an hour, and each IP five an
-hour. The result carries `retryAfterSeconds`; show a countdown.
+Logos Kit's testnet faucet gives each account one drop an hour, each IP five
+an hour, and 60 an hour in all. The result carries `retryAfterSeconds`; show
+a countdown.
 
 </Accordion>
-<Accordion title="The wallet can't reach the official testnet">
+<Accordion title="A send on the testnet is slow to land">
 
-`testnet.lez.logos.co` still runs LEZ 0.2, whose blocks a 0.3 wallet can't
-read. Use the preview network until it moves to 0.3 ([Networks](/docs/concepts/networks)).
+Transactions on the official testnet can take a minute or more to be
+included. The wallet waits up to about 6 minutes before it reports a send as
+not included ([Transactions](/docs/concepts/transactions)).
+
+</Accordion>
+<Accordion title='I sent "42" and only 0.000000042 LGO moved'>
+
+SDK amounts are lepta, not LGO (1 LGO = 10^9 lepta). Turn what the user typed
+into lepta with `kit.sdk.parseUnits(text, 9)`, and show amounts with
+`kit.sdk.formatUnits(amount, 9)`.
+
+</Accordion>
+<Accordion title="The preview network's testimonial program shows as unrecognised">
+
+Wallets from 0.2.0 recognise only the `v0.3.0` testimonial image, deployed on
+the official testnet. The preview network's program isn't that image. Post on
+the testnet ([Networks](/docs/concepts/networks)).
 
 </Accordion>
 <Accordion title="Images don't show in my Basecamp app">

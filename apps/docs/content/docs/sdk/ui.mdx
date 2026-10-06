@@ -12,7 +12,7 @@ import "LogosKitUi"
 Card {
     ColumnLayout {
         Txt { text: "Balance"; tone: "text2" }
-        Txt { text: amount + " LEZ"; font.pixelSize: 24; num: true }
+        Txt { text: kit.sdk.formatUnits(amount, 9) + " LGO"; font.pixelSize: 24; num: true }
         Btn { text: "Send"; tone: "ink"; large: true; busy: sending; onClicked: send() }
     }
 }

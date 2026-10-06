@@ -31,7 +31,7 @@ Logos Kit is our entry for Logos λPrize **LP-0021, "LEZ Wallet and Provider SDK
 It is two things that ship together:
 
 - **Logos Kit Wallet.** A Basecamp app (and a CLI) with public and private
-  accounts, native LEZ and tokens, private transfers proved on your own
+  accounts, the native token (LGO) and other tokens, private transfers proved on your own
   machine, and approvals decoded from the exact message being signed, with
   the program's source verification.
 - **The SDK.** What Basecamp apps (QML) use to ask the wallet for things:
@@ -43,22 +43,23 @@ It is two things that ship together:
 
 Keys, accounts and approvals live only in the wallet. Apps ask; the user decides.
 
-> **Testnets only, unaudited.** The official LEZ testnet still runs 0.2, and
-> Logos Kit is built on LEZ 0.3 (`v0.3.0-rc1`). Until the testnet moves to 0.3,
-> everything runs on the Logos Kit **preview network** (below).
+> **Testnets only, unaudited.** Logos Kit runs on the official LEZ testnet
+> (`https://testnet.lez.logos.co`, LEZ `v0.3.0`) by default. The native token is
+> LOGOS (LGO): 1 LGO = 10^9 lepta.
 
 ## Status
 
 | | |
 |---|---|
-| Wallet in Basecamp | ✅ `logos_kit_wallet` + `logos_kit_wallet_ui` 0.1.2 in the [catalog](https://github.com/logos-kit/logos-kit-modules); signed; macOS arm64, Linux x86-64 and arm64 |
-| Public, private and token flows | ✅ faucet, public send, shield, private → public, token public and private, on the live preview network with real proofs (`e2e/preview-flows.sh`) |
-| Testimonial and faucet mini-apps | ✅ `logos_kit_testimonial`, `logos_kit_faucet` 0.1.0 in the catalog |
+| Official testnet cutover | ✅ the official LEZ testnet (`v0.3.0`) is the default in the wallet, CLI and SDK, with Logos Kit's testnet faucet and the testimonial program ([`docs/dev/cutover-0.3.md`](docs/dev/cutover-0.3.md)) |
+| Wallet in Basecamp | ✅ `logos_kit_wallet` + `logos_kit_wallet_ui` 0.2.0, from the [catalog](https://github.com/logos-kit/logos-kit-modules); signed; macOS arm64, Linux x86-64 and arm64 |
+| Public, private and token flows | ✅ faucet, public send, shield, private → public, token public and private, on the live preview network with real proofs (`e2e/preview-flows.sh`); ⏳ the same run on the official testnet (cutover §9) |
+| Testimonial and faucet mini-apps | ✅ `logos_kit_testimonial`, `logos_kit_faucet` 0.2.0, from the catalog |
 | QML SDK, dApp template | ✅ `sdk/qml/LogosKit`, `nix flake init -t github:logos-kit/logos-kit#dapp` |
 | TypeScript client (Node/transport tooling) | ✅ on npm: `@logos-kit/client`, `codec`, `protocol`, `theme` 0.1.0 |
 | Conformance kit | ✅ fake wallet with 11 scenarios, `just conformance <dapp>` |
-| Testimonial program | ✅ on the preview network (immutable, source-verified); ⏳ official testnet when it runs 0.3 |
-| CI with the real-sequencer E2E | ⏳ S9 |
+| Testimonial program | ✅ on the official testnet: `5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef`, immutable, `verified_local`; also on the preview network (posts there don't count for LP-0021) |
+| CI with the real-sequencer E2E | ✅ `e2e.yml`: the CLI flows against a LEZ 0.3 sequencer built from the pinned source (dev proofs), on `main` and every PR; real proofs nightly (`valid-proof.yml`) |
 | Web (React) connect kit, React Native, passkey wallet | ⏳ planned (S10–S15) |
 
 Progress in detail: [`PROGRESS.md`](PROGRESS.md) · plan: [`docs/dev/PLAN.md`](docs/dev/PLAN.md).
@@ -72,8 +73,8 @@ Progress in detail: [`PROGRESS.md`](PROGRESS.md) · plan: [`docs/dev/PLAN.md`](d
 2. **Applications → Logos Kit Wallet → Install.** The core module comes with it.
    Logos Kit Testimonials and Logos Kit Faucet are in the same catalog.
 3. Open it: **Create wallet** (write down the recovery phrase; it's shown once)
-   or **Restore from recovery phrase**. **Add** (test funds) fills a public
-   account from the preview network's faucet.
+   or **Restore from recovery phrase**. **Test LGO** fills a public account
+   from Logos Kit's testnet faucet (1 LGO, once an hour per account).
 
 ## Accounts
 
@@ -99,8 +100,8 @@ cargo install --path crates/logos-kit-cli
 logos-kit init                             # new wallet; shows the phrase once
 logos-kit account new                      # public account
 logos-kit account new --private            # private account
-logos-kit faucet <public account>          # preview network faucet
-logos-kit send --from <a> --to <b> --amount 42
+logos-kit faucet <public account>          # Logos Kit's testnet faucet: 1 LGO
+logos-kit send --from <a> --to <b> --amount 2.5LGO   # or lepta: --amount 42
 logos-kit shield --from <public> --to <your private> --amount 5000
 logos-kit token create --name KIT --supply 1000000 --holder <public>
 logos-kit send --from <a> --to <b> --amount 250 --token <definition>
@@ -109,21 +110,26 @@ logos-kit backup export wallet.backup      # encrypted
 ```
 
 Every command shows the decoded request, the fee cap and the request hash
-before it asks. `--yes` works only with `LOGOS_KIT_PASSWORD` set. Full
+before it asks. `--yes` works only with `LOGOS_KIT_PASSWORD` set. Amounts show
+in LGO; `--json` stays in lepta, and `--amount` takes lepta (`42`) or LGO
+(`2.5`, `2.5LGO`, `"3 LGO"`). Full
 reference: [CLI docs](https://logos-kit-docs.vercel.app/docs/wallet/cli).
 
 ## Networks (zones)
 
 | Zone | Chain | Sequencer | Notes |
 |---|---|---|---|
-| `lez-preview` (default) | `lez:preview` | `https://lez.84.46.247.92.sslip.io` | Logos Kit's public LEZ 0.3 network, real proofs; faucet `https://lez-drip.84.46.247.92.sslip.io` |
-| `lez-testnet` | `lez:testnet` | `https://testnet.lez.logos.co` | Official; still LEZ 0.2 today |
+| `lez-testnet` (default) | `lez:testnet` | `https://testnet.lez.logos.co` | Official, LEZ `v0.3.0` (chain reset 2026-10-01); explorer `https://explorer.testnet.lez.logos.co`; Logos Kit faucet `https://lez-testnet-drip.84.46.247.92.sslip.io`; browser relay with CORS `https://lez-testnet.84.46.247.92.sslip.io` |
+| `lez-preview` | `lez:preview` | `https://lez.84.46.247.92.sslip.io` | Legacy: Logos Kit's own LEZ 0.3 network (`v0.3.0-rc1`, real proofs), kept for wallets that saved it and for rehearsals; faucet `https://lez-drip.84.46.247.92.sslip.io` |
 | `lez-local` | `lez:local` | `http://127.0.0.1:3040` | `e2e/standalone.sh` starts one |
 
 Switch in the wallet (**Settings → Network**), or with `--zone` /
 `LOGOS_KIT_ZONE` in the CLI. Any other zone: `--zone <id> --sequencer <url>`.
-Apps built on the SDK follow the wallet's network. The preview network's
-deployment is in [`deploy/preview-net`](deploy/preview-net); its faucet is
+Apps built on the SDK follow the wallet's network. The official RPC sends no
+CORS headers, so web pages read the testnet through the relay; Basecamp apps
+and the CLI don't need it. Logos Kit's testnet services (faucet and relay) are
+in [`deploy/testnet`](deploy/testnet), the preview network's in
+[`deploy/preview-net`](deploy/preview-net); the faucet is
 [`crates/logos-kit-drip`](crates/logos-kit-drip).
 
 ## Build a Basecamp app
@@ -179,6 +185,7 @@ described in [`docs/dev/releasing.md`](docs/dev/releasing.md).
 | `templates/basecamp-dapp/` | `nix flake init -t github:logos-kit/logos-kit#dapp` |
 | `apps/docs/` | The docs site (Fumadocs, Next.js) |
 | `e2e/` | End-to-end scripts against a standalone sequencer, real Basecamp and the preview network |
+| `deploy/testnet/` | Logos Kit's services for the official testnet (drip faucet + CORS relay) on Coolify |
 | `deploy/preview-net/` | The preview network (sequencer + faucet) on Coolify |
 
 ## Develop
@@ -206,10 +213,10 @@ Rules for contributors (humans and agents): [`AGENTS.md`](AGENTS.md),
 git clone https://github.com/logos-kit/logos-kit && cd logos-kit
 e2e/demo.sh --local                 # a LEZ 0.3 sequencer built from the pinned source, dev proofs; no hosted services
 e2e/demo.sh --local --real-proofs   # the same with real RISC Zero proofs (minutes per private step)
-e2e/demo.sh --preview               # the public Logos Kit preview network (LEZ 0.3-rc1, real proofs)
+e2e/demo.sh --preview               # the legacy Logos Kit preview network (LEZ v0.3.0-rc1, real proofs)
 ```
 
-CI runs the same flows against a standalone sequencer on every push (`.github/workflows/e2e.yml`). The official LEZ testnet still runs 0.2; the switch to it is [`docs/dev/cutover-0.3.md`](docs/dev/cutover-0.3.md).
+CI runs the same flows against a standalone sequencer on every push (`.github/workflows/e2e.yml`). The official LEZ testnet runs `v0.3.0` and is the default network; the switch to it is [`docs/dev/cutover-0.3.md`](docs/dev/cutover-0.3.md).
 
 ## License
 

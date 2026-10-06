@@ -14,7 +14,7 @@ LogosKit {
     onApiChanged: if (api) root.reset()     // a new network: start over
 }
 
-Text { text: kit.chain }                     // "lez:preview", "lez:testnet", "lez:local"
+Text { text: kit.chain }                     // "lez:testnet", "lez:preview", "lez:local"
 ```
 
 When the network changes, `kit.api` is **rebuilt**. Anything your app holds

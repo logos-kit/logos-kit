@@ -69,8 +69,13 @@ it on chain; the wallet's faucet sheet says so).
 ## Programs apps call
 
 <Callout type="info">
-The canonical testimonial deployment on the LEZ testnet is **pending**: it
-waits for testnet 0.3, and the SDK's program list stays empty until then.
+The canonical testimonial deployment on the official LEZ testnet is
+`5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef`: immutable, image
+`61b2243645ead75c1aec2987bb3aac816e3a4def4c33d38640b55a0457e111a9`, built
+from commit `4baed37` in the `r0.1.91.1` docker builder, source verification
+`verified_local`. The SDK lists it as `TESTIMONIAL_PROGRAMS["lez:testnet"]`.
+Wallets from 0.2.0 recognise only this `v0.3.0` image, so the preview
+network's testimonial program shows there as an unrecognised program.
 </Callout>
 
 The wallet treats testimonial posts in two ways, depending on who builds them:

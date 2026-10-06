@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "ui_qml",
   "category": "developer",
-  "description": "Get testnet LEZ into any of your accounts, public or private, through the Logos Kit wallet. Built on the Logos Kit SDK.",
+  "description": "Get test LGO into any of your accounts, public or private, through the Logos Kit wallet. Built on the Logos Kit SDK.",
   "view": "qml/Main.qml",
   "icon": "src/icons/icon.png",
   "dependencies": ["logos_kit_wallet"],

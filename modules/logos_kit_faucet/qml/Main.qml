@@ -313,7 +313,7 @@ Item {
                     Txt { text: "Test LGO"; font.pixelSize: 26; font.weight: Font.DemiBold }
                     Txt {
                         Layout.fillWidth: true
-                        text: "Free test tokens for trying LEZ: sends, private payments, Basecamp apps. They have no value. A claim is 1 LGO on the preview network (1 LGO = 1,000,000,000 lepta, its smallest unit)."
+                        text: "Free test tokens for trying LEZ: sends, private payments, Basecamp apps. They have no value. A claim is 1 LGO (1 LGO = 1,000,000,000 lepta, its smallest unit)."
                         tone: "text2"
                         wrapMode: Text.Wrap
                         elide: Text.ElideNone

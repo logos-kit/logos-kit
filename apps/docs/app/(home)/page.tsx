@@ -31,8 +31,8 @@ const ts = `import { createClient, http, nodeActions } from '@logos-kit/client'
 import { formatUnits } from '@logos-kit/codec'
 
 const lez = createClient({
-  transport: http('https://lez.84.46.247.92.sslip.io'),
-  chain: 'lez:preview',
+  transport: http('https://testnet.lez.logos.co'),
+  chain: 'lez:testnet',
 }).extend(nodeActions)
 
 const height = await lez.getBlockNumber()
@@ -332,7 +332,7 @@ export default function HomePage() {
           <BorderBeam size={300} duration={16} />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_80%_at_50%_0%,rgb(56_152_255/0.12),transparent_70%)]" />
           <h2 className="relative mx-auto max-w-2xl text-balance font-semibold text-3xl tracking-tight md:text-5xl">
-            Your first Basecamp app, sending LEZ, in ten minutes
+            Your first Basecamp app, sending LGO, in ten minutes
           </h2>
           <p className="relative mx-auto mt-4 max-w-lg text-fd-muted-foreground">
             Start from the template: connect, balance, in-flow test funds and a receipt, already

@@ -33,19 +33,24 @@ logos-kit account new --private                 # private
 logos-kit account list
 logos-kit account label <account> "Savings"
 logos-kit account keys <private account> > keys.txt   # for others to pay it privately
-logos-kit balance <account> [--token <definition>]
+logos-kit balance <account> [--token <definition>]   # native balance in LGO
 ```
 
 ## Funds and transfers
 
 ```sh
-logos-kit faucet <account>                      # preview network: its drip faucet
-logos-kit send --from <a> --to <b> --amount 42
+logos-kit faucet <account>                      # testnet: Logos Kit's drip faucet, 1 LGO
+logos-kit send --from <a> --to <b> --amount 2.5LGO
+logos-kit send --from <a> --to <b> --amount 42  # a whole number is lepta
 logos-kit send --from <a> --to <b> --amount 250 --token <definition>
 logos-kit shield --from <public> --to <your private> --amount 5000
 logos-kit deshield --from <your private> --to <public> --amount 100
 logos-kit send --from <private> --to-keys keys.txt --amount 10   # someone else's private account
 ```
+
+`--amount` takes lepta as a whole number (1 LGO = 1,000,000,000 lepta) or
+LGO written `2.5`, `2.5LGO` or `"3 LGO"`. With `--token` it's a whole number
+of the token's base units. Human output shows LGO; `--json` stays in lepta.
 
 Private routes prove locally (about 4–7 minutes on an M-series Mac).
 
@@ -80,7 +85,8 @@ logos-kit auto-lock 900                         # seconds (60–86400)
 ## Networks
 
 ```sh
-logos-kit --zone lez-preview …                  # default: Logos Kit's 0.3 network
+logos-kit --zone lez-testnet …                  # default: the official LEZ testnet (v0.3.0)
+logos-kit --zone lez-preview …                  # Logos Kit's earlier 0.3 network (legacy)
 logos-kit --zone lez-local …                    # a local sequencer on :3040
 logos-kit --zone my-zone --sequencer https://… …# any other zone
 ```
