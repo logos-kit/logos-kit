@@ -28,25 +28,32 @@ ColumnLayout {
 
     readonly property var from: store.current
     readonly property bool fromPrivate: !!from && from.kind === "private"
+    // This account's tokens, one row each (own slot and token account added up).
+    readonly property var tokens: store.tokenRows(from)
+    readonly property var tokenRow: {
+        for (var i = 0; i < tokens.length; i++) if (tokens[i].definition === token) return tokens[i]
+        return null
+    }
     readonly property string balance: {
         if (!from) return ""
         if (token === "") return from.native === null || from.native === undefined ? "" : String(from.native)
-        var ts = from.tokens || []
-        for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return String(ts[i].amount)
-        return "0"
+        // One transaction sends from one place (the account's own slot or its
+        // token account), so the most that can go is the larger of the two.
+        var best = "0", hs = tokenRow ? tokenRow.holders : []
+        for (var i = 0; i < hs.length; i++) if (Units.cmp(hs[i].amount, best) > 0) best = hs[i].amount
+        return best
     }
-    // The native token is typed in LGO and sent in lepta; tokens have no decimals.
-    readonly property int decimals: token === "" ? Units.DECIMALS : 0
+    // LGO is typed in LGO and sent in lepta; a token uses its decimals
+    // (from the list or set by the user), whole units when unknown.
+    readonly property int decimals: token === "" ? Units.DECIMALS
+        : tokenRow && tokenRow.decimals !== undefined && tokenRow.decimals !== null ? tokenRow.decimals : 0
+    readonly property bool tokenUnverified: !!tokenRow && (tokenRow.tier === "unknown" || tokenRow.tier === "spam")
     // What is sent, in base units ("" while there's nothing to send).
     readonly property string base: {
         var b = Units.parse(amountText, decimals)
         return /^0*$/.test(b) ? "" : b
     }
-    readonly property string tokenName: {
-        var ts = from ? (from.tokens || []) : []
-        for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return ts[i].name || ""
-        return ""
-    }
+    readonly property string tokenName: tokenRow ? store.tokenLabel(tokenRow) : ""
     readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(reservesFee ? Units.add(base, feeCap) : base, balance) > 0
     readonly property bool isCode: to.trim().indexOf("lezpriv1:") === 0
     readonly property bool toFormat: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
@@ -228,14 +235,20 @@ ColumnLayout {
         }
         // Asset: native, or a token this account holds.
         ColumnLayout {
-            visible: !!sf.from && (sf.from.tokens || []).length > 0
+            visible: !!sf.from && sf.tokens.length > 0
             Layout.fillWidth: true
             Layout.topMargin: 6
             spacing: 6
             Txt { text: "Asset"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
             SegmentedControl {
-                readonly property var assets: [{ definition: "", name: Units.SYMBOL }].concat(sf.from ? (sf.from.tokens || []) : [])
-                options: assets.map(function (t) { return t.name || Fmt.short(t.definition) })
+                // Listed and added tokens first; unverified ones say so.
+                readonly property var assets: [{ definition: "", name: Units.SYMBOL }].concat(
+                    sf.tokens.filter(function (t) { return t.tier === "verified" || t.tier === "added" }),
+                    sf.tokens.filter(function (t) { return t.tier === "unknown" || t.tier === "spam" }))
+                options: assets.map(function (t) {
+                    var label = t.definition === "" ? t.name : sf.store.tokenLabel(t)
+                    return t.tier === "unknown" || t.tier === "spam" ? label + " (unverified)" : label
+                })
                 currentIndex: {
                     for (var i = 0; i < assets.length; i++) if (assets[i].definition === sf.token) return i
                     return 0
@@ -275,7 +288,7 @@ ColumnLayout {
             symbol: sf.token === "" ? Units.SYMBOL : (sf.tokenName || "tokens")
             decimals: sf.decimals
             tokenSelectable: false
-            tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; isPrivate: sf.fromPrivate } }
+            tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; source: sf.store.tokenLogo(sf.tokenRow); label: sf.tokenName; warn: sf.tokenUnverified; isPrivate: sf.fromPrivate } }
             balance: sf.balance
             text: sf.amountText
             onTextChanged: if (text !== sf.amountText) sf.amountText = text
@@ -317,6 +330,20 @@ ColumnLayout {
             tone: sf.tooMuch && sf.base !== "" ? "warn" : "text3"
             font.pixelSize: 12
             wrapMode: Text.Wrap
+        }
+        Notice {
+            objectName: "sendUnverifiedToken"
+            visible: sf.tokenUnverified
+            Layout.fillWidth: true
+            tone: "warn"
+            text: "You're sending a token that isn't on the Logos Kit list."
+        }
+        Txt {
+            visible: !!sf.tokenRow && (sf.tokenRow.decimals === undefined || sf.tokenRow.decimals === null)
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            tone: "text3"; font.pixelSize: 12
+            text: "This token's decimals are unknown, so amounts are whole units."
         }
         Btn { id: reviewBtn; objectName: "sendReview"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Review"; busy: sf.busy; enabled: sf.base !== "" && !sf.tooMuch; onClicked: sf.prepare() }
     }

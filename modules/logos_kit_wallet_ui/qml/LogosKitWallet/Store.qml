@@ -1,6 +1,7 @@
 import QtQuick
 import "../LogosKitUi"
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
 // The only file that touches `logos`. Every view reads parsed properties from
 // here and calls `call()`; nothing else knows about the bridge, the core
@@ -90,6 +91,48 @@ QtObject {
         var a = apps[requester]
         return a && a.displayName ? a.displayName : requester
     }
+    // -- tokens (docs/design/ux-tokens-nfts.md §2) ---------------------------------
+    // One row per token for an account: its holdings (own slot and token
+    // account) added up, with what the engine says about trust and decimals.
+    function tokenRows(acct) {
+        var by = {}, order = []
+        var ts = acct ? (acct.tokens || []) : []
+        for (var i = 0; i < ts.length; i++) {
+            var h = ts[i]
+            if (h.kind && h.kind !== "fungible") continue
+            var r = by[h.definition]
+            if (!r) {
+                r = { definition: h.definition, name: h.name || "", symbol: h.symbol || "", decimals: h.decimals,
+                      tier: h.tier || "unknown", spamReason: h.spamReason || "", pinned: !!h.pinned,
+                      decimalsSource: h.decimalsSource || "unknown", amount: "0", isPrivate: false, holders: [] }
+                by[h.definition] = r
+                order.push(h.definition)
+            }
+            r.amount = Units.add(r.amount, String(h.amount))
+            r.isPrivate = r.isPrivate || !!h.private
+            r.holders.push({ holder: h.holder, via: h.via, amount: String(h.amount) })
+        }
+        return order.map(function (d) { return by[d] })
+    }
+    // Verified tokens draw their bundled logo; nothing else loads an image.
+    function tokenLogo(t) {
+        return t && t.tier === "verified" ? Qt.resolvedUrl("logos/" + t.definition + ".png") : ""
+    }
+    // "1,250.5" with the token's decimals; whole units when they're unknown.
+    function tokenAmount(t, raw) {
+        var v = raw === undefined ? t.amount : raw
+        return t && t.decimals !== undefined && t.decimals !== null ? Units.token(v, t.decimals) : Units.group(v)
+    }
+    function tokenLabel(t) { return t ? (t.symbol || t.name || Fmt.short(t.definition)) : "" }
+    // A token as any account knows it (for activity rows): tier, decimals, label.
+    function tokenAnywhere(definition) {
+        for (var i = 0; i < accounts.length; i++) {
+            var rows = tokenRows(accounts[i])
+            for (var j = 0; j < rows.length; j++) if (rows[j].definition === definition) return rows[j]
+        }
+        return null
+    }
+
     // A token's name from any account's holdings; the short ID otherwise.
     function tokenName(definition) {
         for (var i = 0; i < accounts.length; i++) {

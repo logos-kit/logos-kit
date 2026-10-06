@@ -317,7 +317,7 @@ ColumnLayout {
             large: true
             tone: "ink"
             icon: av.isPrivate ? "lock" : ""
-            text: av.isPrivate ? "Prove and send" : av.requester !== "" ? "Approve" : "Send"
+            text: av.isPrivate ? "Prove and send" : av.requester !== "" || av.intent.kind !== "transfer" ? "Approve" : "Send"
             armDelay: 500
             busy: av.busy
             enabled: (!av.ticket || !av.ticket.needsPassword || pw.text.length > 0) && (!av.summary.unknown || ack.checked)

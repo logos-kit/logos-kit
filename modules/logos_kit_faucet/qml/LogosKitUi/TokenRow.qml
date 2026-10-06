@@ -17,6 +17,11 @@ Item {
     property bool isPrivate: false
     property bool loading: false
     property bool chevron: false
+    // Trust (docs/design/ux-tokens-nfts.md §2.1): a check after a verified
+    // token's name, a quiet chip ("Added"), the warning tone for unknown.
+    property bool verified: false
+    property string chip: ""
+    property bool warn: false
     signal clicked()
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -40,11 +45,18 @@ Item {
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         spacing: 12
-        TokenIcon { definition: tr.definition; source: tr.iconSource; size: 44; isPrivate: tr.isPrivate }
+        TokenIcon { definition: tr.definition; source: tr.iconSource; label: tr.symbol !== "" ? tr.symbol : tr.name; warn: tr.warn; size: 44; isPrivate: tr.isPrivate }
         ColumnLayout {
             spacing: 2
             Layout.fillWidth: true
-            Txt { text: tr.name; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            RowLayout {
+                spacing: 6
+                Layout.fillWidth: true
+                Txt { text: tr.name; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.fillWidth: false; Layout.maximumWidth: tr.width * 0.45 }
+                Glyph { visible: tr.verified; name: "check"; color: Theme.action; width: 14; height: 14; stroke: 2.6 }
+                Tag { visible: tr.chip !== ""; text: tr.chip; tone: tr.warn ? "unconfirmed" : "pending" }
+                Item { Layout.fillWidth: true }
+            }
             Txt { text: tr.sub !== "" ? tr.sub : tr.symbol; tone: tr.isPrivate ? "priv" : "text2"; font.pixelSize: 12; Layout.fillWidth: true }
         }
         ColumnLayout {

@@ -989,8 +989,12 @@ async fn prepare_transfer(
             let def = decode::account_id(def)?;
             let token_program = programs::token_account_id();
             let held = holding(&own_shard(core, from_id, from_private, token_program).await?)?;
-            if !from_private && held.as_ref().is_none_or(|h| h.definition_id() != def) {
-                // Not in its own slot: maybe in its associated token account.
+            if !from_private
+                && held
+                    .as_ref()
+                    .is_none_or(|h| h.definition_id() != def || holding_amount(h) < amount)
+            {
+                // Not (enough) in its own slot: its associated token account.
                 if r.route == Route::Public {
                     let built =
                         prepare_ata_transfer(core, decoders, from_id, r.to_id, def, amount).await?;

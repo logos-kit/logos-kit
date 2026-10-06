@@ -734,6 +734,41 @@ impl Service {
                 let ticket = self.block(async { engine.request_tx(caller, None, intent).await })?;
                 Ok(serde_json::to_value(ticket)?)
             }
+            // Create a test token: a new wallet-made account becomes its
+            // definition, the whole supply goes to `holder`. Answers the
+            // approval ticket, as prepareSend does, plus the new Token ID.
+            "createToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    holder: String,
+                    name: String,
+                    #[serde(with = "crate::tx::amount")]
+                    supply: u128,
+                }
+                let a: P = params(p)?;
+                ensure!(a.supply > 0, invalid("the supply must be more than zero"));
+                let engine = self.engine()?;
+                let (definition, intent) = self.block(async {
+                    engine
+                        .with_session(async |s| {
+                            let definition = s
+                                .new_system_account(&format!("{} token ID", a.name))?
+                                .account_id;
+                            let intent = crate::tokens::create_token_intent(
+                                &a.holder,
+                                &definition,
+                                &a.name,
+                                a.supply,
+                            )?;
+                            Ok((definition, intent))
+                        })
+                        .await
+                })?;
+                let ticket = self.block(async { engine.request_tx(caller, None, intent).await })?;
+                let mut v = serde_json::to_value(ticket)?;
+                v["definition"] = json!(definition);
+                Ok(v)
+            }
             "requestTx" => {
                 #[derive(Deserialize)]
                 struct P {

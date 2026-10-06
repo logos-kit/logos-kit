@@ -69,7 +69,7 @@ ColumnLayout {
         elide: Text.ElideNone
         tone: "text3"; font.pixelSize: 13
         text: rv.priv ? "Senders need this code to pay you privately. It doesn't reveal your balance."
-                      : "Anyone can send LGO to this address. Payments to it are public."
+                      : "Accepts LGO and any LEZ token. Payments to it are public."
     }
     Btn { visible: rv.payload !== ""; Layout.fillWidth: true; Layout.topMargin: 6; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
     Btn {
