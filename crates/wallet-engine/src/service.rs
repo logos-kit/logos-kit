@@ -318,7 +318,7 @@ impl Service {
         let want = lock(&self.prefs).zone.clone();
         let zones = self.zones();
         want.and_then(|id| zones.iter().find(|z| z.id == id).cloned())
-            .unwrap_or_else(Zone::preview)
+            .unwrap_or_else(Zone::testnet)
     }
 
     fn engine(&self) -> Result<Arc<Engine>> {
@@ -1418,9 +1418,7 @@ impl Service {
             .faucets
             .get(&zone.id)
             .cloned()
-            .or_else(|| {
-                (zone == Zone::preview()).then(|| crate::session::PREVIEW_FAUCET.to_owned())
-            });
+            .or_else(|| zone.builtin_faucet().map(str::to_owned));
         let faucet = match (zone.id.as_str(), url) {
             (_, Some(url)) => Faucet::Http(HttpFaucet::new("Drip service", &url)?),
             ("lez-local", None) if is_loopback(&zone.sequencer) => {
@@ -2044,7 +2042,7 @@ fn is_loopback(url: &str) -> bool {
 }
 
 fn faucet_label(zone: &Zone, prefs: &Prefs) -> Option<&'static str> {
-    if prefs.faucets.contains_key(&zone.id) || *zone == Zone::preview() {
+    if prefs.faucets.contains_key(&zone.id) || zone.builtin_faucet().is_some() {
         Some("Drip service")
     } else if zone.id == "lez-local" && is_loopback(&zone.sequencer) {
         Some("Local genesis key")

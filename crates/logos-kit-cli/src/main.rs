@@ -33,12 +33,12 @@ struct Cli {
     /// Wallet data directory.
     #[arg(id = "home", long = "home", global = true, env = "LOGOS_KIT_HOME")]
     data: Option<PathBuf>,
-    /// Zone id: `lez-preview` (Logos Kit's 0.3 network), `lez-testnet`, `lez-local`, or one added with --sequencer.
+    /// Zone id: `lez-testnet` (the official LEZ testnet), `lez-preview` (Logos Kit's own 0.3 network), `lez-local`, or one added with --sequencer.
     #[arg(
         long,
         global = true,
         env = "LOGOS_KIT_ZONE",
-        default_value = "lez-preview"
+        default_value = "lez-testnet"
     )]
     zone: String,
     /// Sequencer URL, to add a zone that isn't built in.
@@ -768,10 +768,12 @@ async fn faucet(
 ) -> Result<()> {
     let (session, pw) = open(cli).await?;
     let sequencer = session.zone().sequencer.clone();
-    // The preview network ships with its drip faucet (unless a key is given).
+    // The testnet and the preview network ship with a drip faucet (unless a key is given).
     let url = url.or_else(|| {
-        (key_env.is_none() && *session.zone() == Zone::preview())
-            .then_some(wallet_engine::session::PREVIEW_FAUCET)
+        key_env
+            .is_none()
+            .then(|| session.zone().builtin_faucet())
+            .flatten()
     });
     let engine = Engine::new(session, Config::default());
     let owner = Caller::LocalOwner;
