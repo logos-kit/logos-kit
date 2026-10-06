@@ -16,4 +16,4 @@ BC=$!
 [[ "${LK_KEEP:-}" == 1 ]] || trap 'kill $BC 2>/dev/null; pkill -9 -f "logos_host|ui-host" 2>/dev/null' EXIT
 for _ in $(seq 1 120); do nc -z 127.0.0.1 3768 2>/dev/null && break; sleep 2; done
 sleep 5
-node "$ROOT/tests/catalog-install-gui.mjs" --shots "$ROOT/docs/reviews/s7/catalog"
+node "$ROOT/tests/catalog-install-gui.mjs" --shots "${LK_SHOTS:-$ROOT/docs/reviews/s7/catalog}"

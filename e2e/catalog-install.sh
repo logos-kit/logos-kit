@@ -4,6 +4,7 @@
 #
 #   e2e/catalog-install.sh             # native (macOS arm64 or Linux)
 #   e2e/catalog-install.sh --docker    # inside a fresh ubuntu:24.04 container
+#   EXPECT_VERSION=0.3.0 e2e/catalog-install.sh   # also require that version
 #
 # Checks: the catalog resolves; installing the wallet UI pulls in the core;
 # the testimonial and faucet apps install;
@@ -14,10 +15,11 @@ set -euo pipefail
 CATALOG_URL="${CATALOG_URL:-https://raw.githubusercontent.com/logos-kit/logos-kit-modules/refs/heads/main/logos-repo.json}"
 RELEASE_DID="${RELEASE_DID:-did:jwk:eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6IkVGM0Vyb1kwUGN4OXpvTXpPT0w0YnhQNHI1Tk03UXc1X0x1aHl4TV9ZNVkifQ}"
 LOGOSCTL_VERSION="${LOGOSCTL_VERSION:-0.3.0}"
+EXPECT_VERSION="${EXPECT_VERSION:-}"
 
 if [[ "${1:-}" == "--docker" ]]; then
   exec docker run --rm -i \
-    -e CATALOG_URL="$CATALOG_URL" -e RELEASE_DID="$RELEASE_DID" -e LOGOSCTL_VERSION="$LOGOSCTL_VERSION" \
+    -e CATALOG_URL="$CATALOG_URL" -e RELEASE_DID="$RELEASE_DID" -e LOGOSCTL_VERSION="$LOGOSCTL_VERSION" -e EXPECT_VERSION="$EXPECT_VERSION" \
     ubuntu:24.04 bash -s < "$0"
 fi
 
@@ -71,7 +73,11 @@ step "trust the Logos Kit release key, then install the UI (pulls the core)"
 for m in logos_kit_wallet logos_kit_wallet_ui logos_kit_testimonial logos_kit_faucet; do
   "$ctl" --json package show "$m" > "show-$m.json"
   grep -q "$RELEASE_DID" "show-$m.json" || { cat "show-$m.json"; echo "FAIL: $m is not signed by the release DID" >&2; exit 1; }
-  echo "$m: signed by the Logos Kit release key"
+  got="$(jq -r '[.. | objects | .version? // empty | strings] | first // "?"' "show-$m.json")"
+  if [[ -n "$EXPECT_VERSION" && "$got" != "$EXPECT_VERSION" ]]; then
+    cat "show-$m.json"; echo "FAIL: $m installed $got, expected $EXPECT_VERSION" >&2; exit 1
+  fi
+  echo "$m $got: signed by the Logos Kit release key"
 done
 
 step "load the core and call it"

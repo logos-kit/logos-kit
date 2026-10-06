@@ -387,3 +387,13 @@ The single place to resume from after a context clear.
 - [x] §9 every route on the official testnet with real proofs (`LK_ZONE=lez-testnet e2e/preview-flows.sh`, fresh wallet, drip-funded): public send (block 11969), shield (11978), private→public (11987), token create (11991), token public send (11994), token private send (12002), **testimonial (12004)**
 - Network note: the testnet stalled for ~20 min (block 11960) during the run; transactions waited minutes for inclusion. The engine now waits ~6 min before "not seen"; the drip and flows treat `outcome_unknown` as pending.
 - [ ] §10 daily evidence snapshot workflow; launch posts (`adoption/drafts/05-testnet-launch.md`) await the maintainer's go-ahead
+
+## Combined plan (`docs/dev/PLAN-LP0001.md`): LP-0021 + LP-0001 + Market, one launch
+
+### Stage A · Quiet release 0.3.0 (2026-10-06), done, no posts
+- [x] PR #4 (Ledger design, fee display, approval fixes, 0.3.0 metadata) merged (`eb598ea`); plan, token UX research and `.gitignore` for AI workspace folders on main (`cf15ae3`)
+- [x] Catalog gate hardened (`logos-kit-modules` `2950966`): a release missing a platform (`missingVariants` in `sidecar.json`) is rebuilt with `force_build` instead of counting as done, and a failed run dispatches one retry. 0.2.0 had shipped core on two platforms only (the linux-amd64 leg couldn't download the Qt source) and skipped the UI and apps
+- [x] Catalog 0.3.0: `logos_kit_wallet`, `_ui`, `logos_kit_testimonial`, `logos_kit_faucet`, each on darwin-arm64, linux-amd64 and linux-arm64 (`Release on merge` run 37441509837)
+- [x] Clean installs of 0.3.0, every package signed by the release key, core loads and answers: `EXPECT_VERSION=0.3.0 e2e/catalog-install.sh` on macOS arm64, `--docker` on Linux aarch64 (this Mac) and Linux x86_64 (agari-box); real Basecamp `e2e/catalog-install-gui.sh`: repository added, Logos Kit Wallet v0.3.0 + core installed from Applications, the wallet opens on the testnet (`docs/reviews/a/catalog/`)
+- [x] Docs redeployed to production (`logos-kit-docs.vercel.app`), testnet default, LGO units
+- `e2e/catalog-install.sh` now checks the installed version (`EXPECT_VERSION`); the GUI test takes `LK_SHOTS`
