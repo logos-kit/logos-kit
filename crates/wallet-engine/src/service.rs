@@ -2119,7 +2119,10 @@ impl Service {
             let Some(def) = h["definition"].as_str().map(str::to_owned) else {
                 continue;
             };
-            let amount: u128 = h["amount"].as_str().and_then(|v| v.parse().ok()).unwrap_or(0);
+            let amount: u128 = h["amount"]
+                .as_str()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
             match by.iter_mut().find(|(d, _, _)| *d == def) {
                 Some(entry) => entry.2 = entry.2.saturating_add(amount),
                 None => by.push((def, h, amount)),
