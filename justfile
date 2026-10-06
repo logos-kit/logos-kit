@@ -107,6 +107,8 @@ qml-vendor:
     rm -rf modules/logos_kit_wallet_ui/qml/LogosKitUi modules/logos_kit_wallet_ui/qml/LogosKit
     cp -R sdk/qml/LogosKitUi modules/logos_kit_wallet_ui/qml/
     mkdir -p modules/logos_kit_wallet_ui/qml/LogosKit && cp sdk/qml/LogosKit/Tokens.js modules/logos_kit_wallet_ui/qml/LogosKit/
+    # Logos of listed tokens (registry/tokens/logos/<definition>.png); only Verified tokens show one.
+    rm -rf modules/logos_kit_wallet_ui/qml/LogosKitWallet/logos && cp -R registry/tokens/logos modules/logos_kit_wallet_ui/qml/LogosKitWallet/logos
 
 # QML engine gate: the SDK suite in Node vs Qt 6.9.2 vs Qt 6.11.1 (needs `just qt-setup`).
 qml-gate: qml-sdk
