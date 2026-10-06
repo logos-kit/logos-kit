@@ -1001,7 +1001,10 @@ impl Session {
     /// Name `account` (a program) on this zone; a new name replaces the old.
     pub fn name_program(&mut self, account: &str, name: &str) -> Result<()> {
         let name = name.trim();
-        ensure!(!name.is_empty() && name.chars().count() <= 40, "a program name is 1–40 characters");
+        ensure!(
+            !name.is_empty() && name.chars().count() <= 40,
+            "a program name is 1–40 characters"
+        );
         ensure!(
             !name.chars().any(char::is_control),
             "a program name can't contain control characters"
@@ -1015,14 +1018,18 @@ impl Session {
             added_ms: now_ms(),
         };
         self.update_meta(|m| {
-            m.programs.retain(|p| !(p.zone == zone && p.account == entry.account));
+            m.programs
+                .retain(|p| !(p.zone == zone && p.account == entry.account));
             m.programs.push(entry);
         })
     }
 
     pub fn forget_program(&mut self, account: &str) -> Result<()> {
         let zone = self.zone().id.clone();
-        self.update_meta(|m| m.programs.retain(|p| !(p.zone == zone && p.account == account)))
+        self.update_meta(|m| {
+            m.programs
+                .retain(|p| !(p.zone == zone && p.account == account))
+        })
     }
 
     /// Made by the wallet for its own use (see `new_system_account`).

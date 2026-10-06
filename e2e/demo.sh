@@ -7,7 +7,11 @@
 #                                       no dependency on our hosted services
 #   e2e/demo.sh --local --real-proofs   same, the wallet makes real RISC Zero
 #                                       proofs (~5-8 min each; release build)
-#   e2e/demo.sh --preview               the public Logos Kit preview network
+#   e2e/demo.sh --testnet               the official LEZ testnet 0.3 (real
+#                                       proofs, the Logos Kit drip faucet,
+#                                       explorer links; ~40 min, mostly proving;
+#                                       log in docs/reviews/demo/)
+#   e2e/demo.sh --preview               the legacy Logos Kit preview network
 #                                       (LEZ 0.3-rc1, real proofs, drip faucet)
 #
 # Environment: DEMO_PORT (local sequencer port, default 3040), DEMO_KEEP=1
@@ -21,13 +25,20 @@ for a in "$@"; do
   case "$a" in
     --local) MODE=local ;;
     --preview) MODE=preview ;;
+    --testnet) MODE=testnet ;;
     --real-proofs) REAL=1 ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $a (see --help)" >&2; exit 2 ;;
   esac
 done
-[[ -n "$MODE" ]] || { sed -n '2,17p' "$0"; exit 2; }
-[[ "$MODE" == preview ]] && REAL=1   # the preview network verifies real proofs
+[[ -n "$MODE" ]] || { sed -n '2,21p' "$0"; exit 2; }
+[[ "$MODE" == preview || "$MODE" == testnet ]] && REAL=1   # public networks verify real proofs
+if [[ "$MODE" == testnet ]]; then
+  # Keep the run: the evaluator log (SR5) lives next to the code.
+  mkdir -p "$ROOT/docs/reviews/demo"
+  LOG="$ROOT/docs/reviews/demo/testnet-$(date -u +%Y%m%dT%H%MZ).log"
+  exec > >(tee "$LOG") 2>&1
+fi
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 say() { printf '  %s\n' "$*"; }
@@ -87,10 +98,17 @@ if [[ "$MODE" == local ]]; then
   "$ROOT/e2e/standalone.sh" >/dev/null || { echo "sequencer failed to start" >&2; exit 2; }
   # LEZ's debug genesis account: public test key, local chains only.
   export DEMO_GENESIS_KEY=7f273098f25b71e6c005a9519f2678da8d1c7f01f6a27778e2d9948abdf901fb
+elif [[ "$MODE" == testnet ]]; then
+  URL="https://testnet.lez.logos.co"
+  ZONE=(--zone lez-testnet)
+  EXPLORER="https://explorer.testnet.lez.logos.co"
 else
   URL="https://lez.84.46.247.92.sslip.io"
   ZONE=(--zone lez-preview)
 fi
+EXPLORER="${EXPLORER:-}"
+# Demo posts count under their own submission id, never the real one.
+SUBMISSION=(--submission LP-0021/logos-kit-demo)
 cleanup() {
   if [[ "${DEMO_KEEP:-}" == 1 ]]; then say "kept wallet at $LOGOS_KIT_HOME"; return; fi
   rm -rf "$LOGOS_KIT_HOME"
@@ -106,10 +124,24 @@ get() { python3 -c "import sys,json; v=json.loads(sys.stdin.read().strip().split
 RESULTS=() FAILED=0 T0=$SECONDS
 pass() { RESULTS+=("PASS|$1|$2"); printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "$2"; }
 fail() { RESULTS+=("FAIL|$1|$2"); FAILED=$((FAILED + 1)); printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "$2"; }
-# ok_outcome <label> <json>: the transaction settled with outcome success.
+# ok_outcome <label> <json>: the transaction settled with outcome success
+# (with an explorer link on networks that have one).
 ok_outcome() {
-  local o b; o="$(echo "$2" | get "['outcome']")"; b="$(echo "$2" | get "['block']")"
-  if [[ "$o" == success ]]; then pass "$1" "block $b"; else fail "$1" "$(echo "$2" | tail -1 | cut -c1-160)"; fi
+  local o b h link=""; o="$(echo "$2" | get "['outcome']")"; b="$(echo "$2" | get "['block']")"
+  h="$(echo "$2" | get "['txHash']")"
+  [[ -n "$EXPLORER" && -n "$h" ]] && link="  $EXPLORER/transaction/${h#0x}"
+  if [[ "$o" == success ]]; then pass "$1" "block $b$link"; else fail "$1" "$(echo "$2" | tail -1 | cut -c1-160)"; fi
+}
+# Wait until <account> holds more than 0 (a drip can answer before its
+# transfer lands; the testnet sometimes takes minutes to include it).
+wait_funded() {
+  local i bal
+  for i in $(seq 1 72); do
+    bal="$(LK balance "$1" --json 2>/dev/null | get "['balance']")"
+    [[ -n "$bal" && "$bal" != 0 ]] && { echo "$bal"; return 0; }
+    sleep 5
+  done
+  return 1
 }
 # refused <label> <expected text[|alternative…]> <cmd…>: the wallet must refuse.
 refused() {
@@ -127,19 +159,23 @@ LK init --json >/dev/null 2>&1 && pass "init wallet" "$LOGOS_KIT_HOME" || { fail
 A=$(LK account new --json | get "['accountId']")
 B=$(LK account new --json | get "['accountId']")
 P=$(LK account new --private --json | get "['accountId']")
-[[ -n "$A" && -n "$B" && -n "$P" ]] && pass "accounts (2 public, 1 private)" "A=${A:0:8}… B=${B:0:8}… P=${P:0:8}…" || fail "accounts" "account new failed"
+P2=$(LK account new --private --json | get "['accountId']")
+[[ -n "$A" && -n "$B" && -n "$P" && -n "$P2" ]] && pass "accounts (2 public, 2 private)" "A=${A:0:8}… B=${B:0:8}… P=${P:0:8}… P2=${P2:0:8}…" || fail "accounts" "account new failed"
 
 if [[ "$MODE" == local ]]; then
   F=$(LK faucet "$A" --key-env DEMO_GENESIS_KEY --drop 2000000000 --yes --json 2>&1 | last)
 else
   F=$(LK faucet "$A" --yes --json 2>&1 | last)
 fi
-if [[ "$(echo "$F" | get "['status']")" == funded ]]; then pass "faucet -> A" "+$(echo "$F" | get "['amount']") LEZ"
+FS="$(echo "$F" | get "['status']")"
+if [[ "$FS" == funded ]]; then pass "faucet -> A" "+$(echo "$F" | get "['amount']") lepta"
+elif [[ "$FS" == outcome_unknown ]] && BAL=$(wait_funded "$A"); then pass "faucet -> A" "balance $BAL lepta (landed after the drip answered)"
 else fail "faucet -> A" "$(echo "$F" | cut -c1-160)"; bold "Cannot continue without funds."; exit 1; fi
 
 ok_outcome "public send A -> B" "$(LK send --from "$A" --to "$B" --amount 1000 --yes --json 2>&1 | last)"
 ok_outcome "shield A -> private P" "$(LK send --from "$A" --to "$P" --amount 5000 --yes --json 2>&1 | last)"
 ok_outcome "private send P -> public B" "$(LK send --from "$P" --to "$B" --amount 100 --yes --json 2>&1 | last)"
+ok_outcome "private send P -> private P2" "$(LK send --from "$P" --to "$P2" --amount 100 --yes --json 2>&1 | last)"
 
 T=$(LK token create --name DEMO --supply 1000000 --holder "$A" --yes --json 2>&1 | last)
 DEF=$(echo "$T" | get "['definition']")
@@ -147,6 +183,7 @@ DEF=$(echo "$T" | get "['definition']")
 if [[ -n "$DEF" ]]; then
   ok_outcome "token send A -> B (public)" "$(LK send --from "$A" --to "$B" --amount 250 --token "$DEF" --yes --json 2>&1 | last)"
   ok_outcome "token send A -> P (private)" "$(LK send --from "$A" --to "$P" --amount 10 --token "$DEF" --yes --json 2>&1 | last)"
+  ok_outcome "token send P -> B (from private)" "$(LK send --from "$P" --to "$B" --amount 4 --token "$DEF" --yes --json 2>&1 | last)"
 fi
 
 PROGRAM_ARGS=()
@@ -156,20 +193,20 @@ if [[ "$MODE" == local ]]; then
   if [[ -n "$PROG" ]]; then pass "testimonial program deploy" "immutable ${PROG:0:8}…"; PROGRAM_ARGS=(--program "$PROG")
   else fail "testimonial program deploy" "$(echo "$D" | cut -c1-160)"; fi
 fi
-ok_outcome "testimonial post (A)" "$(LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$A" --username demo \
+ok_outcome "testimonial post (A)" "$(LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --username demo \
   --text "Logos Kit demo: every wallet flow end to end." --yes --json 2>&1 | last)"
 
 SNAP="$LOGOS_KIT_HOME/snapshots"
-EV=$(LK testimonial evidence ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --snapshot "$SNAP" --json 2>&1 | last)
+EV=$(LK testimonial evidence ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --snapshot "$SNAP" --json 2>&1 | last)
 N=$(echo "$EV" | get "['distinctAuthors']")
 [[ -n "$N" && "$N" -ge 1 ]] && pass "evidence export" "$N distinct author(s); snapshot $(ls "$SNAP" 2>/dev/null | head -1)" || fail "evidence export" "$(echo "$EV" | cut -c1-160)"
 
 bold "Refusals"
 refused "second post by the same account" "already posted" \
-  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$A" --text "again with Logos Kit" --yes --json
+  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$A" --text "again with Logos Kit" --yes --json
 refused "post from a private account" "must be public" \
-  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} --from "$P" --text "hidden Logos Kit" --yes --json
-refused "send more than the balance" "Can not pay|not enough" \
+  LK testimonial post ${PROGRAM_ARGS[@]+"${PROGRAM_ARGS[@]}"} "${SUBMISSION[@]}" --from "$P" --text "hidden Logos Kit" --yes --json
+refused "send more than the balance" "Can not pay|not enough|Not enough" \
   LK send --from "$B" --to "$A" --amount 999999999999999 --yes --json
 if [[ "$MODE" == local ]]; then
   # A stale approval: another wallet moves the nonce after approval (engine test).

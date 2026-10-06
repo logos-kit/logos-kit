@@ -28,6 +28,8 @@ QtObject {
     readonly property bool initialized: state.initialized === true
     readonly property bool unlocked: state.unlocked === true
     readonly property var zone: state.zone || ({})
+    // Networks to offer: the old preview network only while it's in use.
+    readonly property var zones: (state.zones || []).filter(function (z) { return z.chain !== "lez:preview" || z.id === (state.zone || {}).id })
     readonly property var pending: state.pending || null
     readonly property var active: state.active || null
     readonly property var network: state.status ? state.status.network : null

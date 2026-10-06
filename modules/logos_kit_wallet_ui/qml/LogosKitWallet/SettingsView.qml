@@ -58,7 +58,7 @@ ColumnLayout {
     // -- network ----------------------------------------------------------------------
     Section { text: "Network" }
     Repeater {
-        model: st.store.state.zones || []
+        model: st.store.zones
         SettingsRow {
             readonly property bool on: modelData.id === st.store.zone.id
             glyph: "link"

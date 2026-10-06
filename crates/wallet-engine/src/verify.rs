@@ -531,7 +531,10 @@ pub fn load_cache(dir: &Path) -> Vec<Verified> {
     let mut all = read_cache(dir);
     if let Some(shared) = shared_dir().filter(|s| s != dir) {
         for v in read_cache(&shared) {
-            if !all.iter().any(|a| a.zone == v.zone && a.account == v.account) {
+            if !all
+                .iter()
+                .any(|a| a.zone == v.zone && a.account == v.account)
+            {
                 all.push(v);
             }
         }

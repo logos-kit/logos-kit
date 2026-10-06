@@ -168,7 +168,13 @@ Item {
                 tone: "text2"
                 font.pixelSize: 13
                 font.underline: privLinkMouse.containsMouse
-                MouseArea { id: privLinkMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: home.privateInfo() }
+                signal clicked()
+                onClicked: home.privateInfo()
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Link
+                Accessible.name: text
+                Keys.onReturnPressed: clicked()
+                MouseArea { id: privLinkMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
             }
 
             // -- tokens ----------------------------------------------------------------

@@ -123,22 +123,28 @@ Item {
                     objectName: "welcomeAdvanced"
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 8
-                    visible: (ob.store.state.zones || []).length > 1 && !parent.advanced && ob.store.zone.chain === "lez:testnet"
+                    visible: ob.store.zones.length > 1 && !parent.advanced && ob.store.zone.chain === "lez:testnet"
                     text: "Advanced: choose a network"
                     tone: "text3"
                     font.pixelSize: 12
                     font.underline: advMouse.containsMouse
-                    MouseArea { id: advMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.parent.advanced = true }
+                    signal clicked()
+                    onClicked: parent.advanced = true
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Link
+                    Accessible.name: text
+                    Keys.onReturnPressed: clicked()
+                    MouseArea { id: advMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
                 }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 8
                     spacing: 6
-                    visible: (ob.store.state.zones || []).length > 1 && (parent.advanced || ob.store.zone.chain !== "lez:testnet")
+                    visible: ob.store.zones.length > 1 && (parent.advanced || ob.store.zone.chain !== "lez:testnet")
                     Txt { Layout.alignment: Qt.AlignHCenter; text: "Network"; tone: "text3"; font.pixelSize: 12 }
                     SegmentedControl {
                         Layout.alignment: Qt.AlignHCenter
-                        readonly property var zones: ob.store.state.zones || []
+                        readonly property var zones: ob.store.zones
                         options: zones.map(function (z) { return z.chain === "lez:preview" ? "Preview" : z.chain === "lez:testnet" ? "Testnet" : z.chain === "lez:local" ? "Local" : z.chain })
                         currentIndex: {
                             for (var i = 0; i < zones.length; i++) if (zones[i].id === ob.store.zone.id) return i
