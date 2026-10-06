@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/logos-kit/logos-kit/blob/main/registry/schema/token-metadata.schema.json",
+  "title": "LEZ token and collection metadata (Logos Kit)",
+  "description": "The JSON a LEZ TokenMetadata `uri` points to. LEZ v0.3 stores only {standard: Simple|Expanded, uri, creators, primary_sale_date} on chain and defines no JSON format, so Logos Kit defines this one. Fields follow the common NFT/ERC-1155/Metaplex names so existing tooling reads them. Metadata can't change after creation. See docs/design/token-list.md §4.",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "symbol": {
+      "description": "Fungible tokens: the ticker shown next to amounts.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 11,
+      "pattern": "^[A-Za-z0-9.+\\-]+$"
+    },
+    "decimals": {
+      "description": "Fungible tokens: display decimals (not stored on chain).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 36
+    },
+    "description": { "type": "string", "maxLength": 1000 },
+    "image": {
+      "description": "A bare Logos Storage CID (base58btc multibase, starts with `z`) or an https URL. PNG, JPEG, WebP or GIF (first frame), up to 5 MB. SVG is not drawn.",
+      "anyOf": [
+        { "type": "string", "pattern": "^z[1-9A-HJ-NP-Za-km-z]{44,64}$" },
+        { "type": "string", "format": "uri", "pattern": "^https://" }
+      ]
+    },
+    "external_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "attributes": {
+      "description": "Expanded standard only; ignored for Simple.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["trait_type", "value"],
+        "properties": {
+          "trait_type": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "value": { "type": ["string", "number", "boolean"] },
+          "display_type": {
+            "type": "string",
+            "enum": ["number", "date", "boost_number", "boost_percentage"]
+          }
+        }
+      }
+    },
+    "animation_url": {
+      "description": "Expanded standard only. Recorded and shown as a link; the wallet doesn't play it.",
+      "anyOf": [
+        { "type": "string", "pattern": "^z[1-9A-HJ-NP-Za-km-z]{44,64}$" },
+        { "type": "string", "format": "uri", "pattern": "^https://" }
+      ]
+    }
+  }
+}
