@@ -241,7 +241,7 @@ ColumnLayout {
         Glyph { name: "shield"; color: Theme.text3; width: 14; height: 14 }
         Txt {
             Layout.fillWidth: true
-            text: iv.requester + " · named by Basecamp · unsigned"
+            text: iv.requester + " · named by Basecamp · " + (iv.store.appSigned(iv.requester) ? "signed package" : "unsigned")
             mono: true; tone: "text3"; font.pixelSize: 12
             wrapMode: Text.WrapAnywhere; elide: Text.ElideNone
         }

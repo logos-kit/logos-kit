@@ -76,9 +76,28 @@ convention (`logos-blockchain-ui` PR #69). In an app, show lepta with
 
 ## Fees
 
-Every transaction declares a **fee cap** (`maxFee`) that the payer approves. The
-approval sheet shows it. Fees are paid in the native token: lepta on the wire,
-LGO on screen.
+Fees are paid in the native token: lepta on the wire, LGO on screen. Private
+transactions are fee-exempt in LEZ 0.3. A public one pays
+
+```
+min(cycles used, gas limit) × execution base fee + signed bytes × storage base fee + tip
+```
+
+The wallet shows three figures:
+
+| Where | Figure | Source |
+|---|---|---|
+| Approval sheet, "Network fee" | **Up to** the fee at today's base fees: gas limit × execution base fee + bytes × storage base fee | `getFeeState` when the review is built |
+| Approval sheet, technical details | The **fee cap** (`maxFee`) the payer signs, the gas limit and the base fee | The transaction itself |
+| After inclusion (public native sends) | The **fee paid** | How much the sender's balance dropped beyond the amount |
+
+The LEZ 0.3 RPC doesn't report gas used: `getTransaction` returns the
+transaction and its block, and there is no simulate method. The paid fee is
+therefore read from the sender's balance. If anything else moves that balance
+in the meantime, such as an incoming payment or another send, the wallet shows
+no fee paid rather than guess. The approval binds to the cap, so a base
+fee rise between review and inclusion can never charge more than the user
+signed for.
 
 ## Re-checks at signing
 

@@ -79,6 +79,11 @@ QtObject {
         var a = apps[requester]
         return a && a.displayName ? a.displayName : requester
     }
+    // Installed from a signed package (Basecamp keeps its manifest.sig).
+    function appSigned(requester) {
+        var a = apps[requester]
+        return !!(a && a.signed)
+    }
     // Set when a private send, shield or dApp request should show its proof.
     property string watching: ""
 

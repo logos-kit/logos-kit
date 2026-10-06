@@ -68,7 +68,14 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 6
         Glyph { name: "shield"; color: Theme.text3; width: 14; height: 14 }
-        Txt { Layout.fillWidth: true; text: "Unsigned app: Basecamp can't confirm its publisher. It can't move funds without you."; tone: "text3"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone }
+        Txt {
+            objectName: "requesterTrust"
+            Layout.fillWidth: true
+            text: av.store.appSigned(av.requester)
+                ? "Installed from a signed package. It can't move funds without you."
+                : "Unsigned app: Basecamp can't confirm its publisher. It can't move funds without you."
+            tone: "text3"; font.pixelSize: 12; wrapMode: Text.Wrap; elide: Text.ElideNone
+        }
     }
 
     // The big line (Family: "Confirm transaction to 0x1f05…").
@@ -163,7 +170,7 @@ ColumnLayout {
             })
         }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
-        fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee }) : null
+        fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee, now: av.review.fee.estimate || "" }) : null
         // A native transfer runs in the chain itself (no program header).
         program: !av.program ? (av.outFlow && !av.outFlow.definition && av.intent.kind === "transfer"
                                 ? ({ name: "Native transfer", status: "builtin", immutable: true }) : null)
@@ -225,17 +232,41 @@ ColumnLayout {
     }
     ColumnLayout {
         id: details
+        objectName: "approvalDetails"
         visible: false
         Layout.fillWidth: true
         spacing: 4
         Txt { visible: !!av.program; Layout.fillWidth: true; text: "Image " + (av.program ? av.program.imageId : ""); mono: true; font.pixelSize: 11; tone: "text2"; wrapMode: Text.WrapAnywhere }
         Txt { visible: !!av.program && !!av.program.note; Layout.fillWidth: true; text: av.program ? av.program.note : ""; font.pixelSize: 12; tone: "text2"; wrapMode: Text.Wrap }
         Txt { visible: av.intent.kind === "call"; Layout.fillWidth: true; text: "Data " + (av.intent.data || ""); mono: true; font.pixelSize: 11; tone: "text2"; wrapMode: Text.WrapAnywhere; maximumLineCount: 4; elide: Text.ElideRight }
+        Txt {
+            visible: !!(av.review.fee && av.review.fee.maxFee)
+            Layout.fillWidth: true
+            text: av.review.fee ? "Fee cap " + Units.lgoLabel(av.review.fee.maxFee || "0") + " · gas limit " + (av.review.fee.gasLimit || "–")
+                  + (av.review.fee.baseFeeExec ? " · base fee " + av.review.fee.baseFeeExec + " lepta/gas" : "") : ""
+            font.pixelSize: 11; tone: "text2"; wrapMode: Text.Wrap
+        }
+        Txt {
+            visible: (av.summary.signers || []).length > 0
+            Layout.fillWidth: true
+            text: "Signs with " + (av.summary.signers || []).map(function (s) { return Fmt.short(s) }).join(", ")
+            mono: true; font.pixelSize: 11; tone: "text2"; wrapMode: Text.WrapAnywhere
+        }
         Txt { Layout.fillWidth: true; text: "Request " + (av.review.requestHash || ""); mono: true; font.pixelSize: 11; tone: "text3"; wrapMode: Text.WrapAnywhere }
     }
 
+    // Any public signer besides the sending account approves this too.
+    readonly property var extraSigners: (summary.signers || []).filter(function (id) {
+        return id !== av.intent.from && !(av.fromAccount && id === av.fromAccount.accountId)
+    })
+    Notice {
+        visible: av.extraSigners.length > 0
+        tone: "warn"; icon: "warning"
+        text: "This also signs with " + av.extraSigners.map(function (id) { return Fmt.short(id) }).join(", ") + ". Those accounts approve it too."
+    }
+
     // -- unknown effects -----------------------------------------------------------------
-    Notice { visible: !!av.summary.unknown; tone: "danger"; icon: "warning"; text: "Logos Kit can't read what this program call does. Only approve it if you trust the app completely." }
+    Notice { visible: !!av.summary.unknown; tone: "danger"; icon: "warning"; text: "Logos Kit can't read what this program call does, and the program can move anything the signing accounts hold. Only approve it if you trust the app completely." }
     CheckRow {
         id: ack
         objectName: "ackUnknown"

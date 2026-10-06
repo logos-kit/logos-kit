@@ -221,8 +221,10 @@ Item {
                 Layout.topMargin: 8
                 glyph: "inbox"
                 title: "No activity yet"
-                body: home.store.state.faucet ? "Get test LGO from the faucet to try a send." : "Sends, receives and app requests show up here."
-                actionText: home.store.state.faucet ? "Get test LGO" : ""
+                // Funded already: the faucet nudge would read as a mistake.
+                readonly property bool nudge: !!home.store.state.faucet && !(home.synced && home.acct.native !== "0")
+                body: nudge ? "Get test LGO from the faucet to try a send." : "Your sends and app requests show up here."
+                actionText: nudge ? "Get test LGO" : ""
                 actionTone: "ink"
                 onAction: home.funds()
             }

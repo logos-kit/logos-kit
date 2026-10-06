@@ -2,6 +2,7 @@ import QtQuick
 import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
 // Following one request after approval (ux-spec §7), after Phantom's
 // "Sending…" (Refero flow 3718, step 9): a centred ring with the elapsed time,
@@ -139,6 +140,15 @@ ColumnLayout {
                   ? "Included in block " + Fmt.amount(String(pv.s.block || ""), 0) + " but not confirmed. Logos Kit couldn't verify the result."
                 : pv.s.lifecycle === "included" ? (pv.s.block ? "In block " + Fmt.amount(String(pv.s.block), 0) + "." : "Included in a block.")
                 : (pv.s.error || "")
+        }
+        // What the network charged (public sends; private ones are fee-exempt).
+        Txt {
+            objectName: "feePaid"
+            visible: !!pv.s.feePaid && pv.s.outcome === "success"
+            Layout.alignment: Qt.AlignHCenter
+            tone: "text3"
+            font.pixelSize: 13
+            text: "Network fee paid " + Units.lgoLabel(pv.s.feePaid || "0")
         }
         Rectangle {
             visible: !!pv.s.txHash
