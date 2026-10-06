@@ -8,7 +8,7 @@ format and the approval policy with the Basecamp wallet.
 
 ```sh
 git clone https://github.com/logos-kit/logos-kit && cd logos-kit
-cargo xtask lez-vendor                          # pinned LEZ + our patches into vendor/lez
+scripts/lez-vendor.sh                           # pinned LEZ + our patches into vendor/lez
 cargo install --path crates/logos-kit-cli
 logos-kit --help
 ```

@@ -72,6 +72,17 @@ it on chain; the wallet's faucet sheet says so).
 
 ## Programs apps call
 
+Every approval shows the program a transaction runs, with its **source
+verification**: rebuilt from source (here or by our CI), named by a source
+claim but not rebuilt, unknown, or a mismatch with its source. Programs the
+CLI rebuilds (`logos-kit verify-program`) count in Basecamp too: both read
+the shared cache in `~/.logos-kit/verified.json`.
+
+You can give a program your own name (**Settings → Programs you named**, or
+`logos-kit program <address> --name "Payroll"`). Approvals then show
+"Payroll (named by you)" instead of "Unknown program". A name is only your
+label: it doesn't change the verification status.
+
 <Callout type="info">
 The canonical testimonial deployment on the official LEZ testnet is
 `5YoH3xjhgeKt2mcJXW7c31bqDNCWWA4CRJxVdvzFvVef`: immutable, image

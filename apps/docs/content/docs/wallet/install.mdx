@@ -47,10 +47,10 @@ on the official [LEZ testnet](/docs/concepts/networks).
 
 | Package | Version | What |
 |---|---|---|
-| `logos_kit_wallet` | 0.2.0 | Core module: keys, policy, proving, sync |
-| `logos_kit_wallet_ui` | 0.2.0 | The wallet app |
-| `logos_kit_testimonial` | 0.2.0 | Testimonials app |
-| `logos_kit_faucet` | 0.2.0 | Test funds app |
+| `logos_kit_wallet` | 0.3.0 | Core module: keys, policy, proving, sync |
+| `logos_kit_wallet_ui` | 0.3.0 | The wallet app |
+| `logos_kit_testimonial` | 0.3.0 | Testimonials app |
+| `logos_kit_faucet` | 0.3.0 | Test funds app |
 
 Packages are signed by the Logos Kit release key and built for macOS
 (Apple silicon) and Linux (x86-64, arm64). The catalog lives at
@@ -75,11 +75,44 @@ checkout: the UI flake refers to `../logos_kit_wallet`.
 <Shot name="wallet-send-review" caption="Every send is reviewed before it leaves." />
 </div>
 
-- **Accounts**: add public or private accounts from the account menu; name
-  them; switch with one click.
+- **Accounts**: add public or private accounts from the account menu (new
+  ones are named "Public account 2", "Private account 2" …); rename them;
+  switch with one click. The wallet opens on your first public account.
 - **Send / Receive**: the route (public, shield, deshield, private) follows
-  from the two accounts. Amounts are in LGO, with up to 9 decimals.
-- **Test LGO**: on the testnet (and the preview network), gets test LGO from
-  Logos Kit's faucet.
-- **Settings**: network, theme, auto-lock, connected apps (revoke any time),
-  reveal the recovery phrase.
+  from the two accounts. Amounts are in LGO, with up to 9 decimals. **Max**
+  leaves the fee cap (0.1344 LGO) on a public LGO send. Send checks the
+  recipient as you paste: a private receive code shows its fingerprint
+  ("Code ends K7-QX", the same four characters the receiver sees), a token's
+  ID is refused, an address that looks like one you've paid (same first and
+  last four characters) needs a tick, and a new address says so.
+- **Activity**: your sends, payments other people make to you (found in the
+  blocks), private payments you receive, and app requests, kept across
+  restarts. Every result links to the explorer.
+- **Test LGO**: on the testnet, gets test LGO from Logos Kit's faucet. On a
+  private account the wallet first explains the two steps (the faucet pays
+  your public account, then you approve moving it in privately, which proves
+  for about 5–8 minutes).
+- **Settings**: networks (add your own), theme, auto-lock, password, an
+  encrypted backup file, low-memory proving, programs you named, connected
+  apps (revoke any time), and the recovery phrase.
+
+### Backups
+
+**Settings → Backup → Save** writes `logos-kit-backup-<date>.json` to your
+Downloads folder (or Documents, or Desktop). It holds your accounts, labels,
+connected apps and activity, encrypted with your password; it isn't readable
+without it. To restore on a new machine, put the file in one of those folders
+and choose **Restore from a backup file** on the welcome screen. Keep your
+recovery phrase as well: a backup opens only with the password it was made
+with. From the CLI: `logos-kit backup export <file>` and
+`logos-kit backup import <file>`.
+
+### Proving and memory
+
+A private transaction is proved on your machine: about 5–8 minutes and up to
+about 4.3 GB of memory on an M1 Pro. Before a proof starts the wallet checks
+free memory. Below what it needs, the approval sheet warns and suggests
+**low-memory proving** (Settings), which proves in smaller pieces with about
+2 GB and takes longer; with almost no memory free it refuses and nothing is
+sent. If Basecamp closes during a proof, Activity says the proof stopped and
+nothing was sent.
