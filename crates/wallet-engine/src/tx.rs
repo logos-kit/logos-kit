@@ -319,7 +319,14 @@ impl Prepared {
 }
 
 fn lez(e: ExecutionFailureKind) -> anyhow::Error {
-    anyhow::anyhow!("{e}")
+    match e {
+        // LEZ's "Can not pay for operation": the balance the network shows
+        // is short. On a busy testnet a payment can take a minute to show.
+        ExecutionFailureKind::InsufficientFundsError => anyhow::anyhow!(
+            "Not enough funds for this, as the network shows the account now. If you were just paid, the network may not show it yet: try again in a minute."
+        ),
+        e => anyhow::anyhow!("{e}"),
+    }
 }
 
 /// Account ids may carry LEZ's `Public/` or `Private/` prefix.
