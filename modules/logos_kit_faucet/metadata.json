@@ -1,7 +1,7 @@
 {
   "name": "logos_kit_faucet",
   "display_name": "Logos Kit Faucet",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "ui_qml",
   "category": "developer",
   "description": "Get test LGO into any of your accounts, public or private, through the Logos Kit wallet. Built on the Logos Kit SDK.",

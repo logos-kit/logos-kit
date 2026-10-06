@@ -1,7 +1,7 @@
 {
   "name": "logos_kit_testimonial",
   "display_name": "Logos Kit Testimonials",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "ui_qml",
   "category": "social",
   "description": "Post an on-chain testimonial for the Logos Kit wallet on the Logos Execution Zone, and read what others wrote. Built on the Logos Kit SDK.",

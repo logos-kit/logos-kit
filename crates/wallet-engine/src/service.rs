@@ -2176,9 +2176,11 @@ fn default_copy(code: i64) -> &'static str {
 /// Basecamp's QML sandbox loads no `data:` URLs and no files outside the
 /// wallet UI's own folder, so a PNG icon travels as an [`ICON_GRID`]² grid
 /// of `#AARRGGBB` cells the sheet draws with rectangles. Missing or odd
-/// files give `null`s (the sheet falls back to initials).
+/// files give `null`s (the sheet falls back to initials). `signed` says
+/// whether Basecamp installed it from a signed package: its package manager
+/// keeps the publisher's `manifest.sig` beside `manifest.json` only then.
 fn app_info(root: &std::path::Path, requester: &str) -> Value {
-    let fallback = json!({ "name": requester, "displayName": null, "icon": null });
+    let fallback = json!({ "name": requester, "displayName": null, "icon": null, "signed": false });
     if requester.is_empty()
         || requester.len() > 64
         || !requester
@@ -2219,7 +2221,8 @@ fn app_info(root: &std::path::Path, requester: &str) -> Value {
         .get("icon")
         .and_then(Value::as_str)
         .and_then(|rel| icon_grid(&dir, rel.strip_prefix(":/").unwrap_or(rel)));
-    json!({ "name": requester, "displayName": display_name, "icon": icon })
+    let signed = dir.join("manifest.sig").is_file();
+    json!({ "name": requester, "displayName": display_name, "icon": icon, "signed": signed })
 }
 
 /// Cells per side of an app icon sent to the wallet UI.

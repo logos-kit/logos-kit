@@ -1,11 +1,13 @@
 # Once a day:
-# - fingerprint the official LEZ testnet and our preview network; the day the
-#   official one runs 0.3, open the cutover issue (docs/dev/cutover-0.3.md);
-#   fail if the preview network is down, halted or not 0.3;
+# - fingerprint the official LEZ testnet and our preview network; warn if the
+#   official one stops reporting 0.3 or halts (the rollback criteria in
+#   docs/dev/cutover-0.3.md); fail if the preview network is down, halted or
+#   not 0.3;
 # - export the testimonial evidence (distinct authors, months, each author's
-#   prior activity) from chain data, as a 90-day artifact. The official
-#   network's export starts once registry/programs.json names a lez:testnet
-#   deployment.
+#   prior activity) from chain data and commit it to the `evidence` branch:
+#   snapshots/<zone>/<submission>-<date>.json, plus the block-scan cache so
+#   the next day resumes where this one stopped. Also kept as a 90-day
+#   artifact.
 name: Daily
 
 on:
@@ -26,8 +28,7 @@ jobs:
     name: fingerprint + evidence
     if: github.repository == 'logos-kit/logos-kit'
     permissions:
-      contents: read
-      issues: write # the cutover issue
+      contents: write # the evidence branch
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -63,14 +64,18 @@ jobs:
             jq -c '{version, halted, lastBlockId, headAgeSecs}' out/$n.json
           done
 
-      - name: Official testnet runs 0.3 - open the cutover issue
-        if: steps.fp.outputs.official == '0.3'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Official testnet still runs 0.3
         run: |
-          title="Official LEZ testnet runs 0.3: run the cutover"
-          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
-            gh issue create --title "$title" --body "$(printf 'The daily fingerprint of %s reports version 0.3 (%s).\n\nRun docs/dev/cutover-0.3.md.\n\n```json\n%s\n```' "$OFFICIAL" "$(date -u +%F)" "$(jq -c . out/official.json)")"
+          [ "${{ steps.fp.outputs.official }}" = "0.3" ] || echo "::warning::official testnet reports '${{ steps.fp.outputs.official }}': check the rollback criteria in docs/dev/cutover-0.3.md"
+          [ "${{ steps.fp.outputs.official_halted }}" != "true" ] || echo "::warning::official testnet halted"
+
+      - name: Check out the evidence branch
+        run: |
+          if git fetch -q origin evidence; then
+            git worktree add -q evidence FETCH_HEAD
+            git -C evidence switch -q -c evidence
+          else
+            git worktree add -q --orphan -b evidence evidence
           fi
 
       - name: Evidence exports
@@ -82,11 +87,22 @@ jobs:
             programs=$(jq -r --arg c "lez:$zone" '.[] | select(.name == "testimonial" and .chain == $c) | "--program=" + .account' registry/programs.json)
             [ -n "$programs" ] || { echo "no lez:$zone testimonial deployment yet"; continue; }
             # shellcheck disable=SC2086
-            "$LK" --zone "lez-$zone" testimonial evidence $programs --snapshot "out/snapshots/$zone" --json \
+            "$LK" --zone "lez-$zone" testimonial evidence $programs --snapshot "evidence/snapshots/$zone" --json \
               | tail -1 > "out/evidence-$zone.json" \
               && jq -c '{distinctAuthors, qualified: .target.qualified, met: .target.met}' "out/evidence-$zone.json" \
               || echo "evidence export for lez:$zone failed"
           done
+          mkdir -p out/snapshots && cp -R evidence/snapshots/. out/snapshots/ 2>/dev/null || true
+
+      - name: Commit the evidence
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd evidence
+          git add -A
+          git diff --cached --quiet && { echo "no new evidence"; exit 0; }
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "evidence $(date -u +%F)"
+          git push -q origin evidence
 
       - uses: actions/upload-artifact@v7
         if: always()

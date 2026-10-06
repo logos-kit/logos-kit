@@ -26,7 +26,7 @@ Item {
             tone: row.tone
             mono: row.mono
             font.pixelSize: 13
-            font.weight: Font.DemiBold
+            font.weight: Font.Medium
             horizontalAlignment: Text.AlignRight
             wrapMode: Text.Wrap
             elide: Text.ElideNone

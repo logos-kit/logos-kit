@@ -109,6 +109,10 @@ pub struct TxStatus {
     pub to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// The native fee a public send paid (lepta), read from the sender's
+    /// balance: the 0.3 RPC reports no gas used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_paid: Option<String>,
     #[serde(skip)]
     requester: Option<String>,
 }
@@ -132,6 +136,7 @@ impl TxStatus {
             amount: None,
             to: None,
             token: None,
+            fee_paid: None,
             requester,
         }
     }
@@ -1269,6 +1274,7 @@ impl Engine {
             Err(e) => return Err(self.fail(handle, Lifecycle::Submitted, e, progress)),
         };
         // Own-account invariant: our private account moved by exactly the amount.
+        let mut fee_paid = None;
         let outcome = match (watch, before) {
             (Some((account, token, delta)), Some(before)) => {
                 let after = self
@@ -1320,6 +1326,9 @@ impl Engine {
                 };
                 match moved {
                     Some(d) if d >= w.out && d <= w.out.saturating_add(fee) => {
+                        if w.token.is_none() && !w.incoming {
+                            fee_paid = Some((d - w.out).to_string());
+                        }
                         (Outcome::Success, OutcomeSource::OwnAccountInvariant)
                     }
                     _ => (Outcome::Unknown, OutcomeSource::None),
@@ -1346,6 +1355,7 @@ impl Engine {
             s.phase_started_ms = now_ms();
             s.block = Some(block);
             (s.outcome, s.outcome_source) = outcome;
+            s.fee_paid = fee_paid;
             s.error = warning;
         }))
     }

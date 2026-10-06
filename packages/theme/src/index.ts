@@ -1,4 +1,4 @@
-// @logos-kit/theme: the Tray design tokens (D14, docs/design/brand.md), light
+// @logos-kit/theme: the Ledger design tokens (docs/design/brand.md), light
 // and dark, for web/React Native (CSS variables) and QML (`toQmlTokens`).
 // QML-safe (ES2017).
 
@@ -31,49 +31,53 @@ export interface Tokens {
   scheme: 'dark' | 'light'
 }
 
+// Ledger (2026-10-06, replaces Tray): monochrome wallet surfaces after Fuse
+// and Family (Refero screens: Fuse wallet home + swap confirm, Family send
+// confirm). Ink on white, white on black; colour only for status. Private is
+// told by its glyph and label, not a hue, so it reads the same in both themes.
 export const trayLight: Tokens = {
-  bg: '#ebebef',
-  surface: '#ffffff',
-  surface2: '#f3f3f6',
-  line: 'rgba(14,14,18,0.07)',
-  text: '#0e0e12',
-  text2: '#575763',
-  text3: '#666672',
-  private: '#6b5fff',
-  privateSoft: 'rgba(107,95,255,0.12)',
-  privateText: '#5145e6',
-  action: '#1f7bff',
+  bg: '#ffffff',
+  surface: '#f5f5f7',
+  surface2: '#ececef',
+  line: 'rgba(10,10,10,0.08)',
+  text: '#0a0a0a',
+  text2: '#55555c',
+  text3: '#6e6e75',
+  private: '#0a0a0a',
+  privateSoft: 'rgba(10,10,10,0.06)',
+  privateText: '#0a0a0a',
+  action: '#0a0a0a',
   actionText: '#ffffff',
-  ok: '#12a150',
-  warn: '#d49a00',
-  danger: '#e5484d',
-  island: '#0e0e12',
+  ok: '#128c4b',
+  warn: '#a86a00',
+  danger: '#d92d20',
+  island: '#0a0a0a',
   font: '"Onest", ui-sans-serif, sans-serif',
   numFont: '"Onest", ui-sans-serif, sans-serif',
   monoFont: '"JetBrains Mono", ui-monospace, monospace',
-  rSheet: 36,
-  rCard: 26,
+  rSheet: 32,
+  rCard: 24,
   rBtn: 999,
-  rRow: 20,
+  rRow: 18,
   scheme: 'light',
 }
 
 export const trayDark: Tokens = {
   bg: '#000000',
-  surface: '#161618',
-  surface2: '#202023',
-  line: 'rgba(255,255,255,0.07)',
-  text: '#f4f4f6',
-  text2: '#9a9aa5',
-  text3: '#8a8a95',
-  private: '#7a70ff',
-  privateSoft: 'rgba(122,112,255,0.18)',
-  privateText: '#c4bfff',
-  action: '#3898ff',
-  actionText: '#ffffff',
-  ok: '#4bd166',
-  warn: '#ffd641',
-  danger: '#ff6257',
+  surface: '#141416',
+  surface2: '#1f1f22',
+  line: 'rgba(255,255,255,0.09)',
+  text: '#ffffff',
+  text2: '#a1a1a8',
+  text3: '#8c8c93',
+  private: '#ffffff',
+  privateSoft: 'rgba(255,255,255,0.1)',
+  privateText: '#ffffff',
+  action: '#ffffff',
+  actionText: '#000000',
+  ok: '#32d74b',
+  warn: '#ffd60a',
+  danger: '#ff453a',
   island: '#000000',
   font: trayLight.font,
   numFont: trayLight.numFont,

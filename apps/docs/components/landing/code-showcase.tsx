@@ -7,7 +7,6 @@ import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { codeToHtml } from 'shiki'
 import { cn } from '@/lib/cn'
-import { BorderBeam } from './border-beam'
 
 export function CodeShowcase({ files }: { files: { name: string; lang: string; code: string }[] }) {
   const [active, setActive] = useState(0)
@@ -33,7 +32,6 @@ export function CodeShowcase({ files }: { files: { name: string; lang: string; c
   const file = files[active]!
   return (
     <div className="relative overflow-hidden rounded-3xl border border-fd-border bg-fd-card">
-      <BorderBeam size={260} duration={14} />
       <div className="flex items-center justify-between border-fd-border border-b px-3">
         <div className="flex">
           {files.map((f, i) => (

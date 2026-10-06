@@ -3,7 +3,22 @@ title: 'Changelog'
 description: 'What changed in each release of the wallet, the apps and the SDK.'
 ---
 
-## Wallet 0.2.0, Testimonials 0.2.0, Faucet 0.2.0
+## Wallet 0.3.0, Testimonials 0.3.0, Faucet 0.3.0
+
+- **New design ("Ledger").** One monochrome look for the wallet, both apps
+  and this site, taken from real wallets: Fuse's balance and confirm sheet,
+  Family's account header, send keypad and black dark mode, Phantom's action
+  tiles and sending ring, Glow's connect sheet. Light and dark both; colour
+  only for status. Private is shown by a lock and a label.
+- **Approvals read like a sentence.** One line says what happens ("Send 1 LGO
+  to Savings"), then the amount, the full destination and short rows.
+  Native transfers show "Built into LEZ"; a program whose source doesn't
+  match is labelled **Source mismatch**; a token transfer proposed by an app
+  now shows the asset, amount and destination.
+- **Verified by you counts.** A program you rebuilt with
+  `logos-kit verify-program` shows as verified on approval sheets too.
+
+## 2026-10-06 · Wallet 0.2.0, Testimonials 0.2.0, Faucet 0.2.0
 
 - **The official LEZ testnet is the default.** The wallet, the CLI (`--zone`
   defaults to `lez-testnet`) and the SDK (`chain: "lez:testnet"`) use

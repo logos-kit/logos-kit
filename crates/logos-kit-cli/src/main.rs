@@ -580,12 +580,21 @@ fn show_review(review: &Review) {
             serde_json::to_string(e).unwrap_or_default()
         );
     }
+    let as_lgo = |v: &String| {
+        v.parse::<u128>()
+            .map_or_else(|_| format!("{v} lepta"), |l| format!("{} LGO", lgo(l)))
+    };
     match (&review.fee.max_fee, &review.fee.payer) {
         (Some(max), Some(payer)) => {
-            let max = max
-                .parse::<u128>()
-                .map_or_else(|_| format!("{max} lepta"), |v| format!("{} LGO", lgo(v)));
-            println!("  fee       up to {max}, paid by {payer}");
+            match &review.fee.estimate {
+                Some(now) => println!(
+                    "  fee       {}{} at today's rate (cap {}), paid by {payer}",
+                    if review.fee.exact { "" } else { "up to " },
+                    as_lgo(now),
+                    as_lgo(max)
+                ),
+                None => println!("  fee       up to {}, paid by {payer}", as_lgo(max)),
+            }
             if let Some(base) = review.fee.base_fee_exec {
                 println!("            network base fee now {base} lepta per gas");
             }
@@ -693,6 +702,13 @@ async fn approve_ticket(
             status.block.map_or("?".into(), |b| b.to_string()),
             status.outcome
         );
+        if let Some(paid) = status
+            .fee_paid
+            .as_deref()
+            .and_then(|f| f.parse::<u128>().ok())
+        {
+            println!("fee paid {} LGO", lgo(paid));
+        }
     });
     Ok(status)
 }

@@ -28,7 +28,8 @@ Item {
     readonly property color bg: tone === "ink" ? Theme.text : tone === "action" ? Theme.action
         : tone === "private" ? Theme.priv : tone === "danger" ? Theme.danger
         : tone === "ghost" ? "transparent" : Theme.surface2
-    readonly property color fg: tone === "ink" ? Theme.bg : (tone === "action" || tone === "private" || tone === "danger") ? "#ffffff"
+    readonly property color fg: tone === "ink" ? Theme.bg : (tone === "action" || tone === "private") ? Theme.privOn
+        : tone === "danger" ? "#ffffff"
         : tone === "ghost" ? Theme.text2 : Theme.text
 
     Rectangle {

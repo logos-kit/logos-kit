@@ -2,9 +2,12 @@ import QtQuick
 import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
+import "../LogosKitUi/Units.js" as Units
 
-// Following one request after approval (ux-spec §7): the ring and phases for
-// a private route, a short wait for a public one, then the honest outcome.
+// Following one request after approval (ux-spec §7), after Phantom's
+// "Sending…" (Refero flow 3718, step 9): a centred ring with the elapsed time,
+// the title and what is being sent, the phases under it, then the honest
+// outcome with a green check.
 ColumnLayout {
     id: pv
     property var store
@@ -24,16 +27,36 @@ ColumnLayout {
 
     // -- in progress -------------------------------------------------------------
     ColumnLayout {
+        id: running
         visible: !pv.final_
         Layout.fillWidth: true
         spacing: 12
-        Txt { Layout.fillWidth: true; text: pv.priv ? "Sending privately" : "Sending"; font.pixelSize: 20; font.weight: Font.DemiBold }
-        Txt { Layout.fillWidth: true; text: pv.s.title || ""; tone: "text2"; font.pixelSize: 13; wrapMode: Text.Wrap }
+        // The ring: elapsed time in the middle; a proof shows its estimate.
+        readonly property real elapsedS: Math.max(0, ((pv.s.nowMs || Date.now()) - (pv.s.phaseStartedMs || Date.now())) / 1000)
+        ProgressRing {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 12
+            size: 96
+            thickness: 6
+            color: Theme.text
+            track: Theme.surface2
+            indeterminate: !(pv.s.lifecycle === "proving" && pv.s.etaSeconds > 0)
+            value: pv.s.etaSeconds > 0 ? Math.min(0.95, running.elapsedS / (running.elapsedS + pv.s.etaSeconds)) : 0
+            Txt { text: Fmt.mmss(running.elapsedS); num: true; font.pixelSize: 16; font.weight: Font.DemiBold }
+        }
+        Txt {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            horizontalAlignment: Text.AlignHCenter
+            text: pv.s.lifecycle === "proving" ? "Proving privately…" : pv.priv ? "Sending privately…" : "Sending…"
+            font.pixelSize: 22; font.weight: Font.Bold
+        }
+        Txt { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: pv.s.title || ""; tone: "text2"; font.pixelSize: 14; wrapMode: Text.Wrap; elide: Text.ElideNone }
 
         Pipeline {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            accent: pv.priv ? Theme.priv : Theme.action
+            accent: Theme.text
             stages: {
                 var at = pv.phases.indexOf(pv.s.lifecycle)
                 var out = [{ label: "Approved", status: "done" }]
@@ -55,9 +78,15 @@ ColumnLayout {
                 return out
             }
         }
-        Notice {
+        Txt {
             visible: pv.priv
-            text: "This is normal for private transactions. Your keys never leave this device. You can close this: the proof keeps running and the balance updates when it's sent."
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
+            tone: "text3"
+            font.pixelSize: 12
+            text: "Normal for private sends: your keys never leave this device. You can close this; the proof keeps running."
         }
         RowLayout {
             Layout.fillWidth: true
@@ -79,7 +108,7 @@ ColumnLayout {
         visible: pv.final_
         Layout.fillWidth: true
         spacing: 10
-        SuccessCheck { visible: pv.final_ && !pv.failed && pv.s.outcome === "success"; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; size: 72; color: pv.priv ? Theme.priv : Theme.ok }
+        SuccessCheck { visible: pv.final_ && !pv.failed && pv.s.outcome === "success"; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 12; size: 80; color: Theme.ok }
         Rectangle {
             visible: !(pv.final_ && !pv.failed && pv.s.outcome === "success")
             Layout.alignment: Qt.AlignHCenter
@@ -94,10 +123,10 @@ ColumnLayout {
         Txt {
             objectName: "outcomeTitle"
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: 20; font.weight: Font.DemiBold
+            font.pixelSize: 24; font.weight: Font.Bold
             text: pv.s.lifecycle === "dropped" && pv.s.errorCode === 6102 ? "Proof failed"
                 : pv.failed ? (Fmt.LIFECYCLE[pv.s.lifecycle] || "Failed")
-                : pv.s.outcome === "success" ? (pv.priv ? "Sent privately" : "Confirmed")
+                : pv.s.outcome === "success" ? (pv.priv ? "Sent privately" : "Sent!")
                 : "Not confirmed yet"
         }
         Txt {
@@ -109,8 +138,17 @@ ColumnLayout {
             text: pv.s.lifecycle === "dropped" ? (pv.s.errorCode === 6102 ? "The transaction wasn't sent. Nothing was spent." : (pv.s.error || "The transaction wasn't sent."))
                 : pv.s.lifecycle === "included" && pv.s.outcome !== "success" && pv.s.outcome !== "failure"
                   ? "Included in block " + Fmt.amount(String(pv.s.block || ""), 0) + " but not confirmed. Logos Kit couldn't verify the result."
-                : pv.s.lifecycle === "included" ? "In block " + Fmt.amount(String(pv.s.block || ""), 0) + "."
+                : pv.s.lifecycle === "included" ? (pv.s.block ? "In block " + Fmt.amount(String(pv.s.block), 0) + "." : "Included in a block.")
                 : (pv.s.error || "")
+        }
+        // What the network charged (public sends; private ones are fee-exempt).
+        Txt {
+            objectName: "feePaid"
+            visible: !!pv.s.feePaid && pv.s.outcome === "success"
+            Layout.alignment: Qt.AlignHCenter
+            tone: "text3"
+            font.pixelSize: 13
+            text: "Network fee paid " + Units.lgoLabel(pv.s.feePaid || "0")
         }
         Rectangle {
             visible: !!pv.s.txHash
@@ -126,6 +164,6 @@ ColumnLayout {
                 IconButton { glyph: "copy"; label: "Copy transaction hash"; onClicked: pv.store.copy(pv.s.txHash) }
             }
         }
-        Btn { objectName: "proofDone"; Layout.fillWidth: true; large: true; text: "Done"; onClicked: pv.close() }
+        Btn { objectName: "proofDone"; Layout.fillWidth: true; Layout.topMargin: 8; large: true; tone: "ink"; text: "Done"; onClicked: pv.close() }
     }
 }

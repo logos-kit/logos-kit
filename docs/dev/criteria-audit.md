@@ -195,3 +195,16 @@ Effort: **S** ≤ 1 day · **M** a few days · **L** substantial or calendar-bou
     - Run the other-modules pattern once in Basecamp.
 13. **Test hardening** (R2) · **S**: assert that a private-balance read is refused before consent.
 14. **Optional:** Logos Storage encrypted backup (R4) · **L**. Not required while there is no remote persistence. Also a real domain for the preview network (sslip.io outage) · **S**, but it matters less once the testnet is the default.
+
+## Closed since the audit (2026-10-06, branch `ui/wallet-v3`)
+
+| Row | What changed | Evidence |
+|---|---|---|
+| F6, F8, S1 | Official testnet cutover. Re-pinned to v0.3.0 `db66590`, testimonial `5YoH3x…fVef` deployed immutably, testnet drip and relay live, testnet is the default network. | Every route proved with real proofs on the official testnet, blocks 11969–12004 (`PROGRESS.md`) |
+| A2, SR3 (tooling) | `daily.yml` commits `snapshots/<zone>/<submission>-<date>.json` and the block-scan cache to the `evidence` branch every day. The cutover-issue step is replaced by a warning on the rollback criteria. | First snapshot: 1 distinct author, tip block 12,014 |
+| U4 (1) | The outflow is built from `summary.outflows` for any asset. A token transfer an app proposes shows its asset, amount and destination. | `ApprovalView.qml` `outFlow` |
+| U4 (2) | Every public signer is listed under technical details, and a warning appears for any signer other than the sending account. | `ApprovalView.qml` `extraSigners` |
+| U4 (3) | The unknown-call notice says that the program can move anything the signing accounts hold. | `ApprovalView.qml` |
+| U4 (4), U6 (d) | "Unsigned app" shows only for apps without Basecamp's `manifest.sig`. Signed installs read "Installed from a signed package". | `service.rs` `app_info` → `signed`; `Store.appSigned` |
+| U7, U6 (c) | The fee at today's base fees (`getFeeState`). It is **exact** for a native transfer, which runs at zero cycles: signed bytes × storage base fee + tip. A program call shows **up to**, pricing its cycles at the gas limit. The cap, gas limit and base fee are under technical details. After inclusion, public native sends show the **fee paid** from the sender's balance. The docs say the 0.3 RPC reports no gas used. | `qa_fees.py`: review 0.000002968 LGO = paid 0.000002968 LGO (local); `tx.rs` `Fee::estimate`; `engine.rs` `fee_paid` |
+| U6 (design) | Ledger design across the wallet, both apps and the landing (Refero: Family, Fuse, Phantom, Ctrl). | `docs/design/ledger-*.png` |

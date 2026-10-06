@@ -1,7 +1,7 @@
 {
   "name": "logos_kit_wallet_ui",
   "display_name": "Logos Kit Wallet",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "ui_qml",
   "category": "wallet",
   "description": "Logos Kit wallet for the Logos Execution Zone",

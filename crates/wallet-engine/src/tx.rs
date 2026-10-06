@@ -224,7 +224,26 @@ pub struct Fee {
     /// The sequencer's current execution base fee per gas (`getFeeState`),
     /// when it offers one. Gas used is only known after inclusion.
     pub base_fee_exec: Option<u64>,
+    /// The fee at today's base fees. LEZ charges `cycles·base_fee_exec +
+    /// bytes·base_fee_stor + tip`, and runs the native transfer outside the
+    /// zkVM at zero cycles: for it this is the fee (`exact`), unless the base
+    /// fee moves before inclusion. A guest program's cycles are only known
+    /// once it runs, so for those this is the most it can cost (cycles at
+    /// the gas limit). The 0.3 RPC reports no gas used, so the paid fee is
+    /// read from the sender's balance afterwards.
+    pub estimate: Option<String>,
+    pub exact: bool,
+    /// Signed size in bytes, the tip, and whether execution is free.
+    #[serde(skip)]
+    sizing: Option<(u64, u64, bool)>,
 }
+
+/// Borsh size of a signed public transaction around its message: the
+/// `LeeTransaction` variant tag and the witness `Vec` length, then a 64-byte
+/// signature and a 32-byte public key per signer. LEZ bills storage gas on
+/// exactly this size.
+const SIGNED_OVERHEAD_BYTES: u64 = 1 + 4;
+const WITNESS_BYTES_PER_SIGNER: u64 = 64 + 32;
 
 /// Returned (inside `anyhow::Error`) when something changed since approval.
 #[derive(Debug)]
@@ -512,6 +531,16 @@ fn fee_of(message: &lee::public_transaction::Message) -> Fee {
         max_fee: Some(f.max_fee.to_string()),
         gas_limit: Some(f.gas_limit),
         base_fee_exec: None,
+        estimate: None,
+        exact: false,
+        sizing: borsh::to_vec(message).ok().map(|b| {
+            let witness = WITNESS_BYTES_PER_SIGNER * message.nonces.len() as u64;
+            (
+                b.len() as u64 + SIGNED_OVERHEAD_BYTES + witness,
+                f.tip,
+                message.program_account_id == NATIVE_TOKEN_PROGRAM_ID,
+            )
+        }),
     })
 }
 
@@ -596,13 +625,20 @@ impl Session {
             ..
         } = built;
         if fee.payer.is_some() {
-            // Informational only: the approval binds to max_fee, not this.
-            fee.base_fee_exec = core
-                .helm_owned()
-                .get_fee_state()
-                .await
-                .ok()
-                .map(|q| q.base_fee_exec);
+            // Informational only: the approval binds to max_fee, not these.
+            if let Ok(q) = core.helm_owned().get_fee_state().await {
+                fee.base_fee_exec = Some(q.base_fee_exec);
+                if let Some((gas, (bytes, tip, exec_free))) = fee.gas_limit.zip(fee.sizing) {
+                    let exec = if exec_free { 0 } else { u128::from(gas) };
+                    fee.estimate = Some(
+                        (exec * u128::from(q.base_fee_exec)
+                            + u128::from(bytes) * u128::from(q.base_fee_stor)
+                            + u128::from(tip))
+                        .to_string(),
+                    );
+                    fee.exact = exec_free;
+                }
+            }
         }
         let hash = request_hash(&scope, requester, &intent, &bound);
         Ok(Prepared {

@@ -32,7 +32,11 @@ An app can **ask**. It can't:
   answers only apps with a connected session.
 
 The app's identity is the name the Basecamp shell attests (`requesterName`),
-not something the app claims. The wallet warns when an app is unsigned.
+not something the app claims. Beside it, the sheet says whether Basecamp
+installed the app from a signed package. Basecamp's package manager keeps the
+publisher's `manifest.sig` next to the install only then. A package without
+one is marked unsigned, because nothing confirms its publisher. Signed or
+not, an app can't move funds without the user's approval.
 
 ## What an approval shows
 

@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 
-// From 21st.dev laziekiki/empty-state-kit (id 27024) and uiable/empty-
-// background (id 18266): https://21st.dev/@laziekiki/components/empty-state-kit
-// A glyph in a soft tile ringed by two faint circles, a title, one line of
-// help and an optional action. For "nothing here yet", never for errors.
+// Fuse's empty state (Refero: Fuse wallet home, "There is nothing here yet"):
+// a bold line, one quiet line of help, and an optional pill. No illustration
+// chrome. For "nothing here yet", never for errors. `glyph` is kept for API
+// compatibility and not drawn.
 ColumnLayout {
     id: es
     property string glyph: "info"
@@ -16,42 +16,21 @@ ColumnLayout {
     Accessible.role: Accessible.Grouping
     Accessible.name: es.title
 
-    spacing: 10
-    Item {
-        Layout.alignment: Qt.AlignHCenter
-        implicitWidth: 112; implicitHeight: 96
-        Repeater {
-            model: 2
-            Rectangle {
-                anchors.centerIn: parent
-                width: 64 + (index + 1) * 26; height: width; radius: width / 2
-                color: "transparent"
-                border.width: 1
-                border.color: Theme.soft(Theme.text, 0.06 - index * 0.025)
-            }
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: 58; height: 58; radius: 18
-            color: Theme.surface2
-            border.width: 1
-            border.color: Theme.line
-            Glyph { anchors.centerIn: parent; name: es.glyph; color: Theme.text2; width: 24; height: 24 }
-        }
-    }
+    spacing: 6
     Txt {
-        Layout.alignment: Qt.AlignHCenter
+        Layout.fillWidth: true
+        Layout.topMargin: 12
         text: es.title
-        font.pixelSize: 16
-        font.weight: Font.DemiBold
+        font.pixelSize: 17
+        font.weight: Font.Bold
+        horizontalAlignment: Text.AlignHCenter
     }
     Txt {
         visible: es.body !== ""
-        Layout.alignment: Qt.AlignHCenter
-        Layout.maximumWidth: 300
+        Layout.fillWidth: true
         text: es.body
         tone: "text2"
-        font.pixelSize: 13
+        font.pixelSize: 14
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
         elide: Text.ElideNone
@@ -60,7 +39,7 @@ ColumnLayout {
     Btn {
         visible: es.actionText !== ""
         Layout.alignment: Qt.AlignHCenter
-        Layout.topMargin: 6
+        Layout.topMargin: 12
         text: es.actionText
         tone: es.actionTone
         onClicked: es.action()

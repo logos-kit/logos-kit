@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 import "../LogosKit/Tokens.js" as Tokens
 
-// Tray tokens (D14, generated from @logos-kit/theme into LogosKit/Tokens.js)
+// Ledger tokens (generated from @logos-kit/theme into LogosKit/Tokens.js)
 // plus the font and motion rules: the same look as the Logos Kit wallet.
 // Basecamp is dark; set `Theme.dark = false` for the light variant.
 QtObject {
@@ -23,10 +23,14 @@ QtObject {
     readonly property color privText: t.privateText
     readonly property color action: t.action
     readonly property color actionText: t.actionText
+    // Text and glyphs drawn on a private or ink fill.
+    readonly property color privOn: t.actionText
     readonly property color ok: t.ok
     readonly property color warn: t.warn
     readonly property color danger: t.danger
     readonly property color island: "#000000"
+    // Sheets: white on light (Fuse), one step up from black on dark (Family).
+    readonly property color sheet: dark ? t.surface : t.bg
     readonly property color scrim: dark ? "#b3000000" : "#73000000"
 
     readonly property int rSheet: t.rSheet

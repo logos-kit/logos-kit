@@ -34,7 +34,7 @@ d.shot("11-send-to")
 d.click("sendNext")
 for o in d.items():
     if o.metaObject().className().startswith("SendFlow"):
-        o.setProperty("amountText", "1234")
+        o.setProperty("amountText", "0.000001234")
 d.shot("12-send-amount")
 d.click("sendReview")
 d.wait(lambda: d.find("approvePassword"), 30, "review")

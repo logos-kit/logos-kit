@@ -204,42 +204,48 @@ ColumnLayout {
         text: (iv.store.queued ? iv.store.appName(iv.store.queued.requester) : "") + " is waiting with another request. Close this to see it."
     }
 
-    // == header (all kinds) ================================================================
-    RowLayout {
+    // == header (all kinds), after Glow's connect sheet: the app and the wallet
+    //    side by side, then one big line saying what is asked ===================
+    Item {
         // Transactions show the requester inside the approval sheet itself.
         visible: !!iv.cur && iv.requester !== "" && !iv.handle && iv.kind !== "lez.transaction.send"
-        Layout.fillWidth: true
-        spacing: 12
+        Layout.topMargin: 4
+        implicitWidth: 88; implicitHeight: 52
         AppAvatar { store: iv.store; requester: iv.requester; size: 52 }
-        Row {
-            spacing: 4
-            Layout.alignment: Qt.AlignVCenter
-            Repeater { model: 3; Rectangle { width: 6; height: 6; radius: 3; color: Theme.text3 } }
+        Rectangle {
+            x: 36; width: 52; height: 52; radius: 26
+            color: "#0a0a0c"
+            border.width: 3; border.color: Theme.sheet
+            LogosMark { anchors.centerIn: parent; size: 24; white: true }
         }
-        Rectangle { implicitWidth: 52; implicitHeight: 52; radius: 16; color: "#000000"; LogosMark { anchors.centerIn: parent; size: 26 } }
-        Item { Layout.fillWidth: true }
     }
     Txt {
         visible: !!iv.cur && (iv.kind !== "lez.transaction.send" || iv.blocked)
         Layout.fillWidth: true
         wrapMode: Text.Wrap
-        font.pixelSize: 20
-        font.weight: Font.DemiBold
-        text: iv.kind === "lez.wallet.connect" ? iv.store.appName(iv.requester) + " wants to connect"
+        elide: Text.ElideNone
+        font.pixelSize: 24
+        font.weight: Font.Bold
+        lineHeight: 1.1
+        text: iv.kind === "lez.wallet.connect" ? iv.store.appName(iv.requester) + " wants to connect to your wallet"
             : iv.kind === "lez.message.sign" ? iv.store.appName(iv.requester) + " asks you to sign a message"
             : iv.kind === "lez.wallet.sign_in" ? "Sign in to " + (iv.p.domain || iv.requester)
-            : iv.kind === "lez.wallet.request_funds" ? "Get test funds"
+            : iv.kind === "lez.wallet.request_funds" ? "Get test LGO"
             : iv.kind === "lez.transaction.send" ? "Can't review this request"
             : "Request"
     }
-    Txt {
+    RowLayout {
         visible: iv.requester !== "" && iv.kind !== "lez.transaction.send"
         Layout.fillWidth: true
-        text: "Module " + iv.requester + " · name checked by Basecamp"
-        mono: true; tone: "text3"; font.pixelSize: 12
-        wrapMode: Text.WrapAnywhere; elide: Text.ElideNone
+        spacing: 6
+        Glyph { name: "shield"; color: Theme.text3; width: 14; height: 14 }
+        Txt {
+            Layout.fillWidth: true
+            text: iv.requester + " · named by Basecamp · " + (iv.store.appSigned(iv.requester) ? "signed package" : "unsigned")
+            mono: true; tone: "text3"; font.pixelSize: 12
+            wrapMode: Text.WrapAnywhere; elide: Text.ElideNone
+        }
     }
-    Notice { visible: iv.requester !== "" && iv.kind === "lez.wallet.connect"; tone: "warn"; text: "Unsigned app: Basecamp can't confirm who published it." }
 
     // == blocked =============================================================================
     ColumnLayout {
@@ -256,7 +262,7 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 8
         Permissions { Layout.fillWidth: true; privateRead: iv.wantsPrivate }
-        Txt { text: "Share which accounts?"; font.pixelSize: 14; font.weight: Font.DemiBold; Layout.topMargin: 8 }
+        Txt { text: "Share which accounts?"; font.pixelSize: 16; font.weight: Font.Bold; Layout.topMargin: 10 }
         Repeater {
             model: iv.wantsPrivate ? iv.publicAccounts.concat(iv.privateAccounts) : iv.publicAccounts
             AccountCard {
@@ -291,7 +297,7 @@ ColumnLayout {
             Btn {
                 id: connectBtn
                 objectName: "connectApprove"
-                Layout.fillWidth: true; large: true; tone: "action"
+                Layout.fillWidth: true; large: true; tone: "ink"
                 text: "Connect " + iv.picked.length + " account" + (iv.picked.length === 1 ? "" : "s")
                 armDelay: 500
                 busy: iv.busy
