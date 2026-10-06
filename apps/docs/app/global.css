@@ -3,35 +3,36 @@
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
-/* Tray (docs/design/brand.md): the wallet's palette, light and dark. */
+/* Ledger (docs/design/brand.md): the wallet's palette, light and dark.
+   Ink on white / white on black; colour only for status. */
 :root {
-  --lk-action: #1f7bff;
-  --lk-ok: #12a150;
-  --lk-priv: #6b5fff;
-  --lk-warn: #d49a00;
-  --lk-danger: #e5484d;
-  --color-fd-background: #ebebef;
-  --color-fd-card: #ffffff;
-  --color-fd-secondary: #f3f3f6;
-  --color-fd-foreground: #0e0e12;
-  --color-fd-muted-foreground: #6c6c78;
-  --color-fd-border: rgb(14 14 18 / 0.08);
-  --color-fd-primary: #1f7bff;
+  --lk-action: #0a0a0a;
+  --lk-ok: #128c4b;
+  --lk-priv: #0a0a0a;
+  --lk-warn: #a86a00;
+  --lk-danger: #d92d20;
+  --color-fd-background: #ffffff;
+  --color-fd-card: #f5f5f7;
+  --color-fd-secondary: #ececef;
+  --color-fd-foreground: #0a0a0a;
+  --color-fd-muted-foreground: #55555c;
+  --color-fd-border: rgb(10 10 10 / 0.08);
+  --color-fd-primary: #0a0a0a;
 }
 .dark {
-  --lk-action: #3898ff;
-  --lk-ok: #4bd166;
-  --lk-priv: #7a70ff;
-  --lk-warn: #ffd641;
-  --lk-danger: #ff6257;
+  --lk-action: #ffffff;
+  --lk-ok: #32d74b;
+  --lk-priv: #ffffff;
+  --lk-warn: #ffd60a;
+  --lk-danger: #ff453a;
   --color-fd-background: #000000;
-  --color-fd-card: #161618;
-  --color-fd-secondary: #202023;
-  --color-fd-popover: #161618;
-  --color-fd-foreground: #f4f4f6;
-  --color-fd-muted-foreground: #9a9aa5;
-  --color-fd-border: rgb(255 255 255 / 0.08);
-  --color-fd-primary: #3898ff;
+  --color-fd-card: #141416;
+  --color-fd-secondary: #1f1f22;
+  --color-fd-popover: #141416;
+  --color-fd-foreground: #ffffff;
+  --color-fd-muted-foreground: #a1a1a8;
+  --color-fd-border: rgb(255 255 255 / 0.09);
+  --color-fd-primary: #ffffff;
 }
 
 html {
@@ -43,27 +44,12 @@ html > body[data-scroll-locked] {
   --removed-body-scroll-bar-size: 0px !important;
 }
 
-/* Screenshot backdrop (components/shot.tsx): a quiet Tray gradient. */
+/* Screenshot backdrop (components/shot.tsx): a flat quiet surface. */
 .lk-backdrop {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgb(31 123 255 / 0.1), transparent 60%),
-    radial-gradient(90% 70% at 100% 100%, rgb(124 92 255 / 0.1), transparent 60%),
-    var(--color-fd-secondary);
+  background: var(--color-fd-card);
 }
 .dark .lk-backdrop {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgb(56 152 255 / 0.14), transparent 60%),
-    radial-gradient(90% 70% at 100% 100%, rgb(139 114 255 / 0.12), transparent 60%), #0b0b0d;
-}
-
-/* Border beam (components/landing/border-beam.tsx). */
-@theme {
-  --animate-border-beam: border-beam calc(var(--duration) * 1s) infinite linear;
-  @keyframes border-beam {
-    100% {
-      offset-distance: 100%;
-    }
-  }
+  background: #0b0b0d;
 }
 
 /* Landing entrance (bento cells), from the 21st.dev "Bento Monochrome" motion. */
