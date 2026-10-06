@@ -213,6 +213,11 @@ impl DataDir {
                 sequencer_addr: zone.sequencer.parse()?,
                 basic_auth: None,
             }],
+            // Upstream gives up after 5 polls 12 s apart. The official testnet
+            // can take longer than a minute to include a transaction (seen
+            // 2026-10-06: a program segment landed minutes after the wallet
+            // declared it lost), so wait up to ~6 min before calling it failed.
+            seq_tx_poll_max_blocks: 30,
             ..WalletConfig::default()
         };
         atomic_write(
