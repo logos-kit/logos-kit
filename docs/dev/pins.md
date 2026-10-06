@@ -8,7 +8,7 @@ Recorded 2026-09-26 (S0).
 
 | Component | Repo | Rev | Date | Notes |
 |---|---|---|---|---|
-| LEZ | `logos-blockchain/logos-execution-zone` | `f7fda38a4428b9989f1db1dbf5d2411484848fd4` | 2026-09-26 | `dev`, one merge after `v0.3.0-rc1`. **Re-pin to `v0.3.0` final when it is tagged** |
+| LEZ | `logos-blockchain/logos-execution-zone` | `db66590ab821a4e142c211017a3866d007f6fa77` | 2026-09-30 | Tag `v0.3.0`, which the official testnet runs. Re-pinned 2026-10-06 from `f7fda38` (`v0.3.0-rc1`): 19 commits, all seven patches applied unchanged, protocol vectors identical. The breaking change for us: `ApplyOutput` gained `chained_calls`, so every guest that uses `apply` (our testimonial program included) had to be rebuilt, and the builtins' images and the privacy circuit changed |
 | Basecamp | `logos-co/logos-basecamp` | `2c2022762b397e5c5657a480bab9981466211e35` | 2026-09-22 | Tag `0.3.0`. Pinned because some public releases did not discover user modules. **Installed locally:** release asset `LogosBasecamp-Desktop-v0.3.0-bbe5da-aarch64.dmg` (sha256 `82ea4cbdf6b32a7a04610a422f1326347b994984d5a07ef474c4968d2edd6d53`) at `~/Applications/LogosBasecamp.app`. The QML Inspector needs a source dev build at the same rev |
 | logos-module-builder | `logos-co/logos-module-builder` | `4b7998272c5ec014bcac4bf1c7dbe7602c63a3c1` | 2026-09-23 | `mkLogosModule` / `mkLogosQmlModule` |
 | logos-rust-sdk | `logos-co/logos-rust-sdk` | `bcc36420d7a15fb39cbf8079c85a18650cdae968` | 2026-09-24 | `current_caller()`, codegen trait |
@@ -21,7 +21,7 @@ Mirrors LEZ's own `flake.nix` at the LEZ rev above. When LEZ re-pins, copy these
 
 | Input | Pin | Why |
 |---|---|---|
-| LEZ source (`lez-src`) | `f7fda38a…` tarball + `vendor/lez-patches/0001–0005` | Same tree as `cargo xtask lez-vendor` (git-ignored `vendor/lez`) |
+| LEZ source (`lez-src`) | `db66590a…` (`v0.3.0`) tarball + `vendor/lez-patches/0001–0007` | Same tree as `cargo xtask lez-vendor` (git-ignored `vendor/lez`) |
 | logos-blockchain-circuits flake | `2846ee7a4cfa24458bb8063412ab2e753b344d2f` | LEZ's pairing for the lockfile's circuits `v0.5.7` (`ebf7ddf5…`) → `LBC_ROOT_DIR` |
 | logos-blockchain-rust-rapidsnark flake | `e91187f8ccb5bbfc7bb00dac88169112428da78f` | Same rev as the lockfile → `RAPIDSNARK_LIB_DIR` |
 | risc0 recursion zkr | hash read from the locked `risc0-circuit-recursion` crate's `build.rs` | Pre-fetched → `RECURSION_SRC_PATH` (no network in the sandbox) |
