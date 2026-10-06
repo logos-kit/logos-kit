@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/logos-kit/logos-kit/blob/main/registry/schema/tokenlist.schema.json",
+  "title": "Logos Kit token list (LEZ)",
+  "description": "The Uniswap Token List shape (https://uniswap.org/tokenlist.schema.json) for LEZ. One deviation: LEZ networks are CAIP-2 strings (\"lez:testnet\"), not EVM integers, so `chainId` is replaced by `extensions.chain`. See docs/design/token-list.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "timestamp", "version", "tokens"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 30, "pattern": "^[\\w ]+$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor", "patch"],
+      "properties": {
+        "major": { "type": "integer", "minimum": 0 },
+        "minor": { "type": "integer", "minimum": 0 },
+        "patch": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "logoURI": { "type": "string", "format": "uri" },
+    "keywords": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 20, "pattern": "^[\\w ]+$" }
+    },
+    "tags": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 10, "pattern": "^[\\w]+$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 20, "pattern": "^[ \\w]+$" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "tokens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": { "$ref": "#/definitions/TokenInfo" }
+    }
+  },
+  "definitions": {
+    "Base58Id": {
+      "description": "A LEZ account id (32 bytes) in base58.",
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "TokenInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "decimals", "name", "symbol", "extensions"],
+      "properties": {
+        "address": {
+          "description": "The token's definition account id (its Token ID). For a collection, the NonFungible definition.",
+          "$ref": "#/definitions/Base58Id"
+        },
+        "decimals": {
+          "description": "Display decimals. Not stored on chain. Collections use 0.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 36
+        },
+        "name": {
+          "description": "Must equal the definition's on-chain name (CI checks it).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 11,
+          "pattern": "^[A-Za-z0-9.+\\-]+$"
+        },
+        "logoURI": {
+          "description": "For other tools only. The wallet never fetches it: it draws the bundled registry/tokens/logos/<address>.png.",
+          "type": "string",
+          "format": "uri"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 10, "pattern": "^[\\w]+$" }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chain", "kind"],
+          "properties": {
+            "chain": {
+              "description": "CAIP-2 network id.",
+              "type": "string",
+              "enum": ["lez:testnet", "lez:local"]
+            },
+            "kind": { "type": "string", "enum": ["fungible", "collection"] },
+            "metadataId": {
+              "description": "The definition's TokenMetadata account, when it has one.",
+              "$ref": "#/definitions/Base58Id"
+            },
+            "website": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "description": { "type": "string", "maxLength": 200 }
+          }
+        }
+      }
+    }
+  }
+}
