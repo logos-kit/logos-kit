@@ -881,7 +881,13 @@ fn print_preview(cli: &Cli, p: &wallet_engine::tokens::TokenPreview) {
                 .unwrap_or_else(|| "unknown".into()),
             p.info.decimals_source
         );
-        println!("  yours     {}", p.your_balance);
+        println!(
+            "  yours     {}",
+            match p.info.decimals {
+                Some(d) => wallet_engine::tokens::format_units(p.your_balance, d),
+                None => p.your_balance.to_string(),
+            }
+        );
         if let Some(m) = &p.metadata {
             println!(
                 "  metadata  {} {} (creators: {})",

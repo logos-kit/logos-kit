@@ -445,7 +445,9 @@ impl Session {
             .iter()
             .filter(|h| h.definition == definition)
             .fold(0u128, |a, h| a.saturating_add(h.amount));
-        let imitates = match crate::trust::spam(&chain, &name) {
+        let listed_in = crate::trust::find(&chain, &definition).map(|_| crate::trust::list_label());
+        // A listed token looks like itself.
+        let imitates = match crate::trust::spam(&chain, &name).filter(|_| listed_in.is_none()) {
             Some(crate::trust::SpamReason::Lookalike { of }) => Some(Imitated {
                 definition: crate::trust::listed(&chain)
                     .into_iter()
@@ -455,7 +457,6 @@ impl Session {
             }),
             _ => None,
         };
-        let listed_in = crate::trust::find(&chain, &definition).map(|_| crate::trust::list_label());
         Ok(Ok(TokenPreview {
             already_added: matches!(
                 info.tier,
