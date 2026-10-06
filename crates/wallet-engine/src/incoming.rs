@@ -1,43 +1,43 @@
-//! Payments into this wallet's public accounts, found by reading blocks.
+//! Payments into this wallet's public accounts and their token accounts,
+//! found by reading blocks (`chain-index`).
 //!
-//! LEZ has no "transactions for this account" call on the sequencer (the
-//! testnet runs no indexer), so the wallet reads the blocks itself: after
-//! each sync it fetches the blocks since the last one it read and decodes
-//! every transaction with the same decoders the approval sheet uses. A
-//! public transaction counts when one of our accounts gains value and none
-//! of ours pays (a send between two of our own accounts is already in the
+//! After each sync the wallet reads the blocks since its saved position and
+//! decodes every transaction with the same decoders the approval sheet uses.
+//! A public transaction counts when value lands in one of our accounts, or in
+//! the associated token account (ATA) of one of our accounts for any token,
+//! and none of ours pays (a send between our own accounts is already in the
 //! activity as a send). A private transaction counts when its public effects
-//! credit one of our accounts (a deshield from someone else's private
-//! account; the sender stays hidden).
-//!
-//! Stage T moves this scan into `crates/chain-index` and adds token
-//! accounts (ATAs) and tokens nobody told the wallet about.
+//! credit one of those (a deshield from someone else's private account; the
+//! sender stays hidden). Every token that lands this way is also reported, so
+//! the wallet knows about tokens nobody told it about.
 
 use std::collections::HashSet;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
+use chain_index::{Cursor, Scanner, Step, block_time_ms};
 use common::transaction::LeeTransaction;
 use lee::AccountId;
-use sequencer_service_rpc::{RpcClient as _, SequencerClient};
+use sequencer_service_rpc::SequencerClient;
 use serde::{Deserialize, Serialize};
 
 use crate::decode::{self, Asset, Decoders, PublicEffect};
 
-/// Blocks per `getBlockRange` call.
-const CHUNK: u64 = 100;
 /// Blocks read per sync, so a long gap is caught up over a few syncs instead
 /// of holding one sync for minutes.
 pub const STEP: u64 = 1_000;
 
-/// One payment into one of our accounts.
+/// One payment into one of our accounts (or its token account).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Incoming {
     pub block: u64,
     pub timestamp_ms: u64,
     pub tx_hash: String,
-    /// Our account that received it.
+    /// Our account that received it (the owner, for a token account).
     pub account: String,
+    /// Where it landed when that isn't `account` itself (its ATA).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holder: Option<String>,
     /// The paying account; `None` when it came out of a private account.
     pub from: Option<String>,
     /// `None` = LGO; otherwise the token definition.
@@ -45,85 +45,103 @@ pub struct Incoming {
     pub amount: String,
 }
 
-/// Read blocks `from..=to` and return the payments into `mine`.
+/// Read up to [`STEP`] blocks after `cursor` and return the payments into
+/// `mine`, the new cursor and what the scanner did.
 pub async fn scan(
     client: &SequencerClient,
-    from: u64,
-    to: u64,
+    cursor: &Cursor,
     mine: &HashSet<AccountId>,
     decoders: &Decoders,
-) -> Result<Vec<Incoming>> {
+) -> Result<(Vec<Incoming>, Cursor, Step)> {
     let mut out = Vec::new();
-    let mut start = from.max(1);
-    while start <= to {
-        let end = (start + CHUNK - 1).min(to);
-        let blocks = client
-            .get_block_range(start, end)
-            .await
-            .with_context(|| format!("blocks {start}..={end}"))?;
-        for block in blocks {
+    let (next, step) = Scanner::new(client)
+        .advance(cursor, STEP, |block| {
             let id = block.header.block_id;
-            // Block times are milliseconds; accept seconds too.
-            let ts = block.header.timestamp;
-            let timestamp_ms = if ts < 100_000_000_000 { ts * 1000 } else { ts };
+            let timestamp_ms = block_time_ms(block);
             for tx in &block.body.transactions {
                 let tx_hash = tx.hash().to_string();
-                for (account, from, asset, amount) in credits(tx, mine, decoders) {
+                for c in credits(tx, mine, decoders) {
                     out.push(Incoming {
                         block: id,
                         timestamp_ms,
                         tx_hash: tx_hash.clone(),
-                        account,
-                        from,
-                        token: match asset {
+                        account: c.owner.to_string(),
+                        holder: (c.holder != c.owner).then(|| c.holder.to_string()),
+                        from: c.from,
+                        token: match c.asset {
                             Asset::Native => None,
                             Asset::Token { definition, .. } => Some(definition),
                         },
-                        amount: amount.to_string(),
+                        amount: c.amount.to_string(),
                     });
                 }
             }
-        }
-        start = end + 1;
-    }
-    Ok(out)
+        })
+        .await?;
+    Ok((out, next, step))
 }
 
-type Credit = (String, Option<String>, Asset, u128);
+struct Credit {
+    owner: AccountId,
+    holder: AccountId,
+    from: Option<String>,
+    asset: Asset,
+    amount: u128,
+}
+
+/// Which of our accounts `account` is: one of them, or the ATA of one of
+/// them for `asset`'s token.
+fn owner_of(account: &str, asset: &Asset, mine: &HashSet<AccountId>) -> Option<(AccountId, AccountId)> {
+    let id = decode::account_id(account).ok()?;
+    if mine.contains(&id) {
+        return Some((id, id));
+    }
+    let Asset::Token { definition, .. } = asset else {
+        return None;
+    };
+    let def = decode::account_id(definition).ok()?;
+    mine.iter()
+        .find(|own| crate::tokens::ata_of(**own, def) == id)
+        .map(|own| (*own, id))
+}
 
 fn credits(tx: &LeeTransaction, mine: &HashSet<AccountId>, decoders: &Decoders) -> Vec<Credit> {
-    let ours = |s: &str| {
-        decode::account_id(s)
-            .map(|id| mine.contains(&id))
-            .unwrap_or(false)
+    let signed_by_us = |keys: &[(lee::Signature, lee::PublicKey)]| {
+        keys.iter().any(|(_, pk)| mine.contains(&AccountId::from(pk)))
     };
     match tx {
         LeeTransaction::Public(t) => {
+            // Signed by one of ours: it's our own send.
+            if signed_by_us(t.witness_set().signatures_and_public_keys()) {
+                return Vec::new();
+            }
             let summary = decode::public(t.message(), decoders);
-            // Signed or paid by one of ours: it's our own send.
-            let signed_by_us = t
-                .witness_set()
-                .signatures_and_public_keys()
+            if summary
+                .outflows
                 .iter()
-                .any(|(_, pk)| mine.contains(&AccountId::from(pk)));
-            if signed_by_us || summary.outflows.iter().any(|f| ours(&f.account)) {
+                .any(|f| owner_of(&f.account, &f.asset, mine).is_some())
+            {
                 return Vec::new();
             }
             let payer = summary.outflows.first().map(|f| f.account.clone());
             summary
                 .inflows
                 .into_iter()
-                .filter(|f| ours(&f.account) && f.amount > 0)
-                .map(|f| (f.account, payer.clone(), f.asset, f.amount))
+                .filter(|f| f.amount > 0)
+                .filter_map(|f| {
+                    let (owner, holder) = owner_of(&f.account, &f.asset, mine)?;
+                    Some(Credit {
+                        owner,
+                        holder,
+                        from: payer.clone(),
+                        asset: f.asset,
+                        amount: f.amount,
+                    })
+                })
                 .collect()
         }
         LeeTransaction::PrivacyPreserving(t) => {
-            let signed_by_us = t
-                .witness_set()
-                .signatures_and_public_keys()
-                .iter()
-                .any(|(_, pk)| mine.contains(&AccountId::from(pk)));
-            if signed_by_us {
+            if signed_by_us(t.witness_set().signatures_and_public_keys()) {
                 return Vec::new();
             }
             decode::private_effects(t.message())
@@ -133,7 +151,16 @@ fn credits(tx: &LeeTransaction, mine: &HashSet<AccountId>, decoders: &Decoders) 
                         account,
                         asset,
                         amount,
-                    } if amount > 0 && ours(&account) => Some((account, None, asset, amount)),
+                    } if amount > 0 => {
+                        let (owner, holder) = owner_of(&account, &asset, mine)?;
+                        Some(Credit {
+                            owner,
+                            holder,
+                            from: None,
+                            asset,
+                            amount,
+                        })
+                    }
                     _ => None,
                 })
                 .collect()

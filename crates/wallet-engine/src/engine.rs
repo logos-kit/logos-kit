@@ -263,8 +263,13 @@ struct State {
     cooldown: HashMap<String, Instant>,
     /// A status changed since the history was last written.
     history_dirty: bool,
-    /// Blocks `1..=scanned` have been read for incoming payments (0: never).
-    scanned: u64,
+    /// How far the incoming scan has read (block 0: never).
+    cursor: chain_index::Cursor,
+    /// Tokens that landed in our accounts or their token accounts, by
+    /// definition (what the token list calls "Unknown" until added).
+    seen_tokens: std::collections::BTreeMap<String, SeenToken>,
+    /// Blocks the scan has yet to read after its last step.
+    scan_behind: u64,
     /// The current session's chain and zone (set when its history loads).
     chain: Option<String>,
     zone_id: String,
@@ -272,6 +277,21 @@ struct State {
     history_unreadable: bool,
     /// Transactions the faucet made for us, so the incoming scan labels them.
     faucet_hashes: std::collections::HashSet<String>,
+}
+
+/// A token found in one of our accounts by the incoming scan.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeenToken {
+    pub first_block: u64,
+    /// Our account it arrived for.
+    pub account: String,
+    /// Its token account (ATA), when it landed there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holder: Option<String>,
+    /// Who sent it first (`None`: from a private account).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 /// A transaction hash compared across sources (drip answer, block).
@@ -304,7 +324,11 @@ impl State {
     /// The history record for `chain`: the scan position and the finished
     /// statuses, newest first.
     fn history(&self, zone: &str) -> serde_json::Value {
-        serde_json::json!({ "scanned": self.scanned, "items": self.history_items(zone) })
+        serde_json::json!({
+            "cursor": self.cursor,
+            "tokens": self.seen_tokens,
+            "items": self.history_items(zone),
+        })
     }
 
     fn history_items(&self, zone: &str) -> Vec<serde_json::Value> {
@@ -347,10 +371,21 @@ impl State {
             self.history_unreadable = true;
             serde_json::Value::Null
         };
-        self.scanned = record
-            .get("scanned")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0);
+        self.cursor = record
+            .get("cursor")
+            .and_then(|c| serde_json::from_value(c.clone()).ok())
+            // Records from before chain-index kept only the block number.
+            .or_else(|| {
+                record
+                    .get("scanned")
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|b| chain_index::Cursor::at(b, None))
+            })
+            .unwrap_or_default();
+        self.seen_tokens = record
+            .get("tokens")
+            .and_then(|t| serde_json::from_value(t.clone()).ok())
+            .unwrap_or_default();
         let items = record
             .get("items")
             .and_then(serde_json::Value::as_array)
@@ -575,41 +610,62 @@ impl Engine {
                 self.state().epoch,
             )
         };
-        let tip = {
-            use sequencer_service_rpc::RpcClient as _;
-            client.get_last_block_id().await?
-        };
-        let from = {
+        let cursor = {
             let mut state = self.state();
             if state.epoch != epoch {
                 return Ok(0);
             }
-            if state.scanned > tip {
-                // The chain was reset under us.
-                state.scanned = 0;
-            }
-            if state.scanned == 0 && !from_genesis {
-                state.scanned = tip;
+            if state.cursor.block == 0 && !from_genesis {
+                // A new wallet: nothing before today's tip is ours.
+                use sequencer_service_rpc::RpcClient as _;
+                drop(state);
+                let tip = client.get_last_block_id().await?;
+                let mut state = self.state();
+                if state.epoch != epoch {
+                    return Ok(0);
+                }
+                state.cursor = chain_index::Cursor::at(tip, None);
                 state.history_dirty = true;
                 return Ok(0);
             }
-            state.scanned + 1
+            state.cursor.clone()
         };
-        if from > tip || mine.is_empty() {
+        if mine.is_empty() {
             return Ok(0);
         }
-        let to = tip.min(from + crate::incoming::STEP - 1);
-        let found = crate::incoming::scan(&client, from, to, &mine, &decoders).await?;
+        let (found, next, step) = crate::incoming::scan(&client, &cursor, &mine, &decoders).await?;
         let mut state = self.state();
-        if state.epoch != epoch {
+        if state.epoch != epoch || state.cursor != cursor {
             return Ok(0);
         }
+        if let chain_index::Step::Reset { tip } = step {
+            // A reset chain: what we read before is gone. A new wallet picks
+            // up at the tip; a restored one reads the new chain from block 1.
+            state.cursor = if from_genesis {
+                chain_index::Cursor::default()
+            } else {
+                chain_index::Cursor::at(tip, None)
+            };
+            state.history_dirty = true;
+            return Ok(0);
+        }
+        state.scan_behind = step.behind();
         let mut added = 0;
         for (i, inc) in found.into_iter().enumerate() {
-            // Already a row (one of ours, or found before).
-            let key = hash_key(&inc.tx_hash);
+            if let Some(def) = &inc.token {
+                state
+                    .seen_tokens
+                    .entry(def.clone())
+                    .or_insert_with(|| SeenToken {
+                        first_block: inc.block,
+                        account: inc.account.clone(),
+                        holder: inc.holder.clone(),
+                        from: inc.from.clone(),
+                    });
+            }
             // Our own send, or this payment found before (a transaction
             // paying two of our accounts makes two rows).
+            let key = hash_key(&inc.tx_hash);
             let known = state.statuses.values().any(|s| {
                 s.tx_hash.as_deref().map(hash_key).as_deref() == Some(key.as_str())
                     && (!s.incoming
@@ -642,9 +698,20 @@ impl Engine {
             state.insert_status(status);
             added += 1;
         }
-        state.scanned = to;
+        state.cursor = next;
         state.history_dirty = true;
         Ok(added)
+    }
+
+    /// Tokens that landed in this zone's accounts (or their token accounts)
+    /// since the wallet started reading, by definition.
+    pub fn seen_tokens(&self) -> std::collections::BTreeMap<String, SeenToken> {
+        self.state().seen_tokens.clone()
+    }
+
+    /// Blocks the incoming scan still has to read (0: caught up).
+    pub fn scan_behind(&self) -> u64 {
+        self.state().scan_behind
     }
 
     fn state(&self) -> std::sync::MutexGuard<'_, State> {

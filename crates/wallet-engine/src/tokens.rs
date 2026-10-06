@@ -93,8 +93,17 @@ impl Session {
     pub async fn holdings(&mut self) -> Result<Vec<Holding>> {
         self.connect().await?;
         let accounts = self.accounts()?;
-        let tracked: Vec<AccountId> = self
-            .tracked_tokens()
+        // Tokens to look for in each account's token account (ATA): the
+        // ones the user added and the ones the chain scan saw arrive.
+        let mut wanted: Vec<String> = self.tracked_tokens();
+        if let Ok(record) = self.load_history()
+            && let Some(seen) = record.get("tokens").and_then(serde_json::Value::as_object)
+        {
+            wanted.extend(seen.keys().cloned());
+        }
+        wanted.sort();
+        wanted.dedup();
+        let tracked: Vec<AccountId> = wanted
             .iter()
             .filter_map(|t| decode::account_id(t).ok())
             .collect();

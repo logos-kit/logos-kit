@@ -1,0 +1,15 @@
+{
+  "$schema": "../schema/tokenlist.schema.json",
+  "name": "Logos Kit",
+  "timestamp": "2026-10-06T00:00:00Z",
+  "version": { "major": 0, "minor": 1, "patch": 0 },
+  "keywords": ["logos kit", "lez", "testnet"],
+  "tags": {
+    "sample": {
+      "name": "Sample",
+      "description": "Sent with test LGO so new users see a token arrive."
+    },
+    "pass": { "name": "Logos Kit Pass", "description": "The free Logos Kit membership NFT." }
+  },
+  "tokens": []
+}
