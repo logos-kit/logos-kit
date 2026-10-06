@@ -31,57 +31,61 @@ ColumnLayout {
     spacing: 12
 
     // 1. What leaves, and where it goes.
+    // Flat, Fuse-style (Refero: Fuse swap confirm): icon, a quiet label, the
+    // figure large with its unit quieter; a hairline closes the block.
     Rectangle {
         visible: !!tx.outflow
         Layout.fillWidth: true
-        implicitHeight: top.implicitHeight + 32
-        radius: Theme.rCard
-        color: Theme.surface2
+        implicitHeight: top.implicitHeight + 18
+        color: "transparent"
+        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.line }
         ColumnLayout {
             id: top
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-            anchors.margins: 16
-            spacing: 14
+            spacing: 16
             RowLayout {
-                spacing: 12
-                TokenIcon { definition: tx.outflow ? (tx.outflow.definition || "") : ""; size: 42; isPrivate: tx.isPrivate }
+                spacing: 14
+                TokenIcon { definition: tx.outflow ? (tx.outflow.definition || "") : ""; size: 48; isPrivate: tx.isPrivate }
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
-                    Txt { text: "You send"; tone: "text2"; font.pixelSize: 12 }
+                    Txt { text: "You send"; tone: "text3"; font.pixelSize: 13 }
                     RowLayout {
                         spacing: 6
                         Txt {
                             text: tx.outFigure
-                            num: true; font.pixelSize: 26; font.weight: Font.Bold
+                            num: true; font.pixelSize: 30; font.weight: Font.Bold
                             Accessible.name: tx.outflow ? tx.outFigure + " " + tx.outflow.symbol : ""
                         }
-                        Txt { text: tx.outflow ? tx.outflow.symbol : ""; tone: "text2"; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
+                        Txt { text: tx.outflow ? tx.outflow.symbol : ""; tone: "text3"; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
                     }
                 }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line; visible: !!tx.to }
+            // To (Family confirm): the name large, the FULL destination under
+            // it, wrapped, never shortened.
             ColumnLayout {
                 visible: !!tx.to
                 Layout.fillWidth: true
-                spacing: 6
+                Layout.bottomMargin: 2
+                spacing: 4
                 RowLayout {
                     spacing: 8
-                    Txt { text: "To"; tone: "text2"; font.pixelSize: 12 }
+                    Txt { text: "To"; tone: "text3"; font.pixelSize: 13 }
+                    Txt { visible: !!(tx.to && tx.to.name); text: tx.to ? (tx.to.name || "") : ""; font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true }
                     Badge {
                         visible: !!tx.to
-                        text: tx.to && tx.to.kind === "private" ? "Private account" : tx.to && tx.to.kind === "program" ? "Program" : "Public account"
+                        text: tx.to && tx.to.kind === "private" ? "Private" : tx.to && tx.to.kind === "program" ? "Program" : "Public"
                         tone: tx.to && tx.to.kind === "private" ? "private" : "neutral"
                         dot: false
                     }
-                    Txt { visible: !!(tx.to && tx.to.name); text: tx.to ? (tx.to.name || "") : ""; font.pixelSize: 13; font.weight: Font.DemiBold }
                 }
-                // The FULL destination, wrapped, never shortened.
                 Txt {
                     Layout.fillWidth: true
                     text: tx.to ? tx.to.address : ""
                     mono: true
-                    font.pixelSize: 13
+                    tone: "text2"
+                    font.pixelSize: 12
                     wrapMode: Text.WrapAnywhere
                     elide: Text.ElideNone
                 }
@@ -94,7 +98,7 @@ ColumnLayout {
         visible: tx.effects.length > 0 || tx.authority.length > 0
         Layout.fillWidth: true
         spacing: 6
-        Txt { text: "What this does"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
+        Txt { text: "What else it does"; tone: "text3"; font.pixelSize: 13 }
         Repeater {
             model: tx.authority
             Notice { text: modelData; tone: "warn"; icon: "key" }
@@ -116,7 +120,7 @@ ColumnLayout {
         spacing: 0
         InfoRow {
             visible: !!tx.fee
-            label: "Network fee (max)"
+            label: "Network fee"
             value: tx.fee ? "≤ " + Units.lgoLabel(tx.fee.cap) + (tx.fee.payer ? " · paid by " + tx.fee.payer : "") : ""
         }
         Item {
@@ -129,15 +133,19 @@ ColumnLayout {
                 anchors.left: parent.left; anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
-                Txt { text: "Program"; tone: "text2"; font.pixelSize: 13 }
+                Txt { text: "Program"; tone: "text2"; font.pixelSize: 14 }
                 Item { Layout.fillWidth: true }
-                Txt { text: tx.program ? tx.program.name : ""; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Txt { text: tx.program ? tx.program.name : ""; font.pixelSize: 14; font.weight: Font.Medium; elide: Text.ElideMiddle; Layout.maximumWidth: 150 }
                 Badge {
-                    text: !tx.program ? "" : tx.program.status === "verified" ? "Verified source" : tx.program.status === "claimed" ? "Source claimed" : "Unverified"
-                    tone: !tx.program ? "neutral" : tx.program.status === "verified" ? "ok" : tx.program.status === "claimed" ? "warn" : "danger"
+                    text: !tx.program ? "" : tx.program.status === "builtin" ? "Built into LEZ"
+                        : tx.program.status === "verified" ? "Verified source"
+                        : tx.program.status === "claimed" ? "Source claimed"
+                        : tx.program.status === "mismatch" ? "Source mismatch" : "Unverified"
+                    tone: !tx.program ? "neutral" : (tx.program.status === "verified" || tx.program.status === "builtin") ? "ok" : tx.program.status === "claimed" ? "warn" : "danger"
                     dot: false
                 }
                 Badge {
+                    visible: !!tx.program && tx.program.status !== "builtin"
                     text: tx.program && tx.program.immutable ? "Immutable" : "Upgradeable"
                     tone: tx.program && tx.program.immutable ? "neutral" : "warn"
                     dot: false

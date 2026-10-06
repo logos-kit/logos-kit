@@ -52,3 +52,4 @@ TxSummary 1.0 TxSummary.qml
 AccountCard 1.0 AccountCard.qml
 Permissions 1.0 Permissions.qml
 CheckRow 1.0 CheckRow.qml
+SectionTitle 1.0 SectionTitle.qml

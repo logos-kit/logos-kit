@@ -3,8 +3,9 @@ import "../LogosKitUi"
 import QtQuick.Layouts
 import "Fmt.js" as Fmt
 
-// Receive (ux-spec §4): public address, or a private receive code with its
-// fingerprint. Both as a QR code drawn with Rectangles.
+// Receive (ux-spec §4) after Family's receive screen (Refero flow 2673): the
+// account name and short address with copy, a large QR, one quiet note, one
+// pill. Public address, or a private receive code with its fingerprint.
 ColumnLayout {
     id: rv
     property var store
@@ -29,42 +30,47 @@ ColumnLayout {
     onAcctChanged: if (visible) load()
     onVisibleChanged: if (visible) load()
 
-    Txt { text: rv.priv ? "Receive privately" : "Receive"; font.pixelSize: 20; font.weight: Font.DemiBold }
-    Txt {
-        Layout.fillWidth: true
-        wrapMode: Text.Wrap
-        tone: "text2"; font.pixelSize: 13
-        text: rv.priv ? "Senders need this code to pay you privately. It doesn't reveal your balance."
-                      : "Anyone can send to this address. Payments to it are visible on-chain."
+    Txt { text: rv.priv ? "Receive privately" : "Receive"; font.pixelSize: 24; font.weight: Font.Bold }
+
+    // Who you are paying: name, then the short address (copy).
+    ColumnLayout {
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: 8
+        spacing: 2
+        Txt { Layout.alignment: Qt.AlignHCenter; text: rv.acct ? Fmt.accountName(rv.acct) : ""; font.pixelSize: 20; font.weight: Font.Bold }
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 4
+            Txt { text: rv.payload !== "" ? Fmt.short(rv.payload) : ""; mono: true; tone: "text2"; font.pixelSize: 14 }
+            IconButton { objectName: "copyReceive"; glyph: "copy"; size: 30; color: Theme.text2; label: "Copy"; onClicked: rv.store.copy(rv.payload) }
+        }
     }
     Item {
         Layout.alignment: Qt.AlignHCenter
-        implicitWidth: 240; implicitHeight: 240
-        QrCard { anchors.centerIn: parent; visible: rv.payload !== ""; text: rv.payload; low: rv.priv; size: 240 }
-        Skeleton { anchors.fill: parent; radius: 24; visible: rv.payload === "" && rv.problem === "" }
+        Layout.topMargin: 4
+        implicitWidth: 280; implicitHeight: 280
+        Rectangle { anchors.fill: parent; radius: 32; color: "#ffffff"; visible: rv.payload !== "" }
+        QrCard { anchors.centerIn: parent; visible: rv.payload !== ""; text: rv.payload; low: rv.priv; size: 264 }
+        Skeleton { anchors.fill: parent; radius: 32; visible: rv.payload === "" && rv.problem === "" }
     }
     RowLayout {
         visible: rv.priv && !!rv.info
         Layout.alignment: Qt.AlignHCenter
         spacing: 6
-        Glyph { name: "shield"; color: Theme.privText; implicitWidth: 14; implicitHeight: 14 }
-        Txt { objectName: "fingerprint"; text: rv.info && rv.info.fingerprint ? "Code ends " + rv.info.fingerprint : ""; tone: "priv"; font.weight: Font.DemiBold }
+        Glyph { name: "lock"; color: Theme.text2; implicitWidth: 14; implicitHeight: 14 }
+        Txt { objectName: "fingerprint"; text: rv.info && rv.info.fingerprint ? "Code ends " + rv.info.fingerprint : ""; tone: "text2"; font.weight: Font.DemiBold }
     }
-    Rectangle {
-        visible: rv.payload !== ""
+    Txt {
         Layout.fillWidth: true
-        implicitHeight: 48
-        radius: Theme.rRow
-        color: Theme.surface2
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 6
-            Identicon { visible: !rv.priv; seed: rv.payload; size: 24 }
-            Txt { Layout.fillWidth: true; text: rv.payload; mono: true; font.pixelSize: 12; tone: "text2"; elide: Text.ElideMiddle }
-            IconButton { objectName: "copyReceive"; glyph: "copy"; label: "Copy"; onClicked: rv.store.copy(rv.payload) }
-        }
+        Layout.leftMargin: 16
+        Layout.rightMargin: 16
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        tone: "text3"; font.pixelSize: 13
+        text: rv.priv ? "Senders need this code to pay you privately. It doesn't reveal your balance."
+                      : "Anyone can send LGO and LEZ tokens to this address. Payments to it are public."
     }
-    Btn { visible: rv.payload !== ""; Layout.fillWidth: true; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
+    Btn { visible: rv.payload !== ""; Layout.fillWidth: true; Layout.topMargin: 6; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
     ErrorCard { visible: rv.problem !== ""; title: "Couldn't load your receive details"; body: rv.problem; onRetry: rv.load() }
 }

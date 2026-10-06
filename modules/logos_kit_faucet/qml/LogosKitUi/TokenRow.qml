@@ -25,7 +25,7 @@ Item {
     Keys.onSpacePressed: if (!tr.loading) tr.clicked()
 
     Layout.fillWidth: true
-    implicitHeight: 64
+    implicitHeight: 68
 
     Rectangle {
         anchors.fill: parent
@@ -40,16 +40,16 @@ Item {
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         spacing: 12
-        TokenIcon { definition: tr.definition; source: tr.iconSource; size: 40; isPrivate: tr.isPrivate }
+        TokenIcon { definition: tr.definition; source: tr.iconSource; size: 44; isPrivate: tr.isPrivate }
         ColumnLayout {
             spacing: 2
             Layout.fillWidth: true
-            Txt { text: tr.name; font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            Txt { text: tr.name; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.fillWidth: true }
             Txt { text: tr.sub !== "" ? tr.sub : tr.symbol; tone: tr.isPrivate ? "priv" : "text2"; font.pixelSize: 12; Layout.fillWidth: true }
         }
         ColumnLayout {
             spacing: 2
-            Txt { Layout.alignment: Qt.AlignRight; text: tr.amount; num: true; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Txt { Layout.alignment: Qt.AlignRight; text: tr.amount; num: true; font.pixelSize: 16; font.weight: Font.DemiBold }
             Txt { Layout.alignment: Qt.AlignRight; visible: tr.amountSub !== ""; text: tr.amountSub; num: true; tone: "text2"; font.pixelSize: 12 }
         }
         Glyph { visible: tr.chevron; name: "chevronRight"; color: Theme.text3; width: 16; height: 16 }

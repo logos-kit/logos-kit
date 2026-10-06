@@ -40,7 +40,7 @@ Item {
         x: ti.size - width * 0.8; y: ti.size - width * 0.8
         color: Theme.priv
         border.width: 2
-        border.color: Theme.surface
-        Glyph { anchors.centerIn: parent; name: "lock"; color: "#ffffff"; width: parent.width * 0.56; height: width; stroke: 2.6 }
+        border.color: Theme.bg
+        Glyph { anchors.centerIn: parent; name: "lock"; color: Theme.privOn; width: parent.width * 0.56; height: width; stroke: 2.6 }
     }
 }

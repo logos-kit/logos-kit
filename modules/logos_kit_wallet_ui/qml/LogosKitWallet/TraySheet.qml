@@ -61,7 +61,7 @@ Item {
         height: Math.min(wanted, sheet.height - 20)
         y: sheet.open ? sheet.height - height - 10 : sheet.height + 20
         radius: Theme.rSheet
-        color: Theme.surface
+        color: Theme.sheet
         border.width: Theme.dark ? 1 : 0
         border.color: Theme.line
         clip: true

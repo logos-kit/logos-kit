@@ -25,21 +25,32 @@ ColumnLayout {
     signal hideToggled(bool hidden)
     spacing: 8
 
+    // The figure, Fuse-style (Refero: Fuse wallet home): the whole part in
+    // ink, the decimals and the unit quieter, so "20.25 LGO" reads as 20.
+    readonly property string full: Units.token(bc.value, bc.decimals)
+    readonly property int dot: full.indexOf(".")
+    readonly property string whole: dot < 0 ? full : full.substring(0, dot)
+    readonly property string frac: dot < 0 ? "" : full.substring(dot)
+    // As large as Fuse's figure, shrinking so long amounts (9 decimals) fit.
+    readonly property int chars: full.length + bc.symbol.length + 2
+    readonly property int figure: Math.max(30, Math.min(bc.width < 380 ? 48 : 64, Math.floor(bc.width / (chars * 0.6))))
+
     RowLayout {
         spacing: 6
-        Txt { text: bc.label; tone: "text2"; font.pixelSize: 13 }
-        IconButton { glyph: "eye"; size: 26; color: Theme.text3; onClicked: { bc.hidden = !bc.hidden; bc.hideToggled(bc.hidden) } }
+        Txt { text: bc.label; tone: "text2"; font.pixelSize: 14; font.weight: Font.Medium }
+        IconButton { glyph: bc.hidden ? "eyeOff" : "eye"; size: 28; color: Theme.text3; label: bc.hidden ? "Show balance" : "Hide balance"; onClicked: { bc.hidden = !bc.hidden; bc.hideToggled(bc.hidden) } }
     }
     Item {
         Layout.fillWidth: true
-        implicitHeight: 52
-        Skeleton { visible: bc.loading; width: 200; height: 40; radius: 12; anchors.verticalCenter: parent.verticalCenter }
+        implicitHeight: bc.figure + 8
+        Skeleton { visible: bc.loading; width: 220; height: bc.figure - 8; radius: 14; anchors.verticalCenter: parent.verticalCenter }
         RowLayout {
             visible: !bc.loading
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 10
-            NumberTicker { objectName: bc.tickerName; value: Units.token(bc.value, bc.decimals); masked: bc.hidden; pixelSize: bc.width < 380 ? 36 : 44; weight: Font.Bold }
-            Txt { text: bc.symbol; tone: "text2"; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline }
+            spacing: 0
+            NumberTicker { objectName: bc.tickerName; value: bc.whole; masked: bc.hidden; pixelSize: bc.figure; weight: Font.Bold }
+            Txt { visible: !bc.hidden && bc.frac !== ""; text: bc.frac; tone: "text3"; num: true; font.pixelSize: bc.figure; font.weight: Font.Bold; Layout.alignment: Qt.AlignBaseline }
+            Txt { text: " " + bc.symbol; tone: "text3"; font.pixelSize: Math.round(bc.figure * 0.42); font.weight: Font.DemiBold; Layout.alignment: Qt.AlignBaseline; Layout.leftMargin: 6 }
         }
     }
     Txt {
@@ -57,26 +68,20 @@ ColumnLayout {
         Glyph { name: "lock"; color: Theme.privText; width: 13; height: 13 }
         Txt { text: bc.hidden ? "Private ••••" : bc.privateLine; tone: "priv"; num: true; font.pixelSize: 13 }
     }
+    // Private funds in three states, as one line (spendable · arriving · in a proof).
     RowLayout {
         visible: bc.privSpendable !== ""
-        Layout.topMargin: 4
-        spacing: 8
-        Repeater {
-            model: [["Private spendable", bc.privSpendable], ["Pending", bc.privPending], ["Locked in proofs", bc.privLocked]]
-            Rectangle {
-                implicitWidth: col.implicitWidth + 24
-                implicitHeight: col.implicitHeight + 16
-                radius: 14
-                color: index === 0 ? Theme.privSoft : Theme.surface2
-                ColumnLayout {
-                    id: col
-                    anchors.centerIn: parent
-                    spacing: 1
-                    Txt { text: modelData[0]; tone: index === 0 ? "priv" : "text2"; font.pixelSize: 11; font.weight: Font.DemiBold }
-                    Txt { text: bc.hidden ? "••••" : Units.token(modelData[1] || "0", bc.decimals); num: true; tone: index === 0 ? "priv" : "text"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                }
-            }
+        spacing: 6
+        Glyph { name: "lock"; color: Theme.text3; width: 13; height: 13 }
+        Txt {
+            num: true
+            tone: "text2"
+            font.pixelSize: 13
+            text: bc.hidden ? "Private · ••••"
+                : "Spendable " + Units.token(bc.privSpendable || "0", bc.decimals)
+                  + (bc.privPending !== "" && bc.privPending !== "0" ? " · arriving " + Units.token(bc.privPending, bc.decimals) : "")
+                  + (bc.privLocked !== "" && bc.privLocked !== "0" ? " · in a proof " + Units.token(bc.privLocked, bc.decimals) : "")
         }
     }
-    RowLayout { id: act; Layout.topMargin: 10; spacing: 12 }
+    RowLayout { id: act; Layout.fillWidth: true; Layout.topMargin: 14; spacing: 10 }
 }

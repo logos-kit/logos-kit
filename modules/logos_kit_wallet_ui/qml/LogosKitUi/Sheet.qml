@@ -50,7 +50,7 @@ Item {
             anchors.fill: parent
             anchors.bottomMargin: -Theme.rSheet     // square off the bottom edge
             radius: Theme.rSheet
-            color: Theme.surface
+            color: Theme.sheet
             border.width: Theme.dark ? 1 : 0
             border.color: Theme.line
             implicitHeight: col.implicitHeight + 18 + Theme.rSheet
