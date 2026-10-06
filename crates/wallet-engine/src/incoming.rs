@@ -91,7 +91,11 @@ struct Credit {
 
 /// Which of our accounts `account` is: one of them, or the ATA of one of
 /// them for `asset`'s token.
-fn owner_of(account: &str, asset: &Asset, mine: &HashSet<AccountId>) -> Option<(AccountId, AccountId)> {
+fn owner_of(
+    account: &str,
+    asset: &Asset,
+    mine: &HashSet<AccountId>,
+) -> Option<(AccountId, AccountId)> {
     let id = decode::account_id(account).ok()?;
     if mine.contains(&id) {
         return Some((id, id));
@@ -107,7 +111,8 @@ fn owner_of(account: &str, asset: &Asset, mine: &HashSet<AccountId>) -> Option<(
 
 fn credits(tx: &LeeTransaction, mine: &HashSet<AccountId>, decoders: &Decoders) -> Vec<Credit> {
     let signed_by_us = |keys: &[(lee::Signature, lee::PublicKey)]| {
-        keys.iter().any(|(_, pk)| mine.contains(&AccountId::from(pk)))
+        keys.iter()
+            .any(|(_, pk)| mine.contains(&AccountId::from(pk)))
     };
     match tx {
         LeeTransaction::Public(t) => {

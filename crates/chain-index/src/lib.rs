@@ -152,6 +152,14 @@ mod tests {
         assert_eq!(v, serde_json::json!({ "block": 42, "hash": "ab" }));
         let back: Cursor = serde_json::from_value(serde_json::json!({ "block": 7 })).unwrap();
         assert_eq!(back, Cursor::at(7, None));
-        assert_eq!(Step::Read { from: 1, to: 10, tip: 25 }.behind(), 15);
+        assert_eq!(
+            Step::Read {
+                from: 1,
+                to: 10,
+                tip: 25
+            }
+            .behind(),
+            15
+        );
     }
 }

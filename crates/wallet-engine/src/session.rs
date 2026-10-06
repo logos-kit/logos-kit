@@ -304,6 +304,14 @@ struct Meta {
     /// Programs the user named, every zone (approvals show the name).
     #[serde(default)]
     programs: Vec<crate::verify::UserProgram>,
+    /// zone id → token definitions the user hid / pinned.
+    #[serde(default)]
+    hidden_tokens: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pinned_tokens: BTreeMap<String, Vec<String>>,
+    /// zone id → definition → display decimals the user set.
+    #[serde(default)]
+    token_decimals: BTreeMap<String, BTreeMap<String, u8>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -586,6 +594,8 @@ pub struct Session {
     reveal: RevealThrottle,
     /// Secrets of a private tx sent from here, to record its note on inclusion.
     pub(crate) pending_note: Option<PendingNote>,
+    /// Token names read from definitions (they never change).
+    pub(crate) token_names: std::collections::HashMap<String, Option<String>>,
     // Declared last so it is released after everything above is flushed.
     _lock: SessionLock,
 }
@@ -769,6 +779,7 @@ impl Session {
             net: Net::Idle,
             reveal: RevealThrottle::default(),
             pending_note: None,
+            token_names: std::collections::HashMap::new(),
             _lock: lock,
         })
     }
@@ -1348,6 +1359,90 @@ impl Session {
         }
         let definition = definition.to_owned();
         self.update_meta(|meta| meta.tokens.entry(zone).or_default().push(definition))
+    }
+
+    /// Stop treating `definition` as added by the user (it falls back to
+    /// Unknown, or Verified if it's on the list).
+    pub fn untrack_token(&mut self, definition: &str) -> Result<()> {
+        let zone = self.zone().id.clone();
+        self.update_meta(|m| {
+            if let Some(list) = m.tokens.get_mut(&zone) {
+                list.retain(|t| t != definition);
+            }
+        })
+    }
+
+    /// Token definitions the user hid on this zone.
+    pub fn hidden_tokens(&self) -> Vec<String> {
+        self.meta
+            .hidden_tokens
+            .get(&self.zone().id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Token definitions the user pinned on this zone.
+    pub fn pinned_tokens(&self) -> Vec<String> {
+        self.meta
+            .pinned_tokens
+            .get(&self.zone().id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Hide (or show again) a token on this zone. Hiding never deletes
+    /// anything; showing never makes a token trusted.
+    pub fn set_token_hidden(&mut self, definition: &str, hidden: bool) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let list = m.hidden_tokens.entry(zone).or_default();
+            list.retain(|t| *t != definition);
+            if hidden {
+                list.push(definition);
+            }
+        })
+    }
+
+    pub fn set_token_pinned(&mut self, definition: &str, pinned: bool) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let list = m.pinned_tokens.entry(zone).or_default();
+            list.retain(|t| *t != definition);
+            if pinned {
+                list.push(definition);
+            }
+        })
+    }
+
+    /// Display decimals the user set for a token (LEZ stores none).
+    pub fn token_decimals(&self, definition: &str) -> Option<u8> {
+        self.meta
+            .token_decimals
+            .get(&self.zone().id)
+            .and_then(|m| m.get(definition))
+            .copied()
+    }
+
+    pub fn set_token_decimals(&mut self, definition: &str, decimals: Option<u8>) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        ensure!(decimals.is_none_or(|d| d <= 36), "decimals are 0–36");
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let map = m.token_decimals.entry(zone).or_default();
+            match decimals {
+                Some(d) => {
+                    map.insert(definition, d);
+                }
+                None => {
+                    map.remove(&definition);
+                }
+            }
+        })
     }
 
     /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be

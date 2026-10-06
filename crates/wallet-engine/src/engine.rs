@@ -611,7 +611,7 @@ impl Engine {
             )
         };
         let cursor = {
-            let mut state = self.state();
+            let state = self.state();
             if state.epoch != epoch {
                 return Ok(0);
             }

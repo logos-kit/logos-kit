@@ -20,6 +20,7 @@ pub mod service;
 pub mod session;
 pub mod testimonial;
 pub mod tokens;
+pub mod trust;
 pub mod tx;
 pub mod vault;
 pub mod verify;

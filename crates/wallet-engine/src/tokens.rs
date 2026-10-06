@@ -44,6 +44,74 @@ pub struct Holding {
     pub kind: &'static str,
     #[serde(with = "amount")]
     pub amount: u128,
+    /// How far to trust it, and how to show it.
+    #[serde(flatten)]
+    pub info: TokenInfo,
+}
+
+/// What the wallet knows about a token definition beyond its name.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenInfo {
+    pub tier: crate::trust::Tier,
+    /// Why it looks like spam ("Name contains a link").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spam_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// Display decimals; `None`: unknown (amounts show as whole units).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decimals: Option<u8>,
+    /// Where `decimals` came from: "list", "you" or "unknown".
+    pub decimals_source: &'static str,
+    pub pinned: bool,
+}
+
+impl Session {
+    /// Tier, symbol, decimals and pin for `definition` named `name` here.
+    pub fn token_info(&self, definition: &str, name: Option<&str>) -> TokenInfo {
+        let chain = self.zone().chain.clone();
+        let hidden = self.hidden_tokens();
+        let added = self.tracked_tokens();
+        let (tier, reason) = crate::trust::tier(
+            &chain,
+            definition,
+            name,
+            &crate::trust::Choices {
+                hidden: &hidden,
+                added: &added,
+            },
+        );
+        let listed = crate::trust::find(&chain, definition);
+        let (decimals, decimals_source) = match (listed, self.token_decimals(definition)) {
+            (Some(l), _) => (Some(l.decimals), "list"),
+            (None, Some(d)) => (Some(d), "you"),
+            (None, None) => (None, "unknown"),
+        };
+        TokenInfo {
+            tier,
+            spam_reason: reason.map(|r| r.text()),
+            symbol: listed.map(|l| l.symbol.clone()),
+            decimals,
+            decimals_source,
+            pinned: self.pinned_tokens().iter().any(|p| p == definition),
+        }
+    }
+
+    /// A definition's name, read once per session (definitions can't change).
+    pub async fn cached_definition_name(&mut self, definition: AccountId) -> Option<String> {
+        let key = definition.to_string();
+        if let Some(n) = self.token_names.get(&key) {
+            return n.clone();
+        }
+        let core = self.core()?;
+        let name = definition_name(core, definition).await;
+        // A failed read isn't cached, so the next sync tries again.
+        if name.is_some() {
+            self.token_names.insert(key, name.clone());
+        }
+        name
+    }
 }
 
 const fn kind_name(k: TokenKind) -> &'static str {
@@ -135,19 +203,11 @@ impl Session {
                 }
             }
         }
-        let mut names: std::collections::HashMap<AccountId, Option<String>> =
-            std::collections::HashMap::new();
         let mut holdings = Vec::with_capacity(out.len());
         for (account, private, via, holder, h) in out {
             let def = h.definition_id();
-            let name = match names.get(&def) {
-                Some(n) => n.clone(),
-                None => {
-                    let n = definition_name(core, def).await;
-                    names.insert(def, n.clone());
-                    n
-                }
-            };
+            let name = self.cached_definition_name(def).await;
+            let info = self.token_info(&def.to_string(), name.as_deref());
             holdings.push(Holding {
                 account,
                 private,
@@ -157,6 +217,7 @@ impl Session {
                 name,
                 kind: kind_name(h.kind()),
                 amount: holding_amount(&h),
+                info,
             });
         }
         Ok(holdings)
