@@ -1,171 +1,171 @@
 [
   {
     "name": "token",
-    "imageId": "8718d36e40549067838e957eb9456f5ca2a8ae395756f53b451fefaa3a5af8b5",
+    "imageId": "912d412c6e82c5a5be4a6ad0749358dd85e269655940147f274d3c168c4a14ab",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "token.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "associated_token_account",
-    "imageId": "81f913424d13959f439241bdf2465f5d1c2c91641b51b4fab5054ce15a5ddf49",
+    "imageId": "2b1d5580b54895db2544574929a2eed36186060f296fb5bf1d11040ab1d27e13",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "associated_token_account.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "amm",
-    "imageId": "40ee1284db0ac5bc6dbfc1d48930d4e7ccfa0420dd0f1d0256475ae2804766b6",
+    "imageId": "243939f0a2e71037d6123f0eb163dd9c4e39bb8683638cd88f8ada3d2a219dbf",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "amm.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "clock",
-    "imageId": "5bbe5ee40dc94490268a7ed54aa20b7eef634ae204498b6097288a27d0edefdf",
+    "imageId": "468de8a65062a18a4c203c95d23a7846b860b73363741f3f5cdb62e14b4c4252",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "clock.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "fee",
-    "imageId": "2b1be474f8a38e8d17fedbd3b983a621eb1ff481d752b6fad953e3870e9732f9",
+    "imageId": "7d5af88ffb50931e9c2de041e7dd77429765461833c22c177a702d7aa122d22d",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "fee.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "bridge",
-    "imageId": "e79c033dbdc1f9a4b44d0f94cb08c7d2fefd396e65025c96bd31c79990bcd668",
+    "imageId": "717c1ff69f929a018d293fe9f884e8c1bf51508a3071bc2953935f607f774513",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "bridge.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "bridge_lock",
-    "imageId": "53873452d15ce00073a060c424dc295e493638067ab031cb07d1075dc6ed26f1",
+    "imageId": "fafa6adab1eb6357346461e45fe5efa6e1a4d4a251ecd83ef343271f553b92f8",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "bridge_lock.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "wrapped_token",
-    "imageId": "fb606c4375dca375ac2f1d31679face55cabec4b6266e91eead26c13b584f333",
+    "imageId": "155a228b0c393039079b572f562fa8a7a36374da1b49b96d94a5c178aff95a87",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "wrapped_token.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "sequencer_stake",
-    "imageId": "4e4a6434c189711fdc2670db337f10daf8aa74ec3e0aa8317e24674c6ff61f80",
+    "imageId": "6c89ee120e64d009ea7072f3cb1bf586d11e86e571ee1d089d2df5ce256742b8",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "sequencer_stake.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "cross_zone_outbox",
-    "imageId": "0658ff5e8e0066e5883627e7d29ac308e1909ae79e43ce497f94de10ccaeb2ad",
+    "imageId": "09f956c3493557213b1f32956c43d1ac97893fdc72a01487a1a1c177b005702b",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "cross_zone_outbox.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "cross_zone_inbox",
-    "imageId": "02b960bf06a4503b658f3a4ee9e498c6710cbbee810e935eccead1cddae3604e",
+    "imageId": "a2dba85f347d23a3e5b4539d6759458b40628c66b7908a9e4542dcf482f8d2c1",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "cross_zone_inbox.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "ping_sender",
-    "imageId": "8947383eb25d8f431a114864623e3d0cea56d757fad261e65ebc684884834d53",
+    "imageId": "6e756540e52d4b8adb54d24db6b2f0f5656499009a98e1b4b5e55e7184da51d0",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "ping_sender.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   },
   {
     "name": "ping_receiver",
-    "imageId": "9956be7d0f541db26627fa077e369f7a103cc0735d673fb25b698881894e5cea",
+    "imageId": "a81455e675dd9ee871e3c6d588e93980fb745978482a21a5eb05f62280817d72",
     "source": {
       "repo": "https://github.com/logos-blockchain/logos-execution-zone",
-      "commit": "f7fda38a4428b9989f1db1dbf5d2411484848fd4",
+      "commit": "db66590ab821a4e142c211017a3866d007f6fa77",
       "guestPath": "lez/programs",
       "bin": "ping_receiver.bin",
       "dockerTag": "r0.1.91.1",
       "features": "programs"
     },
-    "reproduced": "2026-09-26"
+    "reproduced": "2026-10-06"
   }
 ]
