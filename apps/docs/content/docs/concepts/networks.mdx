@@ -84,3 +84,9 @@ In the wallet: **Settings → Network**. From the CLI: `--zone lez-preview` or
 `--zone lez-local` (or `LOGOS_KIT_ZONE`); the default is `lez-testnet`. Apps
 built on the SDK follow the wallet's network (`lez_chainId`) and reset when it
 changes.
+
+The CLI also talks to a zone that isn't built in:
+`--zone <id> --sequencer <url>`. For `lez-local`, `e2e/standalone.sh` in a
+checkout of the repository builds a LEZ 0.3 sequencer from the pinned source
+and starts it on `http://127.0.0.1:3040` (standalone mode, dev proofs; it
+needs `r0vm` 3.0.5); `e2e/standalone.sh stop` stops it.

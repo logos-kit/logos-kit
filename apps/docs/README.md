@@ -1,45 +1,39 @@
-# fd
+# Logos Kit docs
 
-This is a Next.js application generated with
-[Create Fumadocs](https://github.com/fuma-nama/fumadocs).
+The source of [logos-kit-docs.vercel.app](https://logos-kit-docs.vercel.app):
+guides, concepts and the reference for the Logos Kit wallet and SDK. Built with
+[Next.js](https://nextjs.org) and [Fumadocs](https://fumadocs.dev).
 
-Run development server:
-
-```bash
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+```sh
+pnpm install                 # at the repository root
+cd apps/docs && pnpm dev     # http://localhost:3000
+pnpm build                   # builds the workspace packages, regenerates the reference, then next build
 ```
 
-Open http://localhost:3000 with your browser to see the result.
+The site imports `@logos-kit/client`, `@logos-kit/codec` and
+`@logos-kit/protocol` from the workspace, so `pnpm build` first builds them
+(`prebuild`).
 
-## Explore
+## Layout
 
-In the project, you can see:
+| Path | What |
+|---|---|
+| `content/docs/**/*.mdx` | The pages. `content/docs/meta.json` sets the sidebar order |
+| `content/docs/reference/methods.mdx` | Generated: run `pnpm gen` (also part of `pnpm build`). It is built from the protocol's schema and the wallet module's contract (`.lidl`); hand-written notes live in `scripts/method-notes.mjs` |
+| `app/(home)` | The landing page, including the live testnet block height |
+| `app/docs` | The docs layout and pages |
+| `app/llms.txt`, `app/llms-full.txt`, `app/llms.mdx` | Plain-text and Markdown versions of the docs |
+| `components/` | MDX components: `Shot` (screenshots), npm badges, landing sections |
+| `public/shots/` | Screenshots, made by `pnpm shots` from captures in `docs/reviews/**` (sizes in `lib/shots.json`) |
 
-- `lib/source.ts`: Code for content source adapter, [`loader()`](https://fumadocs.dev/docs/headless/source-api) provides the interface to access your content.
-- `lib/layout.shared.tsx`: Shared options for layouts, optional but preferred to keep.
+## Screenshots
 
-| Route                     | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| `app/(home)`              | The route group for your landing page and other pages. |
-| `app/docs`                | The documentation layout and pages.                    |
-| `app/api/search/route.ts` | The Route Handler for search.                          |
+`pnpm shots` reads `scripts/shots.config.mjs`, trims and scales each capture,
+writes WebP files to `public/shots/` and records their sizes. `pnpm shots
+'wallet-*'` limits it to matching names. Re-shoot captures with the wallet
+harness or the e2e scripts first; missing sources are reported, not fatal.
 
-### Fumadocs MDX
+## Deploy
 
-Collections are defined with the [Macro API](https://fumadocs.dev/docs/mdx/macro) in `lib/source.ts`.
-
-Read the [Introduction](https://fumadocs.dev/docs/mdx) for further details.
-
-## Learn More
-
-To learn more about Next.js and Fumadocs, take a look at the following
-resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js
-  features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [Fumadocs](https://fumadocs.dev) - learn about Fumadocs
+The site deploys to the Vercel project `logos-kit-docs`. Nothing is deployed
+without the maintainer's go-ahead ([`AGENTS.md`](../../AGENTS.md)).

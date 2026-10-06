@@ -2,7 +2,7 @@
 
 Builds the Logos Kit SDK for Basecamp QML apps into `sdk/qml/LogosKit/`:
 `logoskit.js` (one ES2016 `.pragma library`, no BigInt, about 28 KB),
-`Tokens.js` (Tray tokens) and the thin `LogosKit.qml` wrapper.
+`Tokens.js` (the Ledger design tokens from `@logos-kit/theme`) and the thin `LogosKit.qml` wrapper.
 
 - `pnpm build`: the pipeline in `build.mjs` (esbuild → Qt V4 babel fix → esbuild ES2016 IIFE).
 - `pnpm gate`: the **QML engine gate**. Builds `gate/suite.ts` the same way and runs it in
