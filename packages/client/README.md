@@ -13,15 +13,15 @@ npm install @logos-kit/client @logos-kit/codec
 import { createClient, http, nodeActions } from '@logos-kit/client'
 
 const node = createClient({
-  transport: http('https://lez.84.46.247.92.sslip.io', { retryCount: 2 }),
-  chain: 'lez:preview',
+  transport: http('https://testnet.lez.logos.co', { retryCount: 2 }),
+  chain: 'lez:testnet',
 }).extend(nodeActions)
 
 const height = await node.getBlockNumber()
 const fees = await node.getFeeState()
 ```
 
-The official LEZ sequencer sends no CORS headers, so from a browser only CORS-enabled endpoints work (the Logos Kit preview network is one). From Node there's no such limit.
+The official LEZ testnet sends no CORS headers, so this works from Node and other non-browser runtimes, not from a web page. In a web page, read through an endpoint that sends CORS headers, such as Logos Kit's relay for the testnet ([Networks](https://logos-kit-docs.vercel.app/docs/concepts/networks)).
 
 ## Ask the wallet (inside a Basecamp app)
 
@@ -31,13 +31,13 @@ import { nativeTransfer } from '@logos-kit/codec'
 
 const wallet = createClient({
   transport: basecampModule({ callModuleAsync: logos.callModuleAsync }),
-  chain: 'lez:preview',
+  chain: 'lez:testnet',
 }).extend(walletActions)
 
-const session = await wallet.connect({ chains: ['lez:preview'] })
+const session = await wallet.connect({ chains: ['lez:testnet'] })
 const from = session.accounts[0].address
 
-// Resolves when the user approves in the wallet, not when the transaction lands.
+// 1000 lepta (1 LGO = 10^9 lepta). Resolves when the user approves, not when the transaction lands.
 const { handle } = await wallet.sendCall(from, nativeTransfer(from, to, '1000'))
 const status = await wallet.waitForTransactionStatus(handle)
 const done = status.outcome === 'success' // "unknown" is not success: re-check, then say "unconfirmed"
@@ -49,7 +49,7 @@ Keys never leave the wallet: an app proposes, the user approves, the wallet sign
 
 ## Status
 
-Preview (`0.x`). Built against LEZ `v0.3.0-rc1`. The browser and React Native connect kits are planned, not shipped.
+`0.x`. The encoding is checked against test vectors generated from LEZ `v0.3.0`, the version the official testnet runs. Browser and React Native connect kits are planned, not shipped.
 
 ## Links
 

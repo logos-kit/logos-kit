@@ -12,8 +12,8 @@ npm install @logos-kit/codec
 ```ts
 import { nativeTransfer, tokenTransfer } from '@logos-kit/codec'
 
-const pay = nativeTransfer(from, to, '42')          // native LEZ (a whole number: LEZ has no decimals)
-const give = tokenTransfer(from, to, token, '250')  // a fungible token from the token program
+const pay = nativeTransfer(from, to, '42')          // the native token, LGO, in lepta: 42 lepta (1 LGO = 10^9 lepta)
+const give = tokenTransfer(from, to, token, '250')  // a fungible token from the token program, in its base units
 ```
 
 Pass the result to the wallet with `@logos-kit/client`'s `sendCall`; the wallet decodes it again and shows the user what it does before they approve.
@@ -25,7 +25,7 @@ u128 amounts stay decimal strings end to end, so nothing is rounded:
 ```ts
 import { add, compare, formatUnits, parseUnits } from '@logos-kit/codec'
 
-parseUnits('1.5', 6)      // "1500000"   (for tokens that define display decimals)
+parseUnits('1.5', 6)      // "1500000"   (for a token with 6 display decimals; LEZ tokens have none on chain)
 formatUnits('1500000', 6) // "1.5"
 // The native token: lepta on the wire, LGO on screen (1 LGO = 10^9 lepta)
 formatUnits('1500000000', 9) // "1.5"   (LGO)
