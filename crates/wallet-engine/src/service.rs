@@ -424,6 +424,101 @@ impl Service {
             "state" => self.state(caller),
             "create" => self.create(p),
             "findBackups" => Ok(json!(find_backups())),
+            // -- tokens (docs/design/ux-tokens-nfts.md §2.2–2.5) ------------------
+            "lookupToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    id: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                let network = network_name(&self.current_zone());
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| {
+                            Ok(match s.lookup_token(&a.id).await? {
+                                Ok(preview) => json!({ "token": preview }),
+                                Err(problem) => json!({
+                                    "problem": problem,
+                                    "message": problem.text(&network),
+                                }),
+                            })
+                        })
+                        .await
+                })
+            }
+            "addToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    #[serde(default)]
+                    decimals: Option<u8>,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.add_token(&a.definition, a.decimals))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "removeToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.untrack_token(&a.definition))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "setTokenHidden" | "setTokenPinned" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    on: bool,
+                }
+                let a: P = params(p)?;
+                let hide = method == "setTokenHidden";
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| {
+                            if hide {
+                                s.set_token_hidden(&a.definition, a.on)
+                            } else {
+                                s.set_token_pinned(&a.definition, a.on)
+                            }
+                        })
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "setTokenDecimals" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    #[serde(default)]
+                    decimals: Option<u8>,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.set_token_decimals(&a.definition, a.decimals))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
             "programs" => {
                 let engine = self.engine()?;
                 self.block(async {
@@ -1948,6 +2043,11 @@ impl Service {
             .into_iter()
             .filter(|s| matches!(s.lifecycle, Lifecycle::Proving | Lifecycle::Signing))
             .collect();
+        // Payments and tokens that arrived since the last read (activity
+        // rows; tokens nobody told us about), written before the holdings
+        // below read them. A failure only delays them to the next sync.
+        let _ = engine.scan_incoming().await;
+        let _ = engine.flush_history().await;
         let result = engine
             .with_session_quiet(async |s| {
                 let synced = s.sync(&mut Quiet).await;
@@ -1977,9 +2077,6 @@ impl Service {
                 Ok((synced, accounts, status))
             })
             .await;
-        // Payments into our accounts since the last read (the activity's
-        // incoming rows); a failure only delays them to the next sync.
-        let _ = engine.scan_incoming().await;
         let mut snap = lock(&self.snapshot);
         let mut received = Vec::new();
         match result {
@@ -2191,6 +2288,15 @@ fn name_defaults(s: &mut Session) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// "LEZ testnet", for copy that names the network.
+fn network_name(zone: &Zone) -> String {
+    match zone.chain.as_str() {
+        "lez:testnet" => "LEZ testnet".to_owned(),
+        "lez:local" => "the local network".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 /// Where backups are saved and looked for: the user's Downloads, Documents

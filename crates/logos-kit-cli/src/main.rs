@@ -207,12 +207,65 @@ struct SendArgs {
 
 #[derive(Subcommand)]
 enum TokenCmd {
-    /// Tokens in your accounts (own slot and associated token accounts).
-    List,
-    /// Look for this token's associated token accounts too.
-    Track { definition: String },
+    /// Tokens in your accounts (own slots and token accounts). Reads new
+    /// blocks first, so tokens someone sent you show up. By default: the
+    /// Logos Kit list's tokens and the ones you added.
+    List {
+        /// Every tier, hidden and spam included.
+        #[arg(long)]
+        all: bool,
+        /// Tokens that arrived but aren't on the list (the app's "Unknown").
+        #[arg(long)]
+        unknown: bool,
+        /// Tokens hidden as spam (with the reason).
+        #[arg(long)]
+        spam: bool,
+        /// Tokens you hid.
+        #[arg(long)]
+        hidden: bool,
+    },
+    /// Add a token by its ID: shows what it is first; asks before adding.
+    Add {
+        definition: String,
+        /// Display decimals, for a token the list doesn't describe (0–36).
+        #[arg(long)]
+        decimals: Option<u8>,
+        /// Add it although it looks like a verified token or LGO.
+        #[arg(long)]
+        accept_lookalike: bool,
+    },
+    /// Stop listing a token you added (it doesn't touch your balance).
+    Remove {
+        definition: String,
+    },
+    /// Hide a token (nothing is deleted; `unhide` brings it back).
+    Hide {
+        definition: String,
+    },
+    Unhide {
+        definition: String,
+    },
+    /// Keep a token near the top of the list.
+    Pin {
+        definition: String,
+    },
+    Unpin {
+        definition: String,
+    },
+    /// What a token is: name, supply, decimals and their source, trust, your balance.
+    Info {
+        definition: String,
+    },
+    /// Same as `add` without the checks (kept for scripts).
+    #[command(hide = true)]
+    Track {
+        definition: String,
+    },
     /// The associated token account address of `owner` for a token.
-    Ata { owner: String, definition: String },
+    Ata {
+        owner: String,
+        definition: String,
+    },
     /// Create a fungible token; all supply goes to --holder (a public account
     /// whose token slot is empty). A new account becomes the definition.
     Create {
@@ -797,27 +850,179 @@ fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// A token preview, as `token add` and `token info` show it.
+fn print_preview(cli: &Cli, p: &wallet_engine::tokens::TokenPreview) {
+    print(cli, &serde_json::to_value(p).unwrap_or_default(), || {
+        let supply = match p.info.decimals {
+            Some(d) => wallet_engine::tokens::format_units(p.total_supply, d),
+            None => format!("{} (decimals unknown)", p.total_supply),
+        };
+        println!("{}  {}", p.name, p.definition);
+        println!(
+            "  trust     {:?}{}",
+            p.info.tier,
+            p.listed_in
+                .as_deref()
+                .map(|l| format!(" ({l})"))
+                .unwrap_or_default()
+        );
+        if let Some(r) = &p.info.spam_reason {
+            println!("  warning   {r}");
+        }
+        if let Some(i) = &p.imitates {
+            println!("  warning   looks like {} but isn't", i.name);
+        }
+        println!("  supply    {supply}");
+        println!(
+            "  decimals  {} ({})",
+            p.info
+                .decimals
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| "unknown".into()),
+            p.info.decimals_source
+        );
+        println!("  yours     {}", p.your_balance);
+        if let Some(m) = &p.metadata {
+            println!(
+                "  metadata  {} {} (creators: {})",
+                m.standard, m.uri, m.creators
+            );
+        }
+    });
+}
+
 async fn token(cli: &Cli, cmd: &TokenCmd) -> Result<()> {
     match cmd {
-        TokenCmd::List => {
-            let (mut session, _) = open(cli).await?;
-            let holdings = session.holdings().await?;
-            print(cli, &serde_json::to_value(&holdings)?, || {
-                if holdings.is_empty() {
+        TokenCmd::List {
+            all,
+            unknown,
+            spam,
+            hidden,
+        } => {
+            use wallet_engine::trust::Tier;
+            let (session, _) = open(cli).await?;
+            let engine = Engine::new(session, Config::default());
+            // Read the blocks since the last look, so tokens someone sent
+            // show up (a restored wallet may need several steps).
+            for _ in 0..200 {
+                engine.with_session(async |s| s.connect().await).await?;
+                if engine.scan_incoming().await.is_err() || engine.scan_behind() == 0 {
+                    break;
+                }
+            }
+            // Holdings read the scan's findings from the history record.
+            engine.flush_history().await?;
+            let holdings = engine.with_session(async |s| s.holdings().await).await?;
+            engine.lock().await?;
+            let wanted = |t: Tier| {
+                *all || match t {
+                    Tier::Verified | Tier::Added => !(*unknown || *spam || *hidden),
+                    Tier::Unknown => *unknown,
+                    Tier::Spam => *spam,
+                    Tier::Hidden => *hidden,
+                }
+            };
+            let shown: Vec<_> = holdings
+                .into_iter()
+                .filter(|h| wanted(h.info.tier))
+                .collect();
+            print(cli, &serde_json::to_value(&shown)?, || {
+                if shown.is_empty() {
                     println!("no tokens");
                 }
-                for h in &holdings {
+                for h in &shown {
+                    let amount = match h.info.decimals {
+                        Some(d) => wallet_engine::tokens::format_units(h.amount, d),
+                        None => format!("{} (decimals unknown)", h.amount),
+                    };
                     println!(
-                        "{:<46} {:>20} {:<16} {} {}",
+                        "{:<46} {:>24} {:<16} {:<9} {} {}{}",
                         h.account,
-                        h.amount,
-                        h.name.as_deref().unwrap_or("?"),
+                        amount,
+                        h.info
+                            .symbol
+                            .as_deref()
+                            .or(h.name.as_deref())
+                            .unwrap_or("?"),
+                        format!("{:?}", h.info.tier).to_lowercase(),
                         h.definition,
-                        if h.private { "(private)" } else { "" }
+                        if h.private { "(private)" } else { "" },
+                        h.info
+                            .spam_reason
+                            .as_deref()
+                            .map(|r| format!(" [{r}]"))
+                            .unwrap_or_default(),
                     );
                 }
             });
+            Ok(())
+        }
+        TokenCmd::Add {
+            definition,
+            decimals,
+            accept_lookalike,
+        } => {
+            let (mut session, _) = open(cli).await?;
+            let network = session.zone().id.clone();
+            let preview = match session.lookup_token(definition).await? {
+                Ok(p) => p,
+                Err(problem) => {
+                    session.lock()?;
+                    bail!("{}", problem.text(&network));
+                }
+            };
+            print_preview(cli, &preview);
+            if let Some(i) = &preview.imitates {
+                ensure!(
+                    *accept_lookalike,
+                    "this looks like {} but isn't{}; add --accept-lookalike to add it anyway",
+                    i.name,
+                    i.definition
+                        .as_deref()
+                        .map(|d| format!(" (the real one is {d})"))
+                        .unwrap_or_default()
+                );
+            }
+            if !cli.json {
+                println!("Anyone can create a token, including fake copies of real ones.");
+            }
+            if !confirm(cli, "Add this token?")? {
+                session.lock()?;
+                bail!("not added");
+            }
+            session.add_token(definition, *decimals)?;
+            if !cli.json {
+                println!("added {}", preview.name);
+            }
             session.lock()
+        }
+        TokenCmd::Remove { definition } => {
+            let (mut session, _) = open(cli).await?;
+            session.untrack_token(definition)?;
+            session.lock()
+        }
+        TokenCmd::Hide { definition } | TokenCmd::Unhide { definition } => {
+            let (mut session, _) = open(cli).await?;
+            session.set_token_hidden(definition, matches!(cmd, TokenCmd::Hide { .. }))?;
+            session.lock()
+        }
+        TokenCmd::Pin { definition } | TokenCmd::Unpin { definition } => {
+            let (mut session, _) = open(cli).await?;
+            session.set_token_pinned(definition, matches!(cmd, TokenCmd::Pin { .. }))?;
+            session.lock()
+        }
+        TokenCmd::Info { definition } => {
+            let (mut session, _) = open(cli).await?;
+            let network = session.zone().id.clone();
+            let result = session.lookup_token(definition).await?;
+            session.lock()?;
+            match result {
+                Ok(p) => {
+                    print_preview(cli, &p);
+                    Ok(())
+                }
+                Err(problem) => bail!("{}", problem.text(&network)),
+            }
         }
         TokenCmd::Ata { owner, definition } => {
             let ata = wallet_engine::tokens::ata_of(

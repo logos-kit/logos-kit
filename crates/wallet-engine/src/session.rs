@@ -1513,6 +1513,16 @@ impl Session {
         self.meta.restored
     }
 
+    /// From when this wallet's activity can matter (unix ms): its creation,
+    /// or a restored wallet's "first used" date; `None` = from genesis.
+    pub const fn activity_since_ms(&self) -> Option<u64> {
+        if self.meta.restored {
+            self.meta.birthday_ms
+        } else {
+            Some(self.meta.created_at_ms)
+        }
+    }
+
     // -- persistence ---------------------------------------------------------
 
     /// Write the current storage to the vault now (not debounced).

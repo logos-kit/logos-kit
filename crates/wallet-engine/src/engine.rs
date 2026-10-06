@@ -589,7 +589,7 @@ impl Engine {
     /// happen without the wallet lock. A new wallet starts at today's tip; a
     /// restored one reads from block 1, `incoming::STEP` blocks per call.
     pub async fn scan_incoming(&self) -> Result<usize> {
-        let (client, mine, decoders, chain, from_genesis, epoch) = {
+        let (client, mine, decoders, chain, since_ms, epoch) = {
             let mut wallet = self.wallet.lock().await;
             let s = wallet.session()?;
             let Some(core) = s.core() else {
@@ -606,29 +606,33 @@ impl Engine {
                 mine,
                 s.decoders(),
                 s.zone().chain.clone(),
-                s.is_restored(),
+                s.activity_since_ms(),
                 self.state().epoch,
             )
         };
-        let cursor = {
+        // Where to read from; a wallet that has never read starts at the
+        // first block after it was made (a minute's slack for clocks).
+        let (current, fresh) = {
             let state = self.state();
             if state.epoch != epoch {
                 return Ok(0);
             }
-            if state.cursor.block == 0 && !from_genesis {
-                // A new wallet: nothing before today's tip is ours.
-                use sequencer_service_rpc::RpcClient as _;
-                drop(state);
-                let tip = client.get_last_block_id().await?;
+            (state.cursor.clone(), state.cursor.block == 0)
+        };
+        let cursor = match (fresh, since_ms) {
+            (true, Some(ms)) => {
+                let start = chain_index::Scanner::new(&client)
+                    .cursor_before_time(ms.saturating_sub(60_000))
+                    .await?;
                 let mut state = self.state();
-                if state.epoch != epoch {
+                if state.epoch != epoch || state.cursor.block != 0 {
                     return Ok(0);
                 }
-                state.cursor = chain_index::Cursor::at(tip, None);
+                state.cursor = start.clone();
                 state.history_dirty = true;
-                return Ok(0);
+                start
             }
-            state.cursor.clone()
+            _ => current,
         };
         if mine.is_empty() {
             return Ok(0);
@@ -639,13 +643,10 @@ impl Engine {
             return Ok(0);
         }
         if let chain_index::Step::Reset { tip } = step {
-            // A reset chain: what we read before is gone. A new wallet picks
-            // up at the tip; a restored one reads the new chain from block 1.
-            state.cursor = if from_genesis {
-                chain_index::Cursor::default()
-            } else {
-                chain_index::Cursor::at(tip, None)
-            };
+            // A reset chain: what we read before is gone; read the new one
+            // from its start (it's short).
+            let _ = tip;
+            state.cursor = chain_index::Cursor::default();
             state.history_dirty = true;
             return Ok(0);
         }

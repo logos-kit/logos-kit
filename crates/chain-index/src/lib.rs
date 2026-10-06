@@ -120,6 +120,40 @@ impl<'a> Scanner<'a> {
         Ok((Cursor::at(to, last_hash), Step::Read { from, to, tip }))
     }
 
+    /// The cursor just before the first block made at or after `ms` (unix
+    /// milliseconds): where a wallet created at `ms` starts reading, so
+    /// nothing sent to it after that is missed. Binary search on block times
+    /// (about 14 reads for 10,000 blocks).
+    pub async fn cursor_before_time(&self, ms: u64) -> Result<Cursor> {
+        let tip = self.tip().await?;
+        let (mut lo, mut hi) = (1u64, tip);
+        if tip == 0 {
+            return Ok(Cursor::default());
+        }
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match self
+                .client
+                .get_block(mid)
+                .await
+                .with_context(|| format!("block {mid}"))?
+            {
+                Some(b) if block_time_ms(&b) >= ms => hi = mid,
+                _ => lo = mid + 1,
+            }
+        }
+        let start = lo.saturating_sub(1);
+        let hash = match start {
+            0 => None,
+            n => self
+                .client
+                .get_block(n)
+                .await?
+                .map(|b| b.header.hash.to_string()),
+        };
+        Ok(Cursor::at(start, hash))
+    }
+
     /// The block under the cursor still has the hash we recorded.
     async fn still_there(&self, cursor: &Cursor) -> Result<bool> {
         let (Some(hash), true) = (&cursor.hash, cursor.block > 0) else {
