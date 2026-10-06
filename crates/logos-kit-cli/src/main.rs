@@ -53,8 +53,8 @@ struct Cli {
     /// With --yes: also approve a call the wallet can't decode.
     #[arg(long, global = true)]
     ack_unknown: bool,
-    /// Prove private transactions with smaller segments: about 2 GB of free
-    /// memory instead of 4.6 GB, and slower.
+    /// Prove private transactions in smaller pieces: about half the memory,
+    /// and slower.
     #[arg(long, global = true, env = "LOGOS_KIT_LOW_MEMORY")]
     low_memory: bool,
     #[command(subcommand)]
