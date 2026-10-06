@@ -117,13 +117,14 @@ cleanup() {
 trap cleanup EXIT
 
 LK() { "$BIN" "${ZONE[@]}" "$@"; }
-# A public network can drop out for a while ("can't reach …"). That error is
-# raised before anything is submitted, so the step is retried once, after a
-# pause; any other failure stands.
+# A public network can drop out for a while ("can't reach …", a refused
+# connection, a DNS failure). Those happen before anything is delivered, so
+# the step is retried once, after a pause; any other failure stands.
 LKR() {
   local out rc
   out="$(LK "$@" 2>&1)"; rc=$?
-  if [[ "$out" == *"can't reach"* ]]; then
+  # "can't reach", a refused connection or a DNS failure: nothing was delivered.
+  if [[ "$out" == *"can't reach"* || "$out" == *"client error (Connect)"* || "$out" == *"dns error"* ]]; then
     say "network unreachable; retrying in 60 s" >&2
     sleep 60
     out="$(LK "$@" 2>&1)"; rc=$?
