@@ -1,5 +1,19 @@
 # @logos-kit/client
 
+## 0.2.0
+
+### Minor Changes
+
+- `lez_getTokens` (client: `getWalletTokens`): the tokens on a shared account, ([#8](https://github.com/logos-kit/logos-kit/pull/8))
+  each with its trust tier (`verified` on the Logos Kit list, `added` by the
+  user, or `unknown`), name, symbol and decimals when known. Spam and tokens the
+  user hid are never listed. Same grants as `lez_getBalance`.
+
+### Patch Changes
+
+- Updated dependencies [[`b8c37c9`](https://github.com/logos-kit/logos-kit/commit/b8c37c91731bd7aaebbf125c6cf0fef479047b7b)]:
+  - @logos-kit/protocol@0.2.0
+
 ## 0.1.1
 
 ### Patch Changes

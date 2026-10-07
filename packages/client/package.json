@@ -1,6 +1,6 @@
 {
   "name": "@logos-kit/client",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Typed client for the Logos Execution Zone: node reads, LWS-0 wallet actions, lossless u128 JSON. QML-safe root; raw-key signing in ./local.",
   "license": "MIT OR Apache-2.0",
   "repository": {
