@@ -46,6 +46,10 @@ jobs:
           path: ~/.risc0
           key: risc0-guest-${{ runner.os }}-${{ env.RISC0_VERSION }}-rust${{ env.RISC0_RUST }}
       - name: cargo-risczero ${{ env.RISC0_VERSION }} + risc0 rust ${{ env.RISC0_RUST }}
+        env:
+          # rzup asks api.github.com for releases; unauthenticated, the runner's
+          # shared IP hits the rate limit (failed on main, 2026-10-07).
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ steps.risc0.outputs.cache-hit }}" != "true" ]; then
             curl -fsSL https://risczero.com/install | bash
@@ -97,6 +101,10 @@ jobs:
           path: ~/.risc0
           key: risc0-guest-${{ runner.os }}-${{ env.RISC0_VERSION }}-rust${{ env.RISC0_RUST }}
       - name: cargo-risczero ${{ env.RISC0_VERSION }} + risc0 rust ${{ env.RISC0_RUST }}
+        env:
+          # rzup asks api.github.com for releases; unauthenticated, the runner's
+          # shared IP hits the rate limit (failed on main, 2026-10-07).
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ steps.risc0.outputs.cache-hit }}" != "true" ]; then
             curl -fsSL https://risczero.com/install | bash
