@@ -1,0 +1,36 @@
+{
+  "$schema": "../schema/tokenlist.schema.json",
+  "name": "Logos Kit",
+  "timestamp": "2026-10-06T19:00:00Z",
+  "version": {
+    "major": 0,
+    "minor": 2,
+    "patch": 0
+  },
+  "keywords": ["logos kit", "lez", "testnet"],
+  "tags": {
+    "sample": {
+      "name": "Sample",
+      "description": "Sent with test LGO so new users see a token arrive."
+    },
+    "pass": {
+      "name": "Logos Kit Pass",
+      "description": "The free Logos Kit membership NFT."
+    }
+  },
+  "tokens": [
+    {
+      "address": "HPhjnuM9gEmr6oFyCyP4y2pYPK4zSa6r6xqSKj8Q7HSs",
+      "name": "Logos Kit Test Token",
+      "symbol": "LKT",
+      "decimals": 2,
+      "logoURI": "https://raw.githubusercontent.com/logos-kit/logos-kit/main/registry/tokens/logos/HPhjnuM9gEmr6oFyCyP4y2pYPK4zSa6r6xqSKj8Q7HSs.png",
+      "tags": ["sample"],
+      "extensions": {
+        "chain": "lez:testnet",
+        "kind": "fungible",
+        "description": "Sent with test LGO by the Logos Kit drip, so a new wallet sees a token arrive. No value."
+      }
+    }
+  ]
+}

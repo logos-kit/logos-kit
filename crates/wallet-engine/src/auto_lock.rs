@@ -88,6 +88,12 @@ impl AutoLock {
         }
     }
 
+    /// The unlocked session as it is: no auto-lock check, not counted as use
+    /// (for writing state while a proof keeps the wallet from locking).
+    pub fn peek(&mut self) -> Option<&mut Session> {
+        self.unlocked.as_mut().map(|(session, _)| session)
+    }
+
     /// The session without counting this as use (background sync, UI reads).
     pub fn session_quiet(&mut self) -> Result<&mut Session> {
         self.tick().map_err(|e| e.context(Locked))?;

@@ -1,0 +1,24 @@
+[1mLogos Kit demo (testnet, real proofs)[0m
+  platform Darwin/arm64: supported
+  prerequisites: ok
+[1mFlows[0m
+  [32mPASS[0m  init wallet                        /var/folders/6j/2lm0q4ys51z35p75tygp_q9h0000gn/T/tmp.MZnPWyosP6
+  [32mPASS[0m  accounts (2 public, 2 private)     A=7146HHyk… B=3yzwxxYp… P=HEkseA9H… P2=8beHZH6s…
+  [32mPASS[0m  faucet -> A                        +1000000000 lepta
+  [32mPASS[0m  public send A -> B                 block 13232  https://explorer.testnet.lez.logos.co/transaction/f245f8e4f7f1f9f08152cc95bdb6ab6f612a6d125a395bfdc397c370986ab82a
+  [32mPASS[0m  shield A -> private P              block 13254  https://explorer.testnet.lez.logos.co/transaction/ce00b7128f703895393488164952d691f3de6d6b37cb3f7ac588bd751df4d149
+  [32mPASS[0m  private send P -> public B         block 13297  https://explorer.testnet.lez.logos.co/transaction/6e98a3429f093ad45b0a7aef63aefcc5e7fdbc6d81c610ae5fc002cbe0ab9c48
+  [32mPASS[0m  private send P -> private P2       block 13312  https://explorer.testnet.lez.logos.co/transaction/1c709ed5e2c5506346f2392d8337c5a1c38260aaa4a6a3e234aac4d8fd13bcdc
+  [32mPASS[0m  token create (holder A)            definition GgPHvTMN…
+  [32mPASS[0m  token send A -> B (public)         block 13331  https://explorer.testnet.lez.logos.co/transaction/71788a70d5ba7e933e02d35fec56531671450a7259b7f894bd0bf1180057025a
+  [32mPASS[0m  token send A -> P (private)        block 13346  https://explorer.testnet.lez.logos.co/transaction/ecda8724a80b431c3031c3f746104a0b2b464db9eddb0aac5e66de112db0bb7e
+  [32mPASS[0m  token send P -> B (from private)   block 13360  https://explorer.testnet.lez.logos.co/transaction/5784521bdc2824bba3727346aa549c99c813675ed7888e121e0a6661307abf92
+  [32mPASS[0m  testimonial post (A)               block 13362  https://explorer.testnet.lez.logos.co/transaction/97e49df130bde94a9f20ba2b58daea77869537b00cab337c367d25cc11f59928
+  [31mFAIL[0m  evidence export                    {"error":{"code":-32603,"message":"blocks 11901..=12000: Request timeout"}}
+[1mRefusals[0m
+  [32mPASS[0m  second post by the same account    refused: already posted
+  [32mPASS[0m  post from a private account        refused: must be public
+  [32mPASS[0m  send more than the balance         refused: Not enough
+[1mSummary[0m
+  15/16 steps passed in 6032s against https://testnet.lez.logos.co
+  failed: evidence export

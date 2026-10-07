@@ -365,5 +365,13 @@ fn program_vectors() -> Result<Value> {
             "kind": "fungible", "data": hex::encode(token),
         },
         "testimonial": testimonials,
+        "associatedTokenAccount": {
+            "owner": author.to_string(),
+            "definition": definition.to_string(),
+            "ata": associated_token_account_core::get_associated_token_account_id(
+                &programs::ata_account_id(),
+                &associated_token_account_core::compute_ata_seed(author, definition, programs::token_account_id()),
+            ).to_string(),
+        },
     }))
 }

@@ -297,6 +297,21 @@ struct Meta {
     /// Base64 key for per-app private account handles (made on first use).
     #[serde(default)]
     handle_key: Option<String>,
+    /// Accounts the wallet made for its own use (token IDs, program
+    /// headers and segments): kept out of the account switcher.
+    #[serde(default)]
+    system: BTreeSet<String>,
+    /// Programs the user named, every zone (approvals show the name).
+    #[serde(default)]
+    programs: Vec<crate::verify::UserProgram>,
+    /// zone id → token definitions the user hid / pinned.
+    #[serde(default)]
+    hidden_tokens: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pinned_tokens: BTreeMap<String, Vec<String>>,
+    /// zone id → definition → display decimals the user set.
+    #[serde(default)]
+    token_decimals: BTreeMap<String, BTreeMap<String, u8>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -572,10 +587,15 @@ pub struct Session {
     backend: Arc<EncryptedBackend>,
     keys: Vault,
     meta: Meta,
+    /// Finished activity for this zone, sealed with the zone key (`None`:
+    /// the file couldn't be opened; activity stays in memory this session).
+    history: Option<Vault>,
     net: Net,
     reveal: RevealThrottle,
     /// Secrets of a private tx sent from here, to record its note on inclusion.
     pub(crate) pending_note: Option<PendingNote>,
+    /// Token names read from definitions (they never change).
+    pub(crate) token_names: std::collections::HashMap<String, Option<String>>,
     // Declared last so it is released after everything above is flushed.
     _lock: SessionLock,
 }
@@ -743,6 +763,7 @@ impl Session {
         }
         data.write_zones_hint(&record.meta.zones)?;
 
+        let history = open_history(&dir, &context, record.secrets.zone_key(&zone.id)?);
         let backend = Arc::new(EncryptedBackend::new(vault, SAVE_INTERVAL)?);
         let meta = record.meta.clone();
         Ok(Self {
@@ -754,9 +775,11 @@ impl Session {
             backend,
             keys,
             meta,
+            history,
             net: Net::Idle,
             reveal: RevealThrottle::default(),
             pending_note: None,
+            token_names: std::collections::HashMap::new(),
             _lock: lock,
         })
     }
@@ -930,6 +953,104 @@ impl Session {
             path: Some(path.to_string()),
             label: None,
         })
+    }
+
+    /// A new account for the user, named "Public account N" / "Private
+    /// account N" (the lowest N not taken).
+    pub fn new_named_account(&mut self, kind: AccountKind) -> Result<AccountInfo> {
+        let word = match kind {
+            AccountKind::Public => "Public",
+            AccountKind::Private => "Private",
+        };
+        // Free across the whole wallet (labels apply to every zone), chosen
+        // before the account exists so a clash can't leave it unnamed.
+        let taken = self.taken_labels()?;
+        let label = (1..)
+            .map(|n| format!("{word} account {n}"))
+            .find(|l| !taken.contains(l))
+            .expect("some number is free");
+        let mut info = self.new_account(kind)?;
+        self.set_label(&info.account_id, Some(&label))?;
+        info.label = Some(label);
+        Ok(info)
+    }
+
+    /// A public account the wallet uses itself (a token's definition, a
+    /// program's header or segment), labelled and kept out of the switcher.
+    pub fn new_system_account(&mut self, label: &str) -> Result<AccountInfo> {
+        let taken = self.taken_labels()?;
+        // Labels are unique and at most 32 characters: a repeat gets a number.
+        let base: String = label.chars().take(28).collect();
+        let label = std::iter::once(base.clone())
+            .chain((2..).map(|n| format!("{base} {n}")))
+            .find(|l| !taken.contains(l))
+            .expect("some number is free");
+        let mut info = self.new_account(AccountKind::Public)?;
+        // Hidden first: if labelling fails, the account still stays out of
+        // the switcher.
+        let id = info.account_id.clone();
+        self.update_meta(|m| {
+            m.system.insert(id);
+        })?;
+        self.set_label(&info.account_id, Some(&label))?;
+        info.label = Some(label);
+        Ok(info)
+    }
+
+    fn taken_labels(&self) -> Result<BTreeSet<String>> {
+        let mut taken: BTreeSet<String> = self.meta.labels.values().cloned().collect();
+        taken.extend(self.accounts()?.into_iter().filter_map(|a| a.label));
+        Ok(taken)
+    }
+
+    /// Programs the user named on this zone.
+    pub fn named_programs(&self) -> Vec<crate::verify::UserProgram> {
+        self.meta
+            .programs
+            .iter()
+            .filter(|p| p.zone == self.zone().id)
+            .cloned()
+            .collect()
+    }
+
+    /// Name `account` (a program) on this zone; a new name replaces the old.
+    pub fn name_program(&mut self, account: &str, name: &str) -> Result<()> {
+        let name = name.trim();
+        ensure!(
+            !name.is_empty() && name.chars().count() <= 40,
+            "a program name is 1–40 characters"
+        );
+        ensure!(
+            !name.chars().any(char::is_control),
+            "a program name can't contain control characters"
+        );
+        crate::decode::account_id(account)?;
+        let zone = self.zone().id.clone();
+        let entry = crate::verify::UserProgram {
+            zone: zone.clone(),
+            account: account.to_owned(),
+            name: name.to_owned(),
+            added_ms: now_ms(),
+        };
+        self.update_meta(|m| {
+            m.programs
+                .retain(|p| !(p.zone == zone && p.account == entry.account));
+            m.programs.push(entry);
+        })
+    }
+
+    pub fn forget_program(&mut self, account: &str) -> Result<()> {
+        let zone = self.zone().id.clone();
+        self.update_meta(|m| {
+            m.programs
+                .retain(|p| !(p.zone == zone && p.account == account))
+        })
+    }
+
+    /// Made by the wallet for its own use (see `new_system_account`).
+    pub fn is_system_account(&self, account_id: &str) -> bool {
+        self.meta.system.contains(account_id)
+            || self.tracked_tokens().iter().any(|t| t == account_id)
     }
 
     /// Import a public account by its private key (hex), e.g. a key from
@@ -1240,6 +1361,90 @@ impl Session {
         self.update_meta(|meta| meta.tokens.entry(zone).or_default().push(definition))
     }
 
+    /// Stop treating `definition` as added by the user (it falls back to
+    /// Unknown, or Verified if it's on the list).
+    pub fn untrack_token(&mut self, definition: &str) -> Result<()> {
+        let zone = self.zone().id.clone();
+        self.update_meta(|m| {
+            if let Some(list) = m.tokens.get_mut(&zone) {
+                list.retain(|t| t != definition);
+            }
+        })
+    }
+
+    /// Token definitions the user hid on this zone.
+    pub fn hidden_tokens(&self) -> Vec<String> {
+        self.meta
+            .hidden_tokens
+            .get(&self.zone().id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Token definitions the user pinned on this zone.
+    pub fn pinned_tokens(&self) -> Vec<String> {
+        self.meta
+            .pinned_tokens
+            .get(&self.zone().id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Hide (or show again) a token on this zone. Hiding never deletes
+    /// anything; showing never makes a token trusted.
+    pub fn set_token_hidden(&mut self, definition: &str, hidden: bool) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let list = m.hidden_tokens.entry(zone).or_default();
+            list.retain(|t| *t != definition);
+            if hidden {
+                list.push(definition);
+            }
+        })
+    }
+
+    pub fn set_token_pinned(&mut self, definition: &str, pinned: bool) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let list = m.pinned_tokens.entry(zone).or_default();
+            list.retain(|t| *t != definition);
+            if pinned {
+                list.push(definition);
+            }
+        })
+    }
+
+    /// Display decimals the user set for a token (LEZ stores none).
+    pub fn token_decimals(&self, definition: &str) -> Option<u8> {
+        self.meta
+            .token_decimals
+            .get(&self.zone().id)
+            .and_then(|m| m.get(definition))
+            .copied()
+    }
+
+    pub fn set_token_decimals(&mut self, definition: &str, decimals: Option<u8>) -> Result<()> {
+        crate::decode::account_id(definition)?;
+        ensure!(decimals.is_none_or(|d| d <= 36), "decimals are 0–36");
+        let zone = self.zone().id.clone();
+        let definition = definition.to_owned();
+        self.update_meta(|m| {
+            let map = m.token_decimals.entry(zone).or_default();
+            match decimals {
+                Some(d) => {
+                    map.insert(definition, d);
+                }
+                None => {
+                    map.remove(&definition);
+                }
+            }
+        })
+    }
+
     /// Re-auth for sensitive actions, throttled so an unlocked wallet can't be
     /// used to guess its own password.
     /// Checks the password without this session (see `vault::PasswordCheck`).
@@ -1281,6 +1486,41 @@ impl Session {
         self.keys.save(&record.to_bytes()?)?;
         self.meta = record.meta.clone();
         Ok(())
+    }
+
+    /// This zone's activity record, as `save_history` wrote it (`Null` if
+    /// unreadable).
+    /// Fails when there's no readable record; the caller must then not
+    /// overwrite it.
+    pub fn load_history(&self) -> Result<serde_json::Value> {
+        let vault = self
+            .history
+            .as_ref()
+            .context("activity history unavailable")?;
+        let bytes = vault.read()?;
+        serde_json::from_slice(&bytes).context("activity history doesn't parse")
+    }
+
+    pub fn save_history(&self, record: &serde_json::Value) -> Result<()> {
+        match &self.history {
+            Some(vault) => vault.save(&serde_json::to_vec(record)?),
+            None => Ok(()),
+        }
+    }
+
+    /// Restored from a phrase: past activity is on chain to be found.
+    pub const fn is_restored(&self) -> bool {
+        self.meta.restored
+    }
+
+    /// From when this wallet's activity can matter (unix ms): its creation,
+    /// or a restored wallet's "first used" date; `None` = from genesis.
+    pub const fn activity_since_ms(&self) -> Option<u64> {
+        if self.meta.restored {
+            self.meta.birthday_ms
+        } else {
+            Some(self.meta.created_at_ms)
+        }
     }
 
     // -- persistence ---------------------------------------------------------
@@ -1341,4 +1581,26 @@ async fn first_block_at_or_after(core: &WalletCore, ms: u64) -> Result<u64> {
         }
     }
     Ok(lo)
+}
+
+/// The zone's activity vault (`<zone>/history`), sealed with the zone key
+/// under its own context. History is a convenience: a vault that won't open
+/// is moved aside (kept, never deleted) and a new one starts.
+fn open_history(dir: &Path, context: &str, key: Option<Zeroizing<[u8; 32]>>) -> Option<Vault> {
+    let hdir = dir.join("history");
+    let context = format!("{context}:history");
+    // The zone vault was just opened or created with this key.
+    let key = key?;
+    if Vault::exists(&hdir) {
+        match Vault::unlock_keyed(&hdir, key.clone(), &context) {
+            Ok((vault, _)) => return Some(vault),
+            // A file that's there but won't open (damaged, or another
+            // key): kept aside, never deleted, and a new history starts. If
+            // it can't even be moved, this session keeps history in memory.
+            Err(_) => {
+                std::fs::rename(&hdir, dir.join(format!("history.unreadable-{}", now_ms()))).ok()?
+            }
+        }
+    }
+    Vault::create_keyed(&hdir, key, &context, br#"{"scanned":0,"items":[]}"#).ok()
 }

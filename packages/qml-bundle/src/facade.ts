@@ -43,6 +43,7 @@ import {
   type SignInResult,
   type SignMessageResult,
   type SubmitResult,
+  type TokensResult,
   type TransactionProposal,
   type TransactionStatus,
   type WalletAccount,
@@ -92,6 +93,14 @@ export interface LogosKit {
    * `formatUnits(amount, 9)` (1 LGO = 10^9 lepta). Never `Number()` it.
    */
   getWalletBalance(account: AccountId, asset?: AccountId): Promise<BalanceResult>
+  /**
+   * The tokens on a shared account, with how far the wallet trusts each:
+   * `verified` (on the Logos Kit list), `added` (the user added it) or
+   * `unknown` (it arrived; show it with care). Spam and tokens the user hid
+   * are never listed. `amount` is base units: use `formatUnits(amount,
+   * decimals)` when `decimals` is there, whole units otherwise.
+   */
+  getWalletTokens(account: AccountId): Promise<TokensResult>
   /** A public account's data for one program (chain state). */
   readAccount(account: AccountId, program: AccountId): Promise<{ nonce: string; data: Uint8Array }>
   /** The network the wallet is on (`LogosKit` follows it by default). */
@@ -219,6 +228,7 @@ export function createLogosKit(host: LogosKitHost): LogosKit {
     getAccounts: () => wallet.getAccounts(),
     getWalletBalance: (account, asset) =>
       wallet.getWalletBalance(asset ? { chain, account, asset } : { chain, account }),
+    getWalletTokens: (account) => wallet.getWalletTokens({ chain, account }),
     readAccount: (account, program) => wallet.readAccount(account, program),
     getChainId: () => wallet.getChainId(),
     openExplorer: (target) => wallet.openExplorer(target),

@@ -10,6 +10,7 @@ export const METHODS = {
   getAccounts: 'lez_getAccounts',
   getCapabilities: 'lez_getCapabilities',
   getBalance: 'lez_getBalance',
+  getTokens: 'lez_getTokens',
   readAccount: 'lez_readAccount',
   chainId: 'lez_chainId',
   openExplorer: 'lez_openExplorer',

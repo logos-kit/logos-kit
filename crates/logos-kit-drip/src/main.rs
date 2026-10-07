@@ -19,6 +19,10 @@
 //! - `LK_DRIP_IP_PER_HOUR` drops per client IP per hour (default 5).
 //! - `LK_DRIP_MAX_PER_HOUR` drops per hour in total (default 200).
 //! - `LK_DRIP_LISTEN` (default `0.0.0.0:8080`).
+//! - `LK_DRIP_TOKEN` (optional): a token definition the treasury holds in its
+//!   own slot; every LGO drop that lands also sends `LK_DRIP_TOKEN_AMOUNT`
+//!   base units of it (default 10 000 = 100 LKT at 2 decimals) to the
+//!   account's token account, so a new wallet sees a token arrive by itself.
 //! - `LK_DRIP_TRUST_PROXY=1`: take the client IP from `X-Real-Ip` (else the
 //!   right-most `X-Forwarded-For` entry). Only behind a proxy that sets them
 //!   from the real peer and that is the only way in: Traefik in its default
@@ -59,6 +63,8 @@ struct Drip {
     ip_per_hour: usize,
     max_per_hour: usize,
     trust_proxy: bool,
+    /// The sample token sent with each LGO drop, and how much.
+    token: Option<(AccountId, u128)>,
     ips: Mutex<HashMap<IpAddr, Vec<Instant>>>,
     /// Held only for bookkeeping, never across a payment.
     ledger: tokio::sync::Mutex<Ledger>,
@@ -98,6 +104,16 @@ async fn main() -> Result<()> {
         ip_per_hour: env_or("LK_DRIP_IP_PER_HOUR", 5)?,
         max_per_hour: env_or("LK_DRIP_MAX_PER_HOUR", 200)?,
         trust_proxy: std::env::var("LK_DRIP_TRUST_PROXY").is_ok_and(|v| v == "1"),
+        token: match std::env::var("LK_DRIP_TOKEN") {
+            Ok(def) if !def.trim().is_empty() => Some((
+                def.trim()
+                    .parse()
+                    .ok()
+                    .context("LK_DRIP_TOKEN is not an account id")?,
+                env_or("LK_DRIP_TOKEN_AMOUNT", 10_000)?,
+            )),
+            _ => None,
+        },
         ips: Mutex::new(HashMap::new()),
         ledger: tokio::sync::Mutex::new(Ledger::open(&data)?),
     });
@@ -140,6 +156,10 @@ async fn info(State(d): State<Arc<Drip>>) -> Json<Value> {
         "everySeconds": d.every.as_secs(),
         "perIpPerHour": d.ip_per_hour,
         "maxPerHour": d.max_per_hour,
+        "sampleToken": d.token.map(|(def, amount)| json!({
+            "definition": def.to_string(),
+            "amount": amount.to_string(),
+        })),
     }))
 }
 
@@ -372,6 +392,14 @@ async fn fund(
         if let Err(e) = ledger.save() {
             eprintln!("ledger write failed after paying: {e:#}");
         }
+    }
+    // The sample token rides on a drop that landed (the LGO transaction is
+    // included, so the treasury's next nonce is free). Best effort: the
+    // wallet finds it by reading blocks; a failure here only skips it.
+    if let (FundOutcome::Funded { .. }, Some((def, amount))) = (&outcome, d.token)
+        && let Err(e) = d.faucet.send_token(def, account, amount).await
+    {
+        eprintln!("sample token to {account_s} not sent: {e:#}");
     }
     let status = match outcome {
         FundOutcome::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,

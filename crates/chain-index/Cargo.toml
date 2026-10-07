@@ -1,0 +1,18 @@
+[package]
+name = "chain-index"
+description = "Logos Kit chain index: read LEZ blocks in order from a saved position, notice a reset chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+common.workspace = true
+sequencer_service_rpc.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

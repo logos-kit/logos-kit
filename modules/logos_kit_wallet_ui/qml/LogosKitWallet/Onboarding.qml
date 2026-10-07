@@ -21,6 +21,20 @@ Item {
     signal done()
 
     function go(s) { problem = ""; step = s }
+    // Backup files the engine found in Downloads, Documents and Desktop.
+    property var backups: []
+    property string backupPath: ""
+    property bool lookingForBackups: false
+    function openBackups() {
+        go("backup")
+        backups = []; backupPath = ""; lookingForBackups = true
+        store.call("findBackups", {}, function (v, e) {
+            ob.lookingForBackups = false
+            if (e) { ob.problem = Fmt.errorText(e); return }
+            ob.backups = v || []
+            if (ob.backups.length > 0) ob.backupPath = ob.backups[0].path
+        })
+    }
 
     Connections {
         target: ob.store
@@ -64,6 +78,7 @@ Item {
                     : ob.step === "confirm" ? "Check your phrase"
                     : ob.step === "ready" ? "Your accounts are ready"
                     : ob.step === "restore" ? "Restore a wallet"
+                    : ob.step === "backup" ? "Restore from a backup"
                     : "Logos Kit"
                 font.pixelSize: 26
                 font.weight: Font.Bold
@@ -81,6 +96,7 @@ Item {
                     : ob.step === "confirm" ? "Type the words it asks for."
                     : ob.step === "ready" ? "One public and one private account, on " + (ob.store.zone.chain || "LEZ") + "."
                     : ob.step === "restore" ? "Enter the 24 words of a Logos Kit or LEZ wallet."
+                    : ob.step === "backup" ? "Pick a backup this wallet saved, then enter the password it was made with."
                     : "A wallet for the Logos Execution Zone. Private by default."
             }
             Badge {
@@ -99,16 +115,36 @@ Item {
                 Item { implicitHeight: 8 }
                 Btn { objectName: "createWallet"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Create wallet"; onClicked: ob.go("password") }
                 Btn { objectName: "restoreWallet"; Layout.fillWidth: true; large: true; text: "Restore from recovery phrase"; onClicked: ob.go("restore") }
-                // Zones are data: the local sequencer is for development.
+                Btn { objectName: "restoreBackupOpen"; Layout.fillWidth: true; tone: "ghost"; text: "Restore from a backup file"; onClicked: ob.openBackups() }
+                // Zones are data. The testnet is the default; the others are for
+                // development, so they wait behind "Advanced".
+                property bool advanced: false
+                Txt {
+                    objectName: "welcomeAdvanced"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 8
+                    visible: ob.store.zones.length > 1 && !parent.advanced && ob.store.zone.chain === "lez:testnet"
+                    text: "Advanced: choose a network"
+                    tone: "text3"
+                    font.pixelSize: 12
+                    font.underline: advMouse.containsMouse
+                    signal clicked()
+                    onClicked: parent.advanced = true
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Link
+                    Accessible.name: text
+                    Keys.onReturnPressed: clicked()
+                    MouseArea { id: advMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
+                }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 8
                     spacing: 6
-                    visible: (ob.store.state.zones || []).length > 1
+                    visible: ob.store.zones.length > 1 && (parent.advanced || ob.store.zone.chain !== "lez:testnet")
                     Txt { Layout.alignment: Qt.AlignHCenter; text: "Network"; tone: "text3"; font.pixelSize: 12 }
                     SegmentedControl {
                         Layout.alignment: Qt.AlignHCenter
-                        readonly property var zones: ob.store.state.zones || []
+                        readonly property var zones: ob.store.zones
                         options: zones.map(function (z) { return z.chain === "lez:preview" ? "Preview" : z.chain === "lez:testnet" ? "Testnet" : z.chain === "lez:local" ? "Local" : z.chain })
                         currentIndex: {
                             for (var i = 0; i < zones.length; i++) if (zones[i].id === ob.store.zone.id) return i
@@ -264,8 +300,8 @@ Item {
                     visible: !!ob.store.state.faucet
                     onClicked: {
                         var pub = null
-                        for (var i = 0; i < ob.accounts.length; i++) if (ob.accounts[i].kind === "public") pub = ob.accounts[i]
-                        if (pub) ob.store.requestFunds(pub.accountId)
+                        for (var i = 0; i < ob.accounts.length && !pub; i++) if (ob.accounts[i].kind === "public") pub = ob.accounts[i]
+                        if (pub) { ob.store.selected = pub.accountId; ob.store.requestFunds(pub.accountId) }
                         ob.go("welcome")
                         ob.done()
                     }
@@ -324,6 +360,53 @@ Item {
                     }
                 }
                 Notice { text: "Restoring scans the chain for your accounts. Funds found so far are usable while it runs." }
+                Btn { Layout.fillWidth: true; tone: "ghost"; text: "Back"; onClicked: ob.go("welcome") }
+            }
+
+            // -- backup file -------------------------------------------------------------
+            ColumnLayout {
+                visible: ob.step === "backup"
+                Layout.fillWidth: true
+                spacing: 8
+                Skeleton { visible: ob.lookingForBackups; Layout.fillWidth: true; implicitHeight: 56; radius: Theme.rRow }
+                EmptyState {
+                    visible: !ob.lookingForBackups && ob.backups.length === 0
+                    Layout.fillWidth: true
+                    glyph: "inbox"
+                    title: "No backups found"
+                    body: "Put a logos-kit-backup….json file in your Downloads, Documents or Desktop folder, then look again."
+                }
+                Repeater {
+                    model: ob.backups
+                    CheckRow {
+                        Layout.fillWidth: true
+                        controlled: true
+                        text: modelData.name + " · " + (modelData.folder || "") + " · " + Fmt.ago(modelData.modifiedMs)
+                        checked: ob.backupPath === modelData.path
+                        onToggled: ob.backupPath = modelData.path
+                    }
+                }
+                Btn { visible: !ob.lookingForBackups && ob.backups.length === 0; Layout.fillWidth: true; text: "Look again"; onClicked: ob.openBackups() }
+                Field { id: bpw; objectName: "backupPassword"; visible: ob.backups.length > 0; Layout.fillWidth: true; echoMode: TextInput.Password; placeholderText: "Password of this backup"; onAccepted: backupGo.clicked() }
+                Btn {
+                    id: backupGo
+                    objectName: "backupRestore"
+                    visible: ob.backups.length > 0
+                    Layout.fillWidth: true; large: true; tone: "ink"; text: "Restore"
+                    busy: ob.working
+                    enabled: ob.backupPath !== "" && bpw.text.length > 0 && !ob.working
+                    onClicked: {
+                        ob.working = true
+                        ob.problem = ""
+                        ob.store.call("restoreBackup", { path: ob.backupPath, password: bpw.text }, function (v, e) {
+                            ob.working = false
+                            bpw.text = ""
+                            if (e) { ob.problem = Fmt.errorText(e); return }
+                            ob.store.refreshAll()
+                            ob.done()
+                        }, 60000)
+                    }
+                }
                 Btn { Layout.fillWidth: true; tone: "ghost"; text: "Back"; onClicked: ob.go("welcome") }
             }
 

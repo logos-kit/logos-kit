@@ -27,7 +27,7 @@ use lee_core::{
 use sequencer_service_rpc::RpcClient as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-use token_core::{TokenDescriptor, TokenHolding};
+use token_core::{TokenDescriptor, TokenHolding, TokenKind};
 use wallet::{
     AccDecodeData, AccountIdentity, ExecutionFailureKind, PreparedPrivateTx, PreparedPublicTx,
     ProvedPrivateTx, SelectedShard, TxSigner, WalletCore,
@@ -151,7 +151,7 @@ impl Intent {
 }
 
 /// How a transfer travels.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Route {
     Public,
@@ -319,7 +319,14 @@ impl Prepared {
 }
 
 fn lez(e: ExecutionFailureKind) -> anyhow::Error {
-    anyhow::anyhow!("{e}")
+    match e {
+        // LEZ's "Can not pay for operation": the balance the network shows
+        // is short. On a busy testnet a payment can take a minute to show.
+        ExecutionFailureKind::InsufficientFundsError => anyhow::anyhow!(
+            "Not enough funds for this, as the network shows the account now. If you were just paid, the network may not show it yet: try again in a minute."
+        ),
+        e => anyhow::anyhow!("{e}"),
+    }
 }
 
 /// Account ids may carry LEZ's `Public/` or `Private/` prefix.
@@ -544,6 +551,17 @@ fn fee_of(message: &lee::public_transaction::Message) -> Fee {
     })
 }
 
+/// Lepta as LGO text: 1 LGO = 10^9 lepta, trailing zeros trimmed.
+pub(crate) fn lgo(lepta: u128) -> String {
+    let whole = lepta / 1_000_000_000;
+    let frac = lepta % 1_000_000_000;
+    if frac == 0 {
+        return format!("{whole} LGO");
+    }
+    let frac = format!("{frac:09}");
+    format!("{whole}.{} LGO", frac.trim_end_matches('0'))
+}
+
 /// The fee payer can cover `max_fee` on top of what `sender` sends natively.
 async fn check_fee(
     core: &WalletCore,
@@ -558,16 +576,19 @@ async fn check_fee(
     if f.payer == sender {
         ensure!(
             sender_balance >= native_out.saturating_add(f.max_fee),
-            "not enough to cover {native_out} plus a fee of up to {}",
-            f.max_fee
+            "Not enough LGO. This needs {} plus up to {} for the fee, and the account has {}.",
+            lgo(native_out),
+            lgo(f.max_fee),
+            lgo(sender_balance)
         );
     } else {
         let payer = core.get_account_balance(f.payer).await?;
         ensure!(
             payer >= f.max_fee,
-            "fee payer {} can't cover a fee of up to {}",
+            "The account paying the fee ({}) has {}, and the fee can be up to {}.",
             f.payer,
-            f.max_fee
+            lgo(payer),
+            lgo(f.max_fee)
         );
     }
     Ok(())
@@ -575,10 +596,12 @@ async fn check_fee(
 
 impl Session {
     pub fn decoders(&self) -> Decoders {
-        Decoders::default().with_rebuilds(
-            &self.zone().id,
-            crate::verify::load_cache(self.data_dir().root()),
-        )
+        Decoders::default()
+            .with_rebuilds(
+                &self.zone().id,
+                crate::verify::load_cache(self.data_dir().root()),
+            )
+            .with_named(self.named_programs())
     }
 
     /// Build `intent` for approval (connects if needed). Checks that the
@@ -891,10 +914,20 @@ impl Session {
             .unwrap_or(0)),
             Some(def) => {
                 let def = decode::account_id(def)?;
-                let h =
-                    holding(&own_shard(core, id, private, programs::token_account_id()).await?)?;
-                Ok(h.filter(|h| h.definition_id() == def)
-                    .map_or(0, |h| holding_amount(&h)))
+                let token = programs::token_account_id();
+                let h = holding(&own_shard(core, id, private, token).await?)?;
+                let own = h
+                    .filter(|h| h.definition_id() == def)
+                    .map_or(0, |h| holding_amount(&h));
+                if private {
+                    return Ok(own);
+                }
+                // A public account also holds tokens in its token account (ATA).
+                let ata = crate::tokens::ata_of(id, def);
+                let in_ata = holding(&own_shard(core, ata, false, token).await?)?
+                    .filter(|h| h.definition_id() == def)
+                    .map_or(0, |h| holding_amount(&h));
+                Ok(own.saturating_add(in_ata))
             }
         }
     }
@@ -963,8 +996,12 @@ async fn prepare_transfer(
             let def = decode::account_id(def)?;
             let token_program = programs::token_account_id();
             let held = holding(&own_shard(core, from_id, from_private, token_program).await?)?;
-            if !from_private && held.as_ref().is_none_or(|h| h.definition_id() != def) {
-                // Not in its own slot: maybe in its associated token account.
+            if !from_private
+                && held
+                    .as_ref()
+                    .is_none_or(|h| h.definition_id() != def || holding_amount(h) < amount)
+            {
+                // Not (enough) in its own slot: its associated token account.
                 if r.route == Route::Public {
                     let built =
                         prepare_ata_transfer(core, decoders, from_id, r.to_id, def, amount).await?;
@@ -981,7 +1018,7 @@ async fn prepare_transfer(
             let held = held.with_context(|| format!("{from_id} holds no tokens"))?;
             ensure!(
                 held.definition_id() == def,
-                "{from_id} holds token {}, not {def}",
+                "{from_id} holds a different token ({}), not {def}.",
                 held.definition_id()
             );
             let descriptor = TokenDescriptor {
@@ -1021,7 +1058,19 @@ async fn prepare_transfer(
             ident.select_program_shard(program)
         }
     };
-    let mentions = vec![mention(r.from.clone()), mention(r.to.clone())];
+    // A public fungible token send lands in the recipient's token account.
+    let lands_in = match (&descriptor, r.route) {
+        (Some(d), Route::Public) => {
+            Some(recipient_holder(core, r.to_id, d.definition_id, d.kind).await?)
+                .filter(|h| *h != r.to_id)
+        }
+        _ => None,
+    };
+    let to_ident = match lands_in {
+        Some(holder) => AccountIdentity::PublicNoSign(holder),
+        None => r.to.clone(),
+    };
+    let mentions = vec![mention(r.from.clone()), mention(to_ident)];
     let program_pin = check
         .as_ref()
         .and_then(|c| (!c.immutable).then_some((program, c.image_id_words)));
@@ -1049,6 +1098,11 @@ async fn prepare_transfer(
         let nonces = signer_nonces(&tx)?;
         let mut summary = decode::public(message, decoders);
         summary.signers = nonces.iter().map(|(id, _)| id.to_string()).collect();
+        if let Some(holder) = lands_in {
+            summary
+                .lines
+                .extend(lands_in_lines(core, r.to_id, holder, programs::token_account_id()).await);
+        }
         Built {
             route: Some(Route::Public),
             summary,
@@ -1346,6 +1400,69 @@ async fn prepare_testimonial(
 }
 
 /// Send `def` out of `owner`'s associated token account (public route).
+/// Where a public token send lands. A fungible token goes to the
+/// recipient's associated token account for it (Phantom's model; LEZ
+/// creates it on arrival, no recipient signature needed), so any account can
+/// hold any number of tokens. Two exceptions keep sending straight to `to`:
+/// it already holds this token in its own slot (an older-style holder, or a
+/// token account pasted as the recipient: never "the ATA of an ATA"), or the
+/// token isn't fungible (NFTs have their own route, stage N2).
+pub(crate) async fn recipient_holder(
+    core: &WalletCore,
+    to: AccountId,
+    def: AccountId,
+    kind: TokenKind,
+) -> Result<AccountId> {
+    if kind != TokenKind::Fungible {
+        return Ok(to);
+    }
+    let own = holding(&own_shard(core, to, false, programs::token_account_id()).await?)?;
+    if own.is_some_and(|h| h.definition_id() == def) {
+        return Ok(to);
+    }
+    Ok(crate::tokens::ata_of(to, def))
+}
+
+/// The review lines that say where the tokens land, and a warning when the
+/// recipient may itself be a token account.
+async fn lands_in_lines(
+    core: &WalletCore,
+    to: AccountId,
+    holder: AccountId,
+    token_program: AccountId,
+) -> Vec<String> {
+    let exists = own_shard(core, holder, false, token_program)
+        .await
+        .is_ok_and(|b| !b.is_empty());
+    let short = decode::shorten_ids(&holder.to_string());
+    let mut lines = vec![if exists {
+        format!("Arrives in the recipient's token account {short}")
+    } else {
+        format!("Creates the recipient's token account {short} for this token")
+    }];
+    if maybe_token_account(core, to).await {
+        lines.push(format!(
+            "Check the recipient: {} holds a token and has never signed, so it may be someone's token account. Tokens sent to it would be stuck; ask for their wallet address.",
+            decode::shorten_ids(&to.to_string())
+        ));
+    }
+    lines
+}
+
+/// `id` holds a token in its own slot and has never signed: it may be
+/// someone's token account (an ATA, which no key controls) pasted as a
+/// recipient. Anything sent to it, or to its own token accounts, is stuck.
+/// (A fresh key account that was sent a token looks the same: a warning,
+/// not a refusal.)
+pub(crate) async fn maybe_token_account(core: &WalletCore, id: AccountId) -> bool {
+    let holds = own_shard(core, id, false, programs::token_account_id())
+        .await
+        .ok()
+        .and_then(|b| holding(&b).ok().flatten())
+        .is_some();
+    holds && nonce_of(core, id).await.is_ok_and(|n| n == 0)
+}
+
 async fn prepare_ata_transfer(
     core: &WalletCore,
     decoders: &Decoders,
@@ -1358,18 +1475,35 @@ async fn prepare_ata_transfer(
     let ata_program = programs::ata_account_id();
     let ata = crate::tokens::ata_of(owner, def);
     let held = holding(&own_shard(core, ata, false, token_program).await?)?
-        .filter(|h| h.definition_id() == def)
-        .with_context(|| format!("{owner} holds no token {def}"))?;
-    let from_balance = holding_amount(&held);
-    ensure!(
-        from_balance >= amount,
-        "{owner} holds only {from_balance} of token {def}"
-    );
-    let recipient = holding(&own_shard(core, to, false, token_program).await?)?;
-    ensure!(
-        recipient.is_none_or(|h| h.definition_id() == def),
-        "{to} already holds another token in its token slot"
-    );
+        .filter(|h| h.definition_id() == def);
+    let from_balance = held.as_ref().map_or(0, holding_amount);
+    if from_balance < amount {
+        // Its own slot may hold some too (the caller found too little there).
+        let own = holding(&own_shard(core, owner, false, token_program).await?)?
+            .filter(|h| h.definition_id() == def)
+            .map_or(0, |h| holding_amount(&h));
+        if own > 0 && from_balance > 0 {
+            bail!(
+                "{owner} holds this token in two places: {own} in the account itself and {from_balance} in its token account. One send comes from one of them, so send at most {}.",
+                own.max(from_balance)
+            );
+        }
+        bail!(
+            "Not enough of this token: {owner} holds {}.",
+            own.max(from_balance)
+        );
+    }
+    let held = held.with_context(|| format!("{owner} holds no token {def}"))?;
+    // Tokens land in the recipient's own token account for this token (its
+    // ATA), created on arrival; NFTs keep their own route (stage N2).
+    let lands_in = recipient_holder(core, to, def, held.kind()).await?;
+    if lands_in == to {
+        let recipient = holding(&own_shard(core, to, false, token_program).await?)?;
+        ensure!(
+            recipient.is_none_or(|h| h.definition_id() == def),
+            "The recipient's account already holds a different token, and a LEZ account holds one token at a time."
+        );
+    }
     let check = decoders.check(core, ata_program).await?;
     let data =
         Program::serialize_instruction(associated_token_account_core::Instruction::Transfer {
@@ -1386,7 +1520,7 @@ async fn prepare_ata_transfer(
             vec![
                 AccountIdentity::Public(owner).balance(),
                 AccountIdentity::PublicNoSign(ata).select_program_shard(token_program),
-                AccountIdentity::PublicNoSign(to).select_program_shard(token_program),
+                AccountIdentity::PublicNoSign(lands_in).select_program_shard(token_program),
             ],
             data,
             ata_program,
@@ -1401,6 +1535,11 @@ async fn prepare_ata_transfer(
     let nonces = signer_nonces(&tx)?;
     let mut summary = decode::public(message, decoders);
     summary.signers = nonces.iter().map(|(id, _)| id.to_string()).collect();
+    if lands_in != to {
+        summary
+            .lines
+            .extend(lands_in_lines(core, to, lands_in, token_program).await);
+    }
     Ok(Built {
         route: Some(Route::Public),
         summary,

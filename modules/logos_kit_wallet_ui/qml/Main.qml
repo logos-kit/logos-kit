@@ -31,9 +31,18 @@ Item {
     readonly property bool showOnboarding: !store.unlocked || onboarding.inFlow
 
     function openSheet(k) { root.sheet = k; store.touch() }
+    // Token sheets (ux-tokens-nfts §2.2–2.6).
+    property string tokenFocus: ""
+    function showToken(d) { root.tokenFocus = d; root.openSheet("tokenDetail") }
+    function requestFunds() {
+        var acct = store.current
+        if (!acct) return
+        store.requestFunds(acct.accountId, function (v, e) { if (e) toasts.show({ title: "Couldn't request test LGO", body: Fmt.errorText(e), tone: "danger" }) })
+    }
     function closeSheet() {
         if (root.sheet === "intent" && store.intent !== null) intentView.cancel()
         if (root.sheet === "send") sendFlow.back()
+        if (root.sheet === "tokenCreate") { createToken.back(); createToken.reset() }
         root.sheet = ""
         sendFlow.reset()
     }
@@ -68,10 +77,25 @@ Item {
     }
 
     // -- screens -------------------------------------------------------------------------
-    Item {
-        anchors.fill: parent
+    // Cold start: Basecamp loads the wallet core and its dependencies first.
+    ColumnLayout {
+        objectName: "coldStart"
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 40, 360)
         visible: !store.loaded && store.unreachable === ""
-        Spinner { anchors.centerIn: parent; size: 28 }
+        spacing: 14
+        LogosMark { Layout.alignment: Qt.AlignHCenter; size: 44 }
+        Spinner { Layout.alignment: Qt.AlignHCenter; size: 22 }
+        Txt { Layout.alignment: Qt.AlignHCenter; text: "Starting the wallet…"; font.pixelSize: 16; font.weight: Font.DemiBold }
+        Txt {
+            Layout.fillWidth: true
+            visible: store.slowStart
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            tone: "text2"
+            font.pixelSize: 13
+            text: "Still starting. The first launch can take up to a minute while Basecamp fetches what Logos Kit needs."
+        }
     }
     ColumnLayout {
         anchors.centerIn: parent
@@ -104,8 +128,14 @@ Item {
         onFunds: {
             var acct = store.current
             if (!acct) return
-            store.requestFunds(acct.accountId, function (v, e) { if (e) toasts.show({ title: "Couldn't request test LGO", body: Fmt.errorText(e), tone: "danger" }) })
+            // A private account is funded in two steps with a proof: say so first.
+            if (acct.kind === "private") root.openSheet("privateFunds")
+            else root.requestFunds()
         }
+        onPrivateInfo: root.openSheet("privateAbout")
+        onOpenToken: function (d) { root.showToken(d) }
+        onTokensMore: root.openSheet("tokensMore")
+        onTokensManage: root.openSheet("tokensManage")
         onOpenStatus: function (s) {
             if (s.lifecycle === "awaiting_approval") return
             root.proofHandle = s.handle
@@ -126,12 +156,15 @@ Item {
     TraySheet {
         id: sheetLayer
         open: root.sheet !== "" && store.unlocked
-        stepKey: root.sheet + ":" + sendFlow.step
+        stepKey: root.sheet + ":" + sendFlow.step + ":" + createToken.step + ":" + root.tokenFocus
         dir: sendFlow.dir
-        first: root.sheet !== "send" || sendFlow.first
-        busy: sendFlow.busy || intentView.busy || pendingView.busy
+        first: root.sheet === "send" ? sendFlow.first : root.sheet === "tokenCreate" ? createToken.first : true
+        busy: sendFlow.busy || intentView.busy || pendingView.busy || createToken.busy
         onCloseRequested: root.closeSheet()
-        onBackRequested: if (root.sheet === "send") sendFlow.back()
+        onBackRequested: {
+            if (root.sheet === "send") sendFlow.back()
+            else if (root.sheet === "tokenCreate") createToken.back()
+        }
 
         Item {
             width: sheetLayer.innerWidth
@@ -142,6 +175,12 @@ Item {
                 case "accounts": return accountsView.implicitHeight
                 case "settings": return settingsView.implicitHeight
                 case "proof": return proofView.implicitHeight
+                case "privateAbout": case "privateFunds": return privateSheet.implicitHeight
+                case "tokenDetail": return tokenDetail.implicitHeight
+                case "tokensMore": return tokensMore.implicitHeight
+                case "tokensManage": return manageTokens.implicitHeight
+                case "tokenAdd": return addToken.implicitHeight
+                case "tokenCreate": return createToken.implicitHeight
                 case "intent": return intentView.implicitHeight
                 case "pending": return pendingView.implicitHeight
                 }
@@ -158,6 +197,56 @@ Item {
             ReceiveView { id: receiveView; visible: root.sheet === "receive"; width: parent.width; store: store }
             AccountsView { id: accountsView; visible: root.sheet === "accounts"; width: parent.width; store: store; onPicked: root.sheet = "" }
             SettingsView { id: settingsView; visible: root.sheet === "settings"; width: parent.width; store: store }
+            TokenDetail {
+                id: tokenDetail
+                visible: root.sheet === "tokenDetail"
+                width: parent.width
+                store: store
+                definition: root.tokenFocus
+                onSend: function (d) { sendFlow.reset(); sendFlow.token = d; root.openSheet("send") }
+                onReceive: root.openSheet("receive")
+                onClose: root.sheet = ""
+            }
+            TokensMore {
+                id: tokensMore
+                visible: root.sheet === "tokensMore"
+                width: parent.width
+                store: store
+                onOpenToken: function (d) { root.showToken(d) }
+            }
+            ManageTokens {
+                id: manageTokens
+                visible: root.sheet === "tokensManage"
+                width: parent.width
+                store: store
+                onAddToken: function (prefill) { addToken.reset(); addToken.tokenId = prefill; root.openSheet("tokenAdd") }
+                onCreateToken: { createToken.reset(); root.openSheet("tokenCreate") }
+                onOpenToken: function (d) { root.showToken(d) }
+            }
+            AddToken {
+                id: addToken
+                visible: root.sheet === "tokenAdd"
+                width: parent.width
+                store: store
+                onAdded: function (d) { root.showToken(d) }
+                onOpenToken: function (d) { root.showToken(d) }
+            }
+            CreateToken {
+                id: createToken
+                visible: root.sheet === "tokenCreate"
+                width: parent.width
+                store: store
+                onFinished: function (d) { root.showToken(d) }
+            }
+            PrivateInfo {
+                id: privateSheet
+                visible: root.sheet === "privateAbout" || root.sheet === "privateFunds"
+                width: parent.width
+                store: store
+                funding: root.sheet === "privateFunds"
+                onClose: root.sheet = ""
+                onProceed: { root.sheet = ""; root.requestFunds() }
+            }
             ProofView { id: proofView; visible: root.sheet === "proof"; width: parent.width; store: store; handle: root.proofHandle; onClose: root.sheet = "" }
             IntentView {
                 id: intentView

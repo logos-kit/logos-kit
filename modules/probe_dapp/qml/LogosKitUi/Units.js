@@ -72,6 +72,19 @@ function cmp(a, b) {
     return a < b ? -1 : a > b ? 1 : 0
 }
 
+// a - b for integer strings with a >= b ("0" when b is larger).
+function sub(a, b) {
+    a = String(a); b = String(b)
+    if (cmp(a, b) <= 0) return "0"
+    var out = "", borrow = 0, i = a.length - 1, j = b.length - 1
+    while (i >= 0) {
+        var d = (a.charCodeAt(i--) - 48) - (j >= 0 ? b.charCodeAt(j--) - 48 : 0) - borrow
+        borrow = d < 0 ? 1 : 0
+        out = (d + (borrow ? 10 : 0)) + out
+    }
+    return out.replace(/^0+(?=[0-9])/, "")
+}
+
 // a + b for integer strings.
 function add(a, b) {
     a = String(a); b = String(b)

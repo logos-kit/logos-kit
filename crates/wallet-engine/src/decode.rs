@@ -42,6 +42,8 @@ pub struct Decoders {
     /// approval shows a program the user rebuilt as verified.
     pub(crate) zone: String,
     pub(crate) verified: Vec<crate::verify::Verified>,
+    /// Programs the user named (shown as "named by you").
+    pub(crate) named: Vec<crate::verify::UserProgram>,
 }
 
 impl Default for Decoders {
@@ -54,6 +56,7 @@ impl Default for Decoders {
             ],
             zone: String::new(),
             verified: Vec::new(),
+            named: Vec::new(),
         }
     }
 }
@@ -63,6 +66,12 @@ impl Decoders {
     pub fn with_rebuilds(mut self, zone: &str, verified: Vec<crate::verify::Verified>) -> Self {
         zone.clone_into(&mut self.zone);
         self.verified = verified;
+        self
+    }
+
+    /// Show the user's own names for programs no source names.
+    pub fn with_named(mut self, named: Vec<crate::verify::UserProgram>) -> Self {
+        self.named = named;
         self
     }
 
@@ -594,6 +603,34 @@ pub fn private_effects(message: &PrivateMessage) -> Vec<PublicEffect> {
             }));
         }
     }
+    out
+}
+
+/// Long base58 ids in a message, shortened the way the UI shows them
+/// ("7Hk2Qe…9Qpa"), so error copy stays readable.
+pub fn shorten_ids(message: &str) -> String {
+    const B58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let mut out = String::with_capacity(message.len());
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        if run.len() >= 32 {
+            out.push_str(&run[..6]);
+            out.push('…');
+            out.push_str(&run[run.len() - 4..]);
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    };
+    for c in message.chars() {
+        if B58.contains(c) {
+            run.push(c);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut run, &mut out);
     out
 }
 

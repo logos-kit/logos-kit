@@ -96,6 +96,21 @@
       "fake": "yes"
     },
     {
+      "method": "lez_getTokens",
+      "userFacing": false,
+      "intent": null,
+      "required": [
+        "chain",
+        "account"
+      ],
+      "result": [
+        "synced",
+        "tokens"
+      ],
+      "real": "yes",
+      "fake": "yes"
+    },
+    {
       "method": "lez_readAccount",
       "userFacing": false,
       "intent": null,

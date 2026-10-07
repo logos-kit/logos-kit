@@ -1,4 +1,9 @@
 {
+  "associatedTokenAccount": {
+    "ata": "7kQ7Af2X8zfRqoVoZx7ZPJqn6biwtybLnGManicVCkDc",
+    "definition": "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+    "owner": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi"
+  },
   "builtins": {
     "associatedTokenAccount": "8MJEJ2fLneAYDx3KgnstHTs1HAvyGQvC213P3YQxCCrm",
     "native": "11111111111111111111111111111111",

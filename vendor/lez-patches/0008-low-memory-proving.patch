@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Blockchain-Oracle <blockchainoracle.dev@gmail.com>
+Date: Tue, 6 Oct 2026 10:53:18 +0100
+Subject: [PATCH] lee: settable segment size for local proofs (low-memory
+ proving)
+
+A host short of memory proves with smaller segments: less memory, more
+time. set_segment_limit_po2(Some(18)) applies to proofs started after it;
+the default stays risc0's 2^20.
+---
+ .../circuit/mod.rs                            | 20 +++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/lee/state_machine/src/privacy_preserving_transaction/circuit/mod.rs b/lee/state_machine/src/privacy_preserving_transaction/circuit/mod.rs
+index 4b17bb6..565b137 100644
+--- a/lee/state_machine/src/privacy_preserving_transaction/circuit/mod.rs
++++ b/lee/state_machine/src/privacy_preserving_transaction/circuit/mod.rs
+@@ -18,6 +18,24 @@ use risc0_zkvm::{
+     ExecutorEnv, ExecutorEnvBuilder, InnerReceipt, ProverOpts, Receipt, default_prover,
+ };
+ 
++/// Segment size for local proofs as a power of two; 0 keeps risc0's default
++/// (2^20 cycles, about 4 GB peak on the privacy circuit). A host short of
++/// memory picks a smaller one: smaller segments need less memory and take
++/// longer. Process-wide, read when a proof starts.
++static SEGMENT_LIMIT_PO2: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
++
++/// Set the segment size for proofs started from now on (`None`: default).
++pub fn set_segment_limit_po2(po2: Option<u32>) {
++    SEGMENT_LIMIT_PO2.store(po2.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
++}
++
++fn limit_segments(env_builder: &mut ExecutorEnvBuilder<'_>) {
++    let po2 = SEGMENT_LIMIT_PO2.load(std::sync::atomic::Ordering::Relaxed);
++    if po2 != 0 {
++        env_builder.segment_limit_po2(po2);
++    }
++}
++
+ use crate::{
+     PRIVACY_PRESERVING_CIRCUIT_ELF, PRIVACY_PRESERVING_CIRCUIT_ID,
+     error::{InvalidProgramBehaviorError, LeeError},
+@@ -343,6 +361,7 @@ pub fn execute_and_prove(
+ 
+     let circuit_input_payload = borsh::to_vec(&circuit_input)?;
+     env_builder.write_slice(&to_frame(&circuit_input_payload));
++    limit_segments(&mut env_builder);
+     let env = env_builder.build().unwrap();
+     let prover = default_prover();
+     let opts = ProverOpts::succinct();
+@@ -370,6 +389,7 @@ fn prove_session(
+ ) -> Result<Receipt, LeeError> {
+     let mut env_builder = ExecutorEnv::builder();
+     write(&mut env_builder)?;
++    limit_segments(&mut env_builder);
+     let env = env_builder.build().unwrap();
+ 
+     // Prove the program

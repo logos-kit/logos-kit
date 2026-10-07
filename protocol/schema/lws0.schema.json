@@ -846,6 +846,77 @@
           "const": "LEZ/message/v1"
         }
       }
+    },
+    "TokenEntry": {
+      "type": "object",
+      "required": ["definition", "amount", "tier"],
+      "properties": {
+        "definition": {
+          "$ref": "#/$defs/AccountId"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 11
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 36
+        },
+        "amount": {
+          "$ref": "#/$defs/U128"
+        },
+        "tier": {
+          "$ref": "#/$defs/TokenTier"
+        }
+      }
+    },
+    "TokenTier": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "verified"
+        },
+        {
+          "type": "string",
+          "const": "added"
+        },
+        {
+          "type": "string",
+          "const": "unknown"
+        }
+      ]
+    },
+    "TokensParams": {
+      "type": "object",
+      "required": ["chain", "account"],
+      "properties": {
+        "chain": {
+          "$ref": "#/$defs/ChainId"
+        },
+        "account": {
+          "$ref": "#/$defs/AccountRef"
+        }
+      }
+    },
+    "TokensResult": {
+      "type": "object",
+      "required": ["tokens", "synced"],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TokenEntry"
+          }
+        },
+        "synced": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

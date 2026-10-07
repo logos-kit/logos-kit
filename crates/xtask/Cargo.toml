@@ -25,6 +25,7 @@ key_protocol.workspace = true
 common.workspace = true
 programs.workspace = true
 token_core.workspace = true
+associated_token_account_core.workspace = true
 testimonial_core.workspace = true
 prettyplease = "0.2"
 schemars = "0.8.22"

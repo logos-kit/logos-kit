@@ -15,6 +15,7 @@ UI `logos_kit_wallet_ui`); **fake** is the conformance fake (`modules/logos_kit_
 | `lez_chainId` | — | — | — | yes | yes |
 | `lez_getCapabilities` | — | — | — | yes | yes |
 | `lez_getBalance` | — | — | chain, account | yes | yes |
+| `lez_getTokens` | — | — | chain, account | yes | yes |
 | `lez_readAccount` | — | — | chain, account, program | yes | yes |
 | `lez_openExplorer` | — | — | chain | yes | yes |
 | `lez_signAndSendTransaction` | yes | `lez.transaction.send` | chain, account, instructions | yes | yes |

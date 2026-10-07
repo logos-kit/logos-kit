@@ -37,8 +37,8 @@ ColumnLayout {
     readonly property string kind: cur ? cur.intent : ""
     readonly property var p: cur ? cur.params || ({}) : ({})
     readonly property string requester: cur ? cur.requester : ""
-    readonly property var publicAccounts: store.accounts.filter(function (a) { return a.kind === "public" })
-    readonly property var privateAccounts: store.accounts.filter(function (a) { return a.kind === "private" })
+    readonly property var publicAccounts: store.userAccounts.filter(function (a) { return a.kind === "public" })
+    readonly property var privateAccounts: store.userAccounts.filter(function (a) { return a.kind === "private" })
     readonly property bool wantsPrivate: (p.accountKinds || []).indexOf("private") >= 0
     readonly property bool pickedPrivate: {
         for (var i = 0; i < picked.length; i++)

@@ -161,6 +161,64 @@ impl KeyFaucet {
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
+    /// Send `amount` base units of token `def` from the treasury's own
+    /// token slot to `to`: into `to`'s token account for it (created on
+    /// arrival), or `to`'s own slot when that already holds the token. For a
+    /// sample token sent with test LGO, after the LGO drop is included (the
+    /// treasury signs both, so they must not share a nonce). Returns the
+    /// transaction hash; it doesn't wait for inclusion.
+    pub async fn send_token(&self, def: AccountId, to: AccountId, amount: u128) -> Result<String> {
+        let token = programs::token_account_id();
+        let own = self
+            .client
+            .get_account_view(ProgramShardSelector::new(to, token))
+            .await?;
+        let holds_it =
+            borsh::from_slice::<token_core::TokenHolding>(own.data.shard(token).as_ref())
+                .is_ok_and(|h| h.definition_id() == def);
+        let dest = if holds_it {
+            to
+        } else {
+            crate::tokens::ata_of(to, def)
+        };
+        let nonce = self
+            .client
+            .get_accounts_nonces(vec![self.treasury])
+            .await?
+            .into_iter()
+            .next()
+            .context("no treasury nonce")?;
+        let message = Message::try_new_with_fees(
+            token,
+            vec![
+                ProgramShardSelector::new(self.treasury, token),
+                ProgramShardSelector::new(dest, token),
+            ],
+            vec![nonce],
+            token_core::Instruction::Transfer {
+                amount_to_transfer: amount,
+                descriptor: token_core::TokenDescriptor {
+                    definition_id: def,
+                    kind: token_core::TokenKind::Fungible,
+                },
+            },
+            FeeDeclaration::new(
+                self.treasury,
+                self.gas_limit,
+                0,
+                wallet::max_fee_for(self.gas_limit),
+            ),
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let witness = WitnessSet::for_message(&message, &[&self.key]);
+        let tx = PublicTransaction::new(message, witness);
+        let hash = self
+            .client
+            .send_transaction(common::transaction::LeeTransaction::Public(tx))
+            .await?;
+        Ok(hash.to_string())
+    }
+
     async fn pay(&self, to: AccountId) -> Result<FundOutcome> {
         let before = self.balance(to).await?;
         let nonce = self
@@ -364,14 +422,27 @@ impl FaucetBackend for HttpFaucet {
                 .max_redirects(0)
                 .build()
                 .new_agent();
-            let mut resp = agent.post(&url).send_json(body)?;
-            let outcome: FundOutcome = resp
-                .body_mut()
-                .with_config()
-                .limit(64 * 1024)
-                .read_json()
-                .context("faucet reply")?;
-            Ok(outcome)
+            let reply = agent.post(&url).send_json(body).and_then(|mut resp| {
+                resp.body_mut()
+                    .with_config()
+                    .limit(64 * 1024)
+                    .read_json::<FundOutcome>()
+            });
+            match reply {
+                Ok(outcome) => Ok(outcome),
+                // Nothing reached the drip: safe to ask again.
+                Err(
+                    e @ (ureq::Error::HostNotFound
+                    | ureq::Error::ConnectionFailed
+                    | ureq::Error::Timeout(ureq::Timeout::Resolve | ureq::Timeout::Connect)),
+                ) => Err(anyhow::Error::from(e).context("faucet unreachable")),
+                // The request may have reached it, and the drip may still pay
+                // (a slow block, a busy drip): never ask again blindly.
+                Err(e) => Ok(FundOutcome::OutcomeUnknown {
+                    reason: format!("the faucet didn't answer in time ({e}); it may still send"),
+                    tx_hash: None,
+                }),
+            }
         })
         .await?
     }

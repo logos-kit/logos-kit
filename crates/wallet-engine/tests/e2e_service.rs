@@ -149,6 +149,20 @@ fn approval_path_through_the_service() {
         code(call("lez_signAndSendTransaction", proposal("a"), &dapp)),
         4100
     );
+    // No balance reads before consent, public or private (audit R2): the
+    // raw private account id, and a made-up private handle, are refused the
+    // same way, so the refusal says nothing about which accounts exist.
+    for account in [public.as_str(), private.as_str(), "pvt_made_up_handle"] {
+        assert_eq!(
+            code(call(
+                "lez_getBalance",
+                json!({ "chain": "lez:local", "account": account }),
+                &dapp,
+            )),
+            4100,
+            "{account}"
+        );
+    }
 
     // Connect (relayed by the wallet UI, as the intent handler does).
     let ticket = ui(
@@ -184,8 +198,17 @@ fn approval_path_through_the_service() {
     )
     .unwrap();
     assert_ne!(balance["amount"], "0");
-    // The private account wasn't shared.
+    // The private account wasn't shared, and connecting the public one
+    // didn't open the private one.
     assert_eq!(session["accounts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        code(call(
+            "lez_getBalance",
+            json!({ "chain": "lez:local", "account": private }),
+            &dapp,
+        )),
+        4100
+    );
 
     // A malformed proposal says why (to the app that sent it).
     let mut bad = proposal("bad");

@@ -11,28 +11,41 @@ import "../LogosKitUi/Units.js" as Units
 ActivityRow {
     id: row
     property var tx: ({})
+    property var store: null
 
     readonly property bool priv: !!tx.route && tx.route !== "public"
     readonly property bool final_: Fmt.isFinal(status)
     readonly property string t: (tx.title || "").toLowerCase()
 
-    kind: t.indexOf("connect") === 0 ? "call"
+    kind: tx.incoming ? (t.indexOf("test lgo") === 0 ? "faucet" : "receive")
+        : t.indexOf("connect") === 0 ? "call"
         : t.indexOf("testimonial") >= 0 ? "testimonial"
         : tx.route === "shield" ? "shield"
         : tx.route === "unshield" ? "unshield" : "send"
-    title: tx.title || "Transaction"
+    // A token nobody vouched for stays nameless in the feed (ux-tokens-nfts
+    // §3.2), whichever way it went: its name could be a lure. Its own page
+    // shows the details.
+    readonly property var tok: tx.token && store ? store.tokenAnywhere(tx.token) : null
+    readonly property bool untrusted: !!tx.token && (!tok || (tok.tier !== "verified" && tok.tier !== "added"))
+    title: untrusted && tx.incoming ? "Received an unknown token"
+         : untrusted && kind === "send" ? "Sent an unknown token"
+         : (tx.title || "Transaction")
     isPrivate: priv
     // Native amounts are lepta, shown in LGO; tokens have no decimals.
-    amount: !tx.amount ? "" : tx.token ? Units.group(tx.amount) : Units.lgo(tx.amount)
-    symbol: tx.token ? Fmt.short(tx.token) : Units.SYMBOL
+    amount: !tx.amount || (tx.incoming && untrusted) ? "" : tx.token ? (tok ? store.tokenAmount(tok, tx.amount) : Units.group(tx.amount)) : Units.lgo(tx.amount)
+    symbol: !tx.token ? Units.SYMBOL : untrusted ? (tx.incoming ? "" : Fmt.short(tx.token)) : tok ? store.tokenLabel(tok) : store ? store.tokenName(tx.token) : Fmt.short(tx.token)
     status: tx.lifecycle === "rejected" || tx.lifecycle === "expired" ? "declined"
           : tx.lifecycle === "dropped" || tx.outcome === "failure" ? "failed"
           : tx.lifecycle === "included" ? (tx.outcome === "success" ? "included" : "unconfirmed")
           : "pending"
-    sub: tx.lifecycle === "rejected" ? "Declined" + (tx.requester ? " · asked by " + tx.requester : "")
+    // Apps by their own display name (Store.appInfo), never the module id.
+    readonly property string asker: !tx.requester ? "" : store ? store.appName(tx.requester) : tx.requester
+    sub: tx.incoming ? (tx.from ? "From " + Fmt.short(tx.from) + " · " : tx.route === "private" ? "From a private account · " : "") + Fmt.ago(tx.phaseStartedMs, tx.nowMs)
+       : tx.lifecycle === "rejected" ? "Declined" + (asker ? " · asked by " + asker : "")
        : tx.lifecycle === "expired" ? "Expired"
        : tx.lifecycle === "proving" ? "Proving on this device · about " + Fmt.mmss(tx.etaSeconds) + " left"
        : tx.lifecycle === "signing" ? "Signing"
        : tx.lifecycle === "submitted" ? "Waiting for a block"
-       : (tx.requester ? "Asked by " + tx.requester + " · " : "") + Fmt.ago(tx.phaseStartedMs, tx.nowMs)
+       : (asker ? "Asked by " + asker + " · " : "") + Fmt.ago(tx.phaseStartedMs, tx.nowMs)
+    Component.onCompleted: if (store && tx.requester) store.loadApp(tx.requester)
 }

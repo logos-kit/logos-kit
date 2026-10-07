@@ -69,8 +69,16 @@ ColumnLayout {
         elide: Text.ElideNone
         tone: "text3"; font.pixelSize: 13
         text: rv.priv ? "Senders need this code to pay you privately. It doesn't reveal your balance."
-                      : "Anyone can send LGO and LEZ tokens to this address. Payments to it are public."
+                      : "Accepts LGO and any LEZ token. Payments to it are public."
     }
     Btn { visible: rv.payload !== ""; Layout.fillWidth: true; Layout.topMargin: 6; large: true; tone: "ink"; icon: "copy"; text: rv.priv ? "Copy receive code" : "Copy address"; onClicked: rv.store.copy(rv.payload) }
+    Btn {
+        objectName: "receiveExplorer"
+        visible: !rv.priv && rv.payload !== "" && !!rv.store.state.explorer
+        Layout.fillWidth: true
+        icon: "external"
+        text: "View account in explorer"
+        onClicked: rv.store.call("openExplorer", { chain: rv.store.zone.chain, account: rv.payload }, function (v, e) { if (e) rv.store.toast(Fmt.errorText(e), "danger") })
+    }
     ErrorCard { visible: rv.problem !== ""; title: "Couldn't load your receive details"; body: rv.problem; onRetry: rv.load() }
 }

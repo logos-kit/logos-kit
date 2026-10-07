@@ -28,28 +28,57 @@ ColumnLayout {
 
     readonly property var from: store.current
     readonly property bool fromPrivate: !!from && from.kind === "private"
+    // This account's tokens, one row each (own slot and token account added up).
+    readonly property var tokens: store.tokenRows(from)
+    readonly property var tokenRow: {
+        for (var i = 0; i < tokens.length; i++) if (tokens[i].definition === token) return tokens[i]
+        return null
+    }
     readonly property string balance: {
         if (!from) return ""
         if (token === "") return from.native === null || from.native === undefined ? "" : String(from.native)
-        var ts = from.tokens || []
-        for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return String(ts[i].amount)
-        return "0"
+        // One transaction sends from one place (the account's own slot or its
+        // token account), so the most that can go is the larger of the two.
+        var best = "0", hs = tokenRow ? tokenRow.holders : []
+        for (var i = 0; i < hs.length; i++) if (Units.cmp(hs[i].amount, best) > 0) best = hs[i].amount
+        return best
     }
-    // The native token is typed in LGO and sent in lepta; tokens have no decimals.
-    readonly property int decimals: token === "" ? Units.DECIMALS : 0
+    // LGO is typed in LGO and sent in lepta; a token uses its decimals
+    // (from the list or set by the user), whole units when unknown.
+    readonly property int decimals: token === "" ? Units.DECIMALS
+        : tokenRow && tokenRow.decimals !== undefined && tokenRow.decimals !== null ? tokenRow.decimals : 0
+    readonly property bool tokenUnverified: !!tokenRow && (tokenRow.tier === "unknown" || tokenRow.tier === "spam")
     // What is sent, in base units ("" while there's nothing to send).
     readonly property string base: {
         var b = Units.parse(amountText, decimals)
         return /^0*$/.test(b) ? "" : b
     }
-    readonly property string tokenName: {
-        var ts = from ? (from.tokens || []) : []
-        for (var i = 0; i < ts.length; i++) if (ts[i].definition === token) return ts[i].name || ""
-        return ""
-    }
-    readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(base, balance) > 0
+    readonly property string tokenName: tokenRow ? store.tokenLabel(tokenRow) : ""
+    readonly property bool tooMuch: base !== "" && balance !== "" && Units.cmp(reservesFee ? Units.add(base, feeCap) : base, balance) > 0
     readonly property bool isCode: to.trim().indexOf("lezpriv1:") === 0
-    readonly property bool toValid: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
+    readonly property bool toFormat: isCode || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim())
+    // The engine's read of the recipient (checkRecipient): a code's
+    // fingerprint, a token ID pasted by mistake, a lookalike of an address
+    // we've paid, or a first-time address.
+    property var check: null
+    property bool lookalikeOk: false
+    readonly property bool checkFits: !!check && check.to === to.trim()
+    readonly property bool toBlocked: checkFits && (check.kind === "token" || check.kind === "invalid")
+    readonly property bool needsLookalikeOk: checkFits && ((check.kind === "address" && !!check.lookalike) || check.kind === "holder")
+    readonly property bool toValid: toFormat && !toBlocked && (!needsLookalikeOk || lookalikeOk)
+    onToChanged: { lookalikeOk = false; checkTimer.restart() }
+    property Timer checkTimer: Timer {
+        interval: 250
+        onTriggered: {
+            var t = sf.to.trim()
+            if (!sf.toFormat) { sf.check = null; return }
+            sf.store.call("checkRecipient", { to: t }, function (v, e) {
+                if (e || !v || t !== sf.to.trim()) return
+                v.to = t
+                sf.check = v
+            })
+        }
+    }
     readonly property var toOwn: {
         for (var i = 0; i < store.accounts.length; i++) if (store.accounts[i].accountId === to.trim()) return store.accounts[i]
         return null
@@ -64,7 +93,7 @@ ColumnLayout {
     }
 
     function go(s, d) { problem = ""; dir = d || 1; step = s }
-    function reset() { step = "to"; to = ""; token = ""; amountText = ""; ticket = null; handle = ""; problem = ""; busy = false }
+    function reset() { step = "to"; to = ""; token = ""; amountText = ""; ticket = null; handle = ""; problem = ""; busy = false; check = null; lookalikeOk = false }
 
     function key(k) {
         var a = amountText
@@ -79,8 +108,15 @@ ColumnLayout {
         if (a.length > 30 || (a !== "" && Units.parse(a, decimals) === "")) return
         amountText = a
     }
-    // Max: the whole balance, as the field shows it (LGO for native).
-    function useMax() { amountText = Units.plain(balance, decimals) }
+    // A public LGO send pays its fee from the same balance, and the
+    // transaction reserves the whole fee cap up front; private sends and
+    // tokens don't.
+    readonly property string feeCap: store.state.feeCap || "0"
+    readonly property bool reservesFee: token === "" && !fromPrivate
+    // Max: everything that can go, as the field shows it (LGO for native).
+    function useMax() {
+        amountText = Units.plain(reservesFee ? Units.sub(balance, feeCap) : balance, decimals)
+    }
     Keys.onPressed: function (e) {
         if (step !== "amount") return
         if (e.text >= "0" && e.text <= "9" && e.text.length === 1) { key(e.text); e.accepted = true }
@@ -145,12 +181,48 @@ ColumnLayout {
             placeholderText: "Account address or private receive code"
             text: sf.to
             onTextChanged: sf.to = text
-            invalid: text.trim() !== "" && !sf.toValid
+            invalid: text.trim() !== "" && (!sf.toFormat || sf.toBlocked)
         }
-        Txt { visible: sf.isCode; text: "Private payment: only you and the recipient will see it."; tone: "priv"; font.pixelSize: 12 }
+        Txt {
+            objectName: "sendCodeFingerprint"
+            Layout.fillWidth: true
+            visible: sf.isCode && sf.checkFits && sf.check.kind === "code"
+            text: sf.checkFits && sf.check.fingerprint ? "Code ends " + sf.check.fingerprint + ". Check it matches the receiver's screen. Only you and the recipient will see this payment." : ""
+            tone: "priv"; font.pixelSize: 12; wrapMode: Text.Wrap
+        }
+        Notice {
+            objectName: "sendToProblem"
+            Layout.fillWidth: true
+            visible: sf.toBlocked
+            tone: "danger"
+            text: sf.toBlocked ? sf.check.message : ""
+        }
+        Notice {
+            objectName: "sendLookalike"
+            Layout.fillWidth: true
+            visible: sf.needsLookalikeOk
+            tone: "warn"
+            text: !sf.needsLookalikeOk ? "" : sf.check.kind === "holder" ? sf.check.message
+                  : "This looks like " + Fmt.short(sf.check.lookalike) + ", which you've sent to before, but it's a different address. Scammers send tiny payments from lookalike addresses so you copy the wrong one."
+        }
+        CheckRow {
+            objectName: "sendLookalikeOk"
+            controlled: true
+            Layout.fillWidth: true
+            visible: sf.needsLookalikeOk
+            text: sf.checkFits && sf.check.kind === "holder" ? "I'm sure this is their wallet address" : "I checked every character of the address"
+            checked: sf.lookalikeOk
+            onToggled: function (c) { sf.lookalikeOk = c }
+        }
+        Txt {
+            Layout.fillWidth: true
+            visible: sf.checkFits && sf.check.kind === "address" && sf.check.firstTime && !sf.needsLookalikeOk
+            text: "First time sending to this address."
+            tone: "text3"; font.pixelSize: 12
+        }
         Txt { text: "Or one of your accounts"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 6 }
         Repeater {
-            model: sf.store.accounts
+            model: sf.store.userAccounts
             AccountCard {
                 visible: !sf.from || modelData.accountId !== sf.from.accountId
                 multi: false
@@ -164,14 +236,20 @@ ColumnLayout {
         }
         // Asset: native, or a token this account holds.
         ColumnLayout {
-            visible: !!sf.from && (sf.from.tokens || []).length > 0
+            visible: !!sf.from && sf.tokens.length > 0
             Layout.fillWidth: true
             Layout.topMargin: 6
             spacing: 6
             Txt { text: "Asset"; tone: "text2"; font.pixelSize: 12; font.weight: Font.DemiBold }
             SegmentedControl {
-                readonly property var assets: [{ definition: "", name: Units.SYMBOL }].concat(sf.from ? (sf.from.tokens || []) : [])
-                options: assets.map(function (t) { return t.name || Fmt.short(t.definition) })
+                // Listed and added tokens first; unverified ones say so.
+                readonly property var assets: [{ definition: "", name: Units.SYMBOL }].concat(
+                    sf.tokens.filter(function (t) { return t.tier === "verified" || t.tier === "added" }),
+                    sf.tokens.filter(function (t) { return t.tier === "unknown" || t.tier === "spam" }))
+                options: assets.map(function (t) {
+                    var label = t.definition === "" ? t.name : sf.store.tokenLabel(t)
+                    return t.tier === "unknown" || t.tier === "spam" ? label + " (unverified)" : label
+                })
                 currentIndex: {
                     for (var i = 0; i < assets.length; i++) if (assets[i].definition === sf.token) return i
                     return 0
@@ -211,7 +289,7 @@ ColumnLayout {
             symbol: sf.token === "" ? Units.SYMBOL : (sf.tokenName || "tokens")
             decimals: sf.decimals
             tokenSelectable: false
-            tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; isPrivate: sf.fromPrivate } }
+            tokenIcon: Component { TokenIcon { size: 24; definition: sf.token; source: sf.store.tokenLogo(sf.tokenRow); label: sf.tokenName; warn: sf.tokenUnverified; isPrivate: sf.fromPrivate } }
             balance: sf.balance
             text: sf.amountText
             onTextChanged: if (text !== sf.amountText) sf.amountText = text
@@ -242,6 +320,31 @@ ColumnLayout {
                     }
                 }
             }
+        }
+        Txt {
+            objectName: "sendFeeNote"
+            Layout.fillWidth: true
+            visible: sf.reservesFee && sf.feeCap !== "0"
+            text: sf.tooMuch && sf.base !== "" && Units.cmp(sf.base, sf.balance) <= 0
+                ? "That leaves too little for the fee. Keep at least " + Units.lgoLabel(sf.feeCap) + "."
+                : "Max leaves up to " + Units.lgoLabel(sf.feeCap) + " for the fee. You keep whatever isn't used."
+            tone: sf.tooMuch && sf.base !== "" ? "warn" : "text3"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+        Notice {
+            objectName: "sendUnverifiedToken"
+            visible: sf.tokenUnverified
+            Layout.fillWidth: true
+            tone: "warn"
+            text: "You're sending a token that isn't on the Logos Kit list."
+        }
+        Txt {
+            visible: !!sf.tokenRow && (sf.tokenRow.decimals === undefined || sf.tokenRow.decimals === null)
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            tone: "text3"; font.pixelSize: 12
+            text: "This token's decimals are unknown, so amounts are whole units."
         }
         Btn { id: reviewBtn; objectName: "sendReview"; Layout.fillWidth: true; large: true; tone: "ink"; text: "Review"; busy: sf.busy; enabled: sf.base !== "" && !sf.tooMuch; onClicked: sf.prepare() }
     }

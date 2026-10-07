@@ -15,3 +15,9 @@ ProofView 1.0 ProofView.qml
 AccountsView 1.0 AccountsView.qml
 SettingsView 1.0 SettingsView.qml
 IntentView 1.0 IntentView.qml
+PrivateInfo 1.0 PrivateInfo.qml
+TokenDetail 1.0 TokenDetail.qml
+TokensMore 1.0 TokensMore.qml
+ManageTokens 1.0 ManageTokens.qml
+AddToken 1.0 AddToken.qml
+CreateToken 1.0 CreateToken.qml

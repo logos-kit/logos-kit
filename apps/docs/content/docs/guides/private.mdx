@@ -21,7 +21,7 @@ see [Accounts](/docs/concepts/accounts).
 - `transfer()` resolves at **approval**. Proving comes after.
 - The status goes `building → proving → signing → submitted → included`, and
   `status.proving.phase` updates while it proves.
-- Proving takes about 4–7 minutes on an M-series Mac and ~4.3 GB of memory.
+- Proving takes about 5–8 minutes on an M1 Pro and ~4.3 GB of memory. Low-memory proving (Settings) needs about half the memory and takes longer.
 - The user may close your app: the proof keeps running in the wallet. When your
   app opens again, follow the same handle (keep it with your state).
 

@@ -19,10 +19,10 @@ Status words: **decided** (built or about to be), **spike** (decided, pending a 
 **Why:** a LEZ account has one token slot (`account.rs:142-159`); a second, different token sent to it fails (`transfer.rs:94-104`). ATAs are PDAs anyone can create (`ata/src/create.rs:45-62`), so any account can hold any number of tokens. This is Solana's associated-token-account model, which Phantom uses.
 **Alternatives:** (a) keep sending to the own slot and show "they can't receive this token": fails the "anything sent to you shows up" bar. (b) Ask recipients to pre-create holdings: a step no other wallet asks for.
 
-### D4. A squatted own slot is cleared by re-initialising it
-**Decided.** When an unknown token occupies an account's own slot, the wallet offers "Clear slot": `InitializeAccount` signed by the owner, which writes a fresh holding and drops the squatted balance.
-**Evidence:** `initialize_holding` accepts an authorized account regardless of prior content (`programs/token/src/initialize.rs:41-49`); the upstream test `initialize_account_writes_the_zeroized_holding_regardless_of_prior_content` covers exactly this (`programs/token/src/tests.rs:514`).
-**Note:** with D3, a squatted slot only blocks legacy-style sends; tokens sent through ATAs are unaffected.
+### D4. A squatted own slot is hidden and explained, not "cleared"
+**Decided (revised in stage T).** When an unknown token sits in an account's own token slot, the wallet hides it like any unknown token and its details say why it's there. There is no "Clear slot" action.
+**Why:** `InitializeAccount` signed by the owner does re-initialise the slot (`programs/token/src/initialize.rs:41-49`, upstream test `tests.rs:514`), but only to a zero-balance holding *of a definition*: the slot stays occupied, and LEZ has no instruction that releases it. So "clearing" would remove the junk balance but free nothing. Since Logos Kit routes every public token send to the recipient's token account (D3), the own slot only matters for stock LEZ wallets that send into it, and for creating a new token into that account (which needs an empty slot; the create sheet only offers accounts whose slot is free).
+**Alternative rejected:** re-initialising the slot to a token the user expects (say LKT): it helps only with stock-wallet sends of that one token, and would surprise users.
 
 ### D5. Discovery by block scan (`chain-index`), not an indexer
 **Decided.** A new crate scans blocks from the wallet's birthday, matches token and ATA instructions and deshield deposits against the user's accounts and `ATA(own, D)`, records every definition seen, and then follows the chain with one `getBlockRange` (≤ 1024 blocks) per sync.

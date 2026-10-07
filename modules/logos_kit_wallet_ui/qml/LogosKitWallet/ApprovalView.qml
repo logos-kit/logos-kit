@@ -28,6 +28,12 @@ ColumnLayout {
     readonly property string requester: review.requester || ""
     readonly property string route: review.route || ""
     readonly property bool isPrivate: route !== "" && route !== "public"
+    // Free memory vs what a proof wants (proving.rs): warn, don't block.
+    property var mem: null
+    function loadMem() { if (isPrivate && visible) store.call("memory", {}, function (v, e) { if (!e) av.mem = v }) }
+    onIsPrivateChanged: loadMem()
+    onVisibleChanged: loadMem()
+    readonly property bool lowMem: !!mem && mem.free !== null && mem.free !== undefined && mem.free < mem.recommended
     readonly property var fromAccount: {
         for (var i = 0; i < store.accounts.length; i++)
             if (store.accounts[i].accountId === intent.from) return store.accounts[i]
@@ -171,11 +177,12 @@ ColumnLayout {
         }
         authority: (av.summary.authorities || []).map(function (a) { return "Authority change: " + a })
         fee: av.review.fee && av.review.fee.maxFee ? ({ cap: av.review.fee.maxFee, now: av.review.fee.estimate || "", exact: !!av.review.fee.exact }) : null
-        // A native transfer runs in the chain itself (no program header).
-        program: !av.program ? (av.outFlow && !av.outFlow.definition && av.intent.kind === "transfer"
+        // A native transfer runs in the chain itself (no program header),
+        // whether the wallet's Send built it or an app proposed it.
+        program: !av.program ? (av.outFlow && !av.outFlow.definition
                                 ? ({ name: "Native transfer", status: "builtin", immutable: true }) : null)
             : ({
-            name: (av.program.name || "Unknown program") + " · " + Fmt.short(av.program.account),
+            name: (av.program.name ? av.program.name + (av.program.namedByUser ? " (named by you)" : "") : "Unknown program") + " · " + Fmt.short(av.program.account),
             status: av.program.status === "verified_local" ? "verified" : av.program.status === "claimed" ? "claimed"
                   : av.program.status === "mismatch" ? "mismatch" : "unknown",
             immutable: av.program.builtin || av.program.immutable
@@ -195,8 +202,19 @@ ColumnLayout {
                  : "Only you"
             tone: av.isPrivate ? "priv" : "text"
         }
-        InfoRow { visible: av.isPrivate; label: "Proof"; value: "On this device · " + (av.route === "shield" ? "5–6" : "6–8") + " min" }
+        InfoRow { visible: av.isPrivate; label: "Proof"; value: "On this device · " + (av.store.state.proofTime || "a few minutes") + (av.mem && av.mem.lowMemory ? " (low-memory mode: slower)" : "") }
         InfoRow { visible: !(av.review.fee && av.review.fee.maxFee); label: "Network fee"; value: av.isPrivate ? "None (private)" : "Not available yet" }
+    }
+
+    Notice {
+        objectName: "lowMemoryWarning"
+        visible: av.isPrivate && av.lowMem
+        Layout.fillWidth: true
+        tone: "warn"
+        text: av.lowMem
+              ? "This computer has " + (av.mem.free / 1073741824).toFixed(1) + " GB of free memory; proving works best with " + (av.mem.recommended / 1073741824).toFixed(1) + " GB. Close other apps"
+                + (av.mem.lowMemory ? "." : ", or turn on low-memory proving in Settings (slower).")
+              : ""
     }
 
     // Family's line above the button.
@@ -299,7 +317,7 @@ ColumnLayout {
             large: true
             tone: "ink"
             icon: av.isPrivate ? "lock" : ""
-            text: av.isPrivate ? "Prove and send" : av.requester !== "" ? "Approve" : "Send"
+            text: av.isPrivate ? "Prove and send" : av.requester !== "" || av.intent.kind !== "transfer" ? "Approve" : "Send"
             armDelay: 500
             busy: av.busy
             enabled: (!av.ticket || !av.ticket.needsPassword || pw.text.length > 0) && (!av.summary.unknown || ack.checked)

@@ -9,10 +9,9 @@
 
 use std::{collections::HashMap, path::Path};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use common::transaction::LeeTransaction;
 use lee::AccountId;
-use sequencer_service_rpc::RpcClient as _;
 use serde::{Deserialize, Serialize};
 use wallet::WalletCore;
 
@@ -60,10 +59,7 @@ impl History {
         let mut start = history.scanned + 1;
         while start <= tip {
             let end = (start + CHUNK - 1).min(tip);
-            let blocks = client
-                .get_block_range(start, end)
-                .await
-                .with_context(|| format!("blocks {start}..={end}"))?;
+            let blocks = chain_index::get_blocks(&client, start, end).await?;
             for block in blocks {
                 let id = block.header.block_id;
                 for tx in &block.body.transactions {

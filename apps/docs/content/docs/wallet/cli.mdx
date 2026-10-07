@@ -8,7 +8,7 @@ format and the approval policy with the Basecamp wallet.
 
 ```sh
 git clone https://github.com/logos-kit/logos-kit && cd logos-kit
-cargo xtask lez-vendor                          # pinned LEZ + our patches into vendor/lez
+scripts/lez-vendor.sh                           # pinned LEZ + our patches into vendor/lez
 cargo install --path crates/logos-kit-cli
 logos-kit --help
 ```
@@ -52,7 +52,7 @@ logos-kit send --from <private> --to-keys keys.txt --amount 10   # someone else'
 LGO written `2.5`, `2.5LGO` or `"3 LGO"`. With `--token` it's a whole number
 of the token's base units. Human output shows LGO; `--json` stays in lepta.
 
-Private routes prove locally (about 4–7 minutes on an M-series Mac).
+Private routes prove locally (about 5–8 minutes on an M1 Pro; `--low-memory` uses about half the memory and takes longer).
 
 ## Tokens and programs
 

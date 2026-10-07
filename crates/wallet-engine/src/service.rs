@@ -63,6 +63,9 @@ const LOCAL_GENESIS_KEY: &str = "7f273098f25b71e6c005a9519f2678da8d1c7f01f6a2777
 /// Proving time on a desktop CPU, from the S3 benchmarks (seconds).
 const ETA_SHIELD_S: u64 = 330;
 const ETA_PRIVATE_S: u64 = 420;
+/// The one proof-time figure every screen, the README and the docs quote
+/// (measured on an M1 Pro: a shield 267–337 s, a private send 469 s; ~4.3 GB peak).
+pub const PROOF_TIME: &str = "about 5–8 minutes";
 
 static SERVICE: OnceLock<Service> = OnceLock::new();
 
@@ -78,12 +81,17 @@ struct Prefs {
     motion: Option<String>,
     /// Zone id → drip service URL.
     faucets: HashMap<String, String>,
+    /// Prove with smaller segments: less memory, more time (`proving`).
+    low_memory: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Snapshot {
     accounts: Vec<Value>,
+    /// The chain and zone `accounts` were read on (balances differ per zone).
+    chain: Option<String>,
+    zone: Option<String>,
     updated_ms: u64,
     tip: Option<u64>,
     error: Option<String>,
@@ -165,7 +173,9 @@ fn valid_module_name(n: &str) -> bool {
 /// RPC detail stay in the wallet); the wallet UI gets the full chain.
 fn error_json(e: &anyhow::Error, caller: &Caller) -> Value {
     let code = policy::code_of(e);
-    let message = if caller.is_owner() || code != Code::Internal {
+    let message = if caller.is_owner() {
+        crate::decode::shorten_ids(&format!("{e:#}"))
+    } else if code != Code::Internal {
         format!("{e:#}")
     } else {
         "the wallet hit an internal error".to_owned()
@@ -257,10 +267,11 @@ impl Service {
             .build()
             .context("tokio runtime")?;
         let data = DataDir::new(root);
-        let prefs = std::fs::read(data.root().join("ui-prefs.json"))
+        let prefs: Prefs = std::fs::read(data.root().join("ui-prefs.json"))
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
+        crate::proving::set_low_memory(prefs.low_memory);
         Ok(Self {
             rt,
             data,
@@ -364,6 +375,7 @@ impl Service {
                 self.granted_accounts(&app)
             }
             "lez_getBalance" => self.get_balance(p, caller),
+            "lez_getTokens" => self.get_tokens(p, caller),
             "lez_getTransactionStatus" => {
                 let h: HandleP = params(p)?;
                 let s = self.engine()?.status(caller, &h.handle)?;
@@ -412,6 +424,166 @@ impl Service {
         match method {
             "state" => self.state(caller),
             "create" => self.create(p),
+            "findBackups" => Ok(json!(find_backups())),
+            // -- tokens (docs/design/ux-tokens-nfts.md §2.2–2.5) ------------------
+            "lookupToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    id: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                let network = network_name(&self.current_zone());
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| {
+                            Ok(match s.lookup_token(&a.id).await? {
+                                Ok(preview) => json!({ "token": preview }),
+                                Err(problem) => json!({
+                                    "problem": problem,
+                                    "message": problem.text(&network),
+                                }),
+                            })
+                        })
+                        .await
+                })
+            }
+            "addToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    #[serde(default)]
+                    decimals: Option<u8>,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.add_token(&a.definition, a.decimals))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "removeToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.untrack_token(&a.definition))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "setTokenHidden" | "setTokenPinned" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    on: bool,
+                }
+                let a: P = params(p)?;
+                let hide = method == "setTokenHidden";
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| {
+                            if hide {
+                                s.set_token_hidden(&a.definition, a.on)
+                            } else {
+                                s.set_token_pinned(&a.definition, a.on)
+                            }
+                        })
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "setTokenDecimals" => {
+                #[derive(Deserialize)]
+                struct P {
+                    definition: String,
+                    #[serde(default)]
+                    decimals: Option<u8>,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.set_token_decimals(&a.definition, a.decimals))
+                        .await
+                })?;
+                self.refresh.notify_one();
+                Ok(Value::Null)
+            }
+            "programs" => {
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| Ok(json!(s.named_programs())))
+                        .await
+                })
+            }
+            "nameProgram" => {
+                #[derive(Deserialize)]
+                struct P {
+                    account: String,
+                    name: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.name_program(&a.account, &a.name))
+                        .await
+                })?;
+                Ok(Value::Null)
+            }
+            "forgetProgram" => {
+                let a: AccountP = params(p)?;
+                let engine = self.engine()?;
+                self.block(async {
+                    engine
+                        .with_session(async |s| s.forget_program(&a.account))
+                        .await
+                })?;
+                Ok(Value::Null)
+            }
+            // Free memory vs what a proof needs now (reads the OS; not polled).
+            "memory" => {
+                use crate::proving as pv;
+                let low = pv::low_memory();
+                Ok(json!({
+                    "free": pv::available_memory(),
+                    "recommended": if low { pv::NEEDS_LOW_MEMORY } else { pv::NEEDS_DEFAULT },
+                    "floor": if low { pv::FLOOR_LOW_MEMORY } else { pv::FLOOR_DEFAULT },
+                    "lowMemory": low,
+                }))
+            }
+            "restoreBackup" => self.restore_backup(p),
+            "exportBackup" => {
+                let engine = self.engine()?;
+                let bundle =
+                    self.block(async { engine.with_session(async |s| s.export_backup()).await })?;
+                let dir = backup_dirs()
+                    .into_iter()
+                    .next()
+                    .context("no Downloads, Documents or Desktop folder to save the backup in")?;
+                let day = civil_date(now_ms());
+                let name = (1..)
+                    .map(|n| match n {
+                        1 => format!("logos-kit-backup-{day}.json"),
+                        n => format!("logos-kit-backup-{day}-{n}.json"),
+                    })
+                    .find(|n| !dir.join(n).exists())
+                    .expect("some name is free");
+                crate::vault::atomic_write(&dir, &name, &bundle)?;
+                Ok(json!({ "path": dir.join(name).display().to_string() }))
+            }
             "restore" => self.restore(p),
             "unlock" => self.unlock(p),
             "lock" => {
@@ -450,11 +622,15 @@ impl Service {
                 let info = self.block(async {
                     engine
                         .with_session(async |s| {
-                            let info = s.new_account(a.kind)?;
-                            if let Some(l) = a.label.as_deref().filter(|l| !l.is_empty()) {
-                                s.set_label(&info.account_id, Some(l))?;
+                            match a.label.as_deref().filter(|l| !l.is_empty()) {
+                                Some(l) => {
+                                    let mut info = s.new_account(a.kind)?;
+                                    s.set_label(&info.account_id, Some(l))?;
+                                    info.label = Some(l.to_owned());
+                                    Ok(info)
+                                }
+                                None => s.new_named_account(a.kind),
                             }
-                            Ok(info)
                         })
                         .await
                 })?;
@@ -478,6 +654,25 @@ impl Service {
                 })?;
                 self.refresh.notify_one();
                 Ok(Value::Null)
+            }
+            "checkRecipient" => {
+                #[derive(Deserialize)]
+                struct P {
+                    to: String,
+                }
+                let a: P = params(p)?;
+                let engine = self.engine()?;
+                let past: Vec<String> = engine
+                    .statuses(&Caller::LocalOwner)
+                    .into_iter()
+                    .filter(|s| !s.incoming && s.lifecycle == Lifecycle::Included)
+                    .filter_map(|s| s.to)
+                    .collect();
+                self.block(async {
+                    engine
+                        .with_session_quiet(async |s| check_recipient(s, a.to.trim(), &past).await)
+                        .await
+                })
             }
             "receive" => {
                 let a: AccountP = params(p)?;
@@ -539,6 +734,41 @@ impl Service {
                 let engine = self.engine()?;
                 let ticket = self.block(async { engine.request_tx(caller, None, intent).await })?;
                 Ok(serde_json::to_value(ticket)?)
+            }
+            // Create a test token: a new wallet-made account becomes its
+            // definition, the whole supply goes to `holder`. Answers the
+            // approval ticket, as prepareSend does, plus the new Token ID.
+            "createToken" => {
+                #[derive(Deserialize)]
+                struct P {
+                    holder: String,
+                    name: String,
+                    #[serde(with = "crate::tx::amount")]
+                    supply: u128,
+                }
+                let a: P = params(p)?;
+                ensure!(a.supply > 0, invalid("the supply must be more than zero"));
+                let engine = self.engine()?;
+                let (definition, intent) = self.block(async {
+                    engine
+                        .with_session(async |s| {
+                            let definition = s
+                                .new_system_account(&format!("{} token ID", a.name))?
+                                .account_id;
+                            let intent = crate::tokens::create_token_intent(
+                                &a.holder,
+                                &definition,
+                                &a.name,
+                                a.supply,
+                            )?;
+                            Ok((definition, intent))
+                        })
+                        .await
+                })?;
+                let ticket = self.block(async { engine.request_tx(caller, None, intent).await })?;
+                let mut v = serde_json::to_value(ticket)?;
+                v["definition"] = json!(definition);
+                Ok(v)
             }
             "requestTx" => {
                 #[derive(Deserialize)]
@@ -700,6 +930,8 @@ impl Service {
                     /// The zone to open (while locked; unlocked, use switchZone).
                     #[serde(default)]
                     zone: Option<String>,
+                    #[serde(default)]
+                    low_memory: Option<bool>,
                 }
                 let a: P = params(p)?;
                 let mut prefs = lock(&self.prefs).clone();
@@ -731,6 +963,10 @@ impl Service {
                         invalid("theme is dark or light")
                     );
                     prefs.theme = Some(t);
+                }
+                if let Some(on) = a.low_memory {
+                    prefs.low_memory = on;
+                    crate::proving::set_low_memory(on);
                 }
                 if let Some((zone, url)) = a.faucet {
                     match url.filter(|u| !u.is_empty()) {
@@ -813,6 +1049,8 @@ impl Service {
                 })?;
                 Ok(json!({ "tip": tip }))
             }
+            // The wallet's own explorer links (rate-limited like apps', no grant needed).
+            "openExplorer" => self.open_explorer(p, caller),
             "openUrl" => {
                 #[derive(Deserialize)]
                 struct P {
@@ -878,6 +1116,20 @@ impl Service {
             "motion": prefs.motion.clone().unwrap_or_else(|| "system".into()),
             "systemReducedMotion": system_reduced_motion(),
             "faucet": faucet_label(&zone, &prefs),
+            // Where faucet requests go (Settings → Privacy lists it).
+            "faucetHost": prefs
+                .faucets
+                .get(&zone.id)
+                .map(String::as_str)
+                .or_else(|| zone.builtin_faucet())
+                .map(|u| u.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or("").to_owned()),
+            // The fee cap a public transaction reserves (LEZ wallets size it
+            // from the gas limit; the real fee is at most this). Send's Max
+            // leaves it behind.
+            "feeCap": wallet::DEFAULT_MAX_FEE.to_string(),
+            "proofTime": PROOF_TIME,
+            "lowMemory": prefs.low_memory,
+            "explorer": explorer_base(&zone.chain).is_some(),
             "status": status,
             "busy": busy,
             "pending": pending,
@@ -910,6 +1162,41 @@ impl Service {
             "words": phrase.split_whitespace().collect::<Vec<_>>(),
             "accounts": accounts,
         }))
+    }
+
+    /// Restore an encrypted backup into this (empty) device, then unlock it.
+    /// Only files `findBackups` lists can be restored, and a wrong password
+    /// leaves nothing behind.
+    fn restore_backup(&'static self, p: &Value) -> Result<Value> {
+        #[derive(Deserialize)]
+        struct P {
+            path: String,
+            password: String,
+        }
+        let a: P = params(p)?;
+        ensure!(
+            !self.data.is_initialized(),
+            invalid("this device already has a wallet")
+        );
+        ensure!(
+            find_backups().iter().any(|b| b["path"] == a.path.as_str()),
+            invalid("pick one of the backups the wallet found")
+        );
+        let bundle = std::fs::read(&a.path).with_context(|| a.path.clone())?;
+        let written = self.data.import_backup(&bundle)?;
+        match Session::unlock(self.data.clone(), &a.password, self.current_zone()) {
+            Ok(session) => {
+                self.open(session)?;
+                Ok(Value::Null)
+            }
+            Err(_) => {
+                crate::backup::remove_written(self.data.root(), &written);
+                Err(Denied::err(
+                    Code::Unauthorized,
+                    "the backup didn't open with that password",
+                ))
+            }
+        }
     }
 
     fn restore(&'static self, p: &Value) -> Result<Value> {
@@ -1724,6 +2011,31 @@ impl Service {
         })
     }
 
+    /// The wallet account behind what an app passed as `account` (an address
+    /// or a private handle), if this app may read it; refused the same way
+    /// otherwise, so the answer says nothing about which accounts exist.
+    fn shared_account(s: &mut Session, app: &str, account: &str) -> Result<String> {
+        let zone_id = s.zone().id.clone();
+        let mine = s.accounts()?;
+        let key = s.handle_key()?;
+        let (id, cap) = if account.starts_with("pvt_") {
+            let found = mine.iter().find(|m| {
+                m.kind == AccountKind::Private
+                    && private_handle(&key, &zone_id, app, &m.account_id) == account
+            });
+            (found.map(|m| m.account_id.clone()), Capability::ReadPrivate)
+        } else {
+            (Some(account.to_owned()), Capability::ReadPublic)
+        };
+        id.filter(|id| policy::allows(s.grants(), &zone_id, app, id, cap))
+            .ok_or_else(|| {
+                Denied::err(
+                    Code::Unauthorized,
+                    "this app can't read that account's balance",
+                )
+            })
+    }
+
     fn get_balance(&self, p: &Value, caller: &Caller) -> Result<Value> {
         #[derive(Deserialize)]
         struct P {
@@ -1747,25 +2059,7 @@ impl Service {
         self.block(async {
             engine
                 .with_session_quiet(async |s| {
-                    let zone_id = s.zone().id.clone();
-                    let mine = s.accounts()?;
-                    let key = s.handle_key()?;
-                    let (id, cap) = if a.account.starts_with("pvt_") {
-                        let found = mine.iter().find(|m| {
-                            m.kind == AccountKind::Private
-                                && private_handle(&key, &zone_id, &app, &m.account_id) == a.account
-                        });
-                        (found.map(|m| m.account_id.clone()), Capability::ReadPrivate)
-                    } else {
-                        (Some(a.account.clone()), Capability::ReadPublic)
-                    };
-                    let id = id.filter(|id| policy::allows(s.grants(), &zone_id, &app, id, cap));
-                    let Some(id) = id else {
-                        return Err(Denied::err(
-                            Code::Unauthorized,
-                            "this app can't read that account's balance",
-                        ));
-                    };
+                    let id = Self::shared_account(s, &app, &a.account)?;
                     let amount = s.balance_of(&id, a.asset.as_deref()).await?;
                     let synced = !s.status()?.discovering;
                     let mut out = json!({
@@ -1782,6 +2076,82 @@ impl Service {
         })
     }
 
+    /// `lez_getTokens`: the tokens on a shared account from the last sync
+    /// (own slot and token accounts added up), Verified, Added and Unknown
+    /// only: spam and the user's hidden tokens never reach an app.
+    fn get_tokens(&self, p: &Value, caller: &Caller) -> Result<Value> {
+        #[derive(Deserialize)]
+        struct P {
+            chain: String,
+            account: String,
+        }
+        let a: P = params(p)?;
+        let app = app_of(caller)?;
+        let zone = self.current_zone();
+        if a.chain != zone.chain {
+            return Err(coded(
+                4902,
+                format!("the wallet is on {}", zone.chain),
+                Value::Null,
+            ));
+        }
+        let engine = self.locked_is_disconnected()?;
+        let (id, synced) = self.block(async {
+            engine
+                .with_session_quiet(async |s| {
+                    let id = Self::shared_account(s, &app, &a.account)?;
+                    Ok((id, !s.status()?.discovering))
+                })
+                .await
+        })?;
+        let holdings: Vec<Value> = lock(&self.snapshot)
+            .accounts
+            .iter()
+            .find(|acct| acct["accountId"] == id.as_str())
+            .and_then(|acct| acct["tokens"].as_array().cloned())
+            .unwrap_or_default();
+        let mut by: Vec<(String, Value, u128)> = Vec::new();
+        for h in holdings {
+            let tier = h["tier"].as_str().unwrap_or("unknown");
+            if !matches!(tier, "verified" | "added" | "unknown") || h["kind"] != "fungible" {
+                continue;
+            }
+            // Its name couldn't be read, so the spam rules haven't seen it
+            // yet: wait for a sync that reads it.
+            if tier == "unknown" && h["name"].is_null() {
+                continue;
+            }
+            let Some(def) = h["definition"].as_str().map(str::to_owned) else {
+                continue;
+            };
+            let amount: u128 = h["amount"]
+                .as_str()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            match by.iter_mut().find(|(d, _, _)| *d == def) {
+                Some(entry) => entry.2 = entry.2.saturating_add(amount),
+                None => by.push((def, h, amount)),
+            }
+        }
+        let tokens: Vec<Value> = by
+            .into_iter()
+            .map(|(def, h, amount)| {
+                let mut t = json!({
+                    "definition": def,
+                    "amount": amount.to_string(),
+                    "tier": h["tier"],
+                });
+                for k in ["name", "symbol", "decimals"] {
+                    if !h[k].is_null() {
+                        t[k] = h[k].clone();
+                    }
+                }
+                t
+            })
+            .collect();
+        Ok(json!({ "tokens": tokens, "synced": synced }))
+    }
+
     // -- background ----------------------------------------------------------------
 
     async fn sync_once(&self, engine: &Engine) {
@@ -1792,6 +2162,11 @@ impl Service {
             .into_iter()
             .filter(|s| matches!(s.lifecycle, Lifecycle::Proving | Lifecycle::Signing))
             .collect();
+        // Payments and tokens that arrived since the last read (activity
+        // rows; tokens nobody told us about), written before the holdings
+        // below read them. A failure only delays them to the next sync.
+        let _ = engine.scan_incoming().await;
+        let _ = engine.flush_history().await;
         let result = engine
             .with_session_quiet(async |s| {
                 let synced = s.sync(&mut Quiet).await;
@@ -1809,6 +2184,7 @@ impl Service {
                     accounts.push(json!({
                         "accountId": a.account_id,
                         "kind": a.kind,
+                        "system": s.is_system_account(&a.account_id),
                         "label": a.label,
                         "path": a.path,
                         "native": native.map(|n| n.to_string()),
@@ -1821,8 +2197,19 @@ impl Service {
             })
             .await;
         let mut snap = lock(&self.snapshot);
+        let mut received = Vec::new();
         match result {
             Ok((synced, accounts, status)) => {
+                let chain = status.as_ref().map(|s| s.zone.chain.clone());
+                let zone = status.as_ref().map(|s| s.zone.id.clone());
+                // Not while a restored wallet is still finding its accounts:
+                // balances rise then as old notes are found, not as new ones arrive.
+                let discovering = status.as_ref().is_some_and(|s| s.discovering);
+                if zone.is_some() && zone == snap.zone && !discovering {
+                    received = private_increases(&snap.accounts, &accounts);
+                }
+                snap.chain = chain;
+                snap.zone = zone;
                 snap.accounts = accounts;
                 snap.updated_ms = now_ms();
                 match synced {
@@ -1840,7 +2227,14 @@ impl Service {
             }
             Err(e) => snap.error = Some(format!("{e:#}")),
         }
+        let tip = snap.tip;
+        let zone = snap.zone.clone();
         drop(snap);
+        if let Some(zone) = zone {
+            for (account, delta) in received {
+                engine.record_private_receipt(&account, delta, tip, &zone);
+            }
+        }
         self.emit("snapshot_updated", json!({}));
     }
 }
@@ -1857,6 +2251,30 @@ fn tip_of(s: crate::session::ZoneStatus) -> ZoneStatusTip {
         NetStatus::Online { tip } => tip,
         _ => s.synced_block,
     })
+}
+
+/// Private accounts whose LGO balance went up between two snapshots, with
+/// the increase. Private receipts arrive as notes the sync decrypts, and the
+/// LEZ sync reports no per-note events, so a rise is how the wallet notices.
+fn private_increases(before: &[Value], after: &[Value]) -> Vec<(String, u128)> {
+    let native = |a: &Value| {
+        a.get("native")
+            .and_then(Value::as_str)
+            .and_then(|n| n.parse::<u128>().ok())
+    };
+    after
+        .iter()
+        .filter(|a| a.get("kind").and_then(Value::as_str) == Some("private"))
+        .filter_map(|a| {
+            let id = a.get("accountId")?.as_str()?;
+            let old = before
+                .iter()
+                .find(|b| b.get("accountId").and_then(Value::as_str) == Some(id))
+                .and_then(native)?;
+            let new = native(a)?;
+            (new > old).then(|| (id.to_owned(), new - old))
+        })
+        .collect()
 }
 
 async fn background(svc: &'static Service, engine: Arc<Engine>, generation: u64) {
@@ -1988,6 +2406,79 @@ fn name_defaults(s: &mut Session) -> Result<()> {
     Ok(())
 }
 
+/// "LEZ testnet", for copy that names the network.
+fn network_name(zone: &Zone) -> String {
+    match zone.chain.as_str() {
+        "lez:testnet" => "LEZ testnet".to_owned(),
+        "lez:local" => "the local network".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+/// Where backups are saved and looked for: the user's Downloads, Documents
+/// and Desktop folders (the QML sandbox has no file picker).
+fn backup_dirs() -> Vec<std::path::PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+        return Vec::new();
+    };
+    ["Downloads", "Documents", "Desktop"]
+        .iter()
+        .map(|d| home.join(d))
+        .filter(|p| p.is_dir())
+        .collect()
+}
+
+/// `logos-kit-backup*.json` files in `backup_dirs`, newest first.
+fn find_backups() -> Vec<Value> {
+    let mut found: Vec<(u64, Value)> = Vec::new();
+    for dir in backup_dirs() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let Ok(meta) = e.metadata() else { continue };
+            if !(name.starts_with("logos-kit-backup") && name.ends_with(".json"))
+                || !meta.is_file()
+                || meta.len() > 256 * 1024 * 1024
+            {
+                continue;
+            }
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_millis() as u64);
+            found.push((
+                modified,
+                json!({
+                    "path": e.path().display().to_string(),
+                    "name": name,
+                    "folder": dir.file_name().map(|f| f.to_string_lossy().into_owned()),
+                    "modifiedMs": modified,
+                    "bytes": meta.len(),
+                }),
+            ));
+        }
+    }
+    found.sort_by_key(|(m, _)| std::cmp::Reverse(*m));
+    found.into_iter().map(|(_, v)| v).collect()
+}
+
+/// `YYYY-MM-DD` (UTC) for a unix time in ms (days-to-civil, H. Hinnant).
+fn civil_date(ms: u64) -> String {
+    let z = (ms / 86_400_000) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// A private account's receive code: `lezpriv1:` + base64url(npk ‖ vpk). The
 /// viewing key is an ML-KEM-768 key (1,184 bytes), so the code is long; it
 /// still fits one QR code at error correction L. The fingerprint is what
@@ -2000,15 +2491,75 @@ fn receive_code(npk: &str, vpk: &str) -> Result<Value> {
         "unexpected key sizes for a receive code"
     );
     let code = format!("{RECEIVE_PREFIX}{}", URL_SAFE_NO_PAD.encode(&bytes));
-    let h = Sha256::digest(&bytes);
+    Ok(json!({
+        "kind": "private",
+        "code": code,
+        "fingerprint": code_fingerprint(&bytes),
+    }))
+}
+
+/// What people compare out loud: "K7-QX", from the code's key bytes. The
+/// receiver's screen and the sender's paste show the same four characters.
+fn code_fingerprint(bytes: &[u8]) -> String {
+    let h = Sha256::digest(bytes);
     let fp: String = h[..4]
         .iter()
         .map(|b| CROCKFORD[usize::from(b & 31)] as char)
         .collect();
+    format!("{}-{}", &fp[..2], &fp[2..])
+}
+
+/// What a pasted recipient is, before the amount step: a private code (with
+/// its fingerprint), one of our accounts, a token's ID (never a person), or
+/// an address, with whether we've sent to it before and whether it looks
+/// like one we have (same first 4 and last 4, different middle: address
+/// poisoning).
+async fn check_recipient(s: &mut Session, to: &str, past: &[String]) -> Result<Value> {
+    if to.starts_with(RECEIVE_PREFIX) {
+        let body = to.strip_prefix(RECEIVE_PREFIX).unwrap_or_default();
+        return Ok(match URL_SAFE_NO_PAD.decode(body) {
+            Ok(bytes) if bytes.len() == RECEIVE_LEN => {
+                json!({ "kind": "code", "fingerprint": code_fingerprint(&bytes) })
+            }
+            _ => {
+                json!({ "kind": "invalid", "message": "This private receive code is damaged or incomplete." })
+            }
+        });
+    }
+    let Ok(id) = crate::decode::account_id(to) else {
+        return Ok(json!({ "kind": "invalid", "message": "That isn't a LEZ address." }));
+    };
+    if let Some(own) = s.accounts()?.into_iter().find(|a| a.account_id == to) {
+        return Ok(json!({ "kind": "own", "accountId": own.account_id, "accountKind": own.kind }));
+    }
+    if let Some(core) = s.core()
+        && let Some(name) = crate::tokens::definition_name(core, id).await
+    {
+        return Ok(json!({
+            "kind": "token",
+            "name": name,
+            "message": "That's a token's ID, not a person's address.",
+        }));
+    }
+    if let Some(core) = s.core()
+        && crate::tx::maybe_token_account(core, id).await
+    {
+        return Ok(json!({
+            "kind": "holder",
+            "message": "This address holds a token and has never signed, so it may be someone's token account. Anything sent to a token account is stuck. Ask for their wallet address.",
+        }));
+    }
+    let lookalike = past.iter().find(|p| {
+        p.as_str() != to
+            && p.len() > 8
+            && to.len() > 8
+            && p[..4] == to[..4]
+            && p[p.len() - 4..] == to[to.len() - 4..]
+    });
     Ok(json!({
-        "kind": "private",
-        "code": code,
-        "fingerprint": format!("{}-{}", &fp[..2], &fp[2..]),
+        "kind": "address",
+        "firstTime": !past.iter().any(|p| p == to),
+        "lookalike": lookalike,
     }))
 }
 
@@ -2347,6 +2898,13 @@ mod tests {
         assert!(b.take("app", t0 + Duration::from_secs(100)).is_err());
         assert!(b.take("other", t0 + Duration::from_secs(101)).is_ok());
         assert!(b.take("app", t0 + Duration::from_secs(601)).is_ok());
+    }
+
+    #[test]
+    fn civil_date_matches_known_days() {
+        assert_eq!(super::civil_date(0), "1970-01-01");
+        assert_eq!(super::civil_date(1_791_244_800_000), "2026-10-06");
+        assert_eq!(super::civil_date(951_782_400_000), "2000-02-29");
     }
 
     #[test]

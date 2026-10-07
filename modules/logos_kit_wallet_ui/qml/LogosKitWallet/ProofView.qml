@@ -126,6 +126,7 @@ ColumnLayout {
             font.pixelSize: 24; font.weight: Font.Bold
             text: pv.s.lifecycle === "dropped" && pv.s.errorCode === 6102 ? "Proof failed"
                 : pv.failed ? (Fmt.LIFECYCLE[pv.s.lifecycle] || "Failed")
+                : pv.s.incoming ? (pv.priv ? "Received privately" : "Received")
                 : pv.s.outcome === "success" ? (pv.priv ? "Sent privately" : "Sent!")
                 : "Not confirmed yet"
         }
@@ -164,6 +165,15 @@ ColumnLayout {
                 IconButton { glyph: "copy"; label: "Copy transaction hash"; onClicked: pv.store.copy(pv.s.txHash) }
             }
         }
-        Btn { objectName: "proofDone"; Layout.fillWidth: true; Layout.topMargin: 8; large: true; tone: "ink"; text: "Done"; onClicked: pv.close() }
+        Btn {
+            objectName: "openExplorer"
+            visible: !!pv.s.txHash && !!pv.store.state.explorer
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            icon: "external"
+            text: "View in explorer"
+            onClicked: pv.store.call("openExplorer", { chain: pv.s.chain, txHash: pv.s.txHash }, function (v, e) { if (e) pv.store.toast(Fmt.errorText(e), "danger") })
+        }
+        Btn { objectName: "proofDone"; Layout.fillWidth: true; Layout.topMargin: pv.s.txHash ? 0 : 8; large: true; tone: "ink"; text: "Done"; onClicked: pv.close() }
     }
 }

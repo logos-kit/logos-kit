@@ -57,6 +57,7 @@ export {
 } from './message.ts'
 export {
   type AccountRow,
+  associatedTokenAccount,
   decodeTestimonial,
   decodeTestimonialStats,
   nativeTransfer,

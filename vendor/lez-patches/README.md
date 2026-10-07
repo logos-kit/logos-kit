@@ -23,6 +23,7 @@ git am /path/to/logos-kit/vendor/lez-patches/*.patch
 | 5 | `0005-keycard-feature.patch` | `Cargo.toml`, `account_manager.rs`, `cli/mod.rs` | +20 / -4 |
 | 6 | `0006-storage-remove-label.patch` | `storage.rs` | +5 / -0 |
 | 7 | `0007-private-note-no-stdout.patch` | `lib.rs` | +8 / -5 |
+| 8 | `0008-low-memory-proving.patch` | `lee/state_machine/src/privacy_preserving_transaction/circuit/mod.rs` | +22 / -0 |
 
 Most of the lines in patches 3 and 4 are existing function bodies moved into the new
 functions. The series adds no new dependencies.
@@ -176,6 +177,15 @@ Without the feature:
 `AccountIdentity::PublicKeycard` still exists, as plain data. Remaining gap: preparing a
 `PublicKeycard` identity without the feature still prompts for a PIN before it fails at signing
 time. Nothing in the CLI reaches that path, because key-path mentions fail earlier.
+
+## 8. Low-memory proving: a settable segment size
+
+`lee::privacy_preserving_transaction::circuit::set_segment_limit_po2(Some(n))` makes every
+local proof started afterwards run with segments of 2^n cycles instead of risc0's default
+2^20. Both proving paths (`execute_and_prove` for the privacy circuit and `prove_session` for
+inner programs) apply it. Smaller segments need less memory and take longer, so a wallet on
+a machine with little free memory can still prove instead of being killed. `None` restores
+the default; the value is process-wide and read when a proof starts.
 
 ## Verification (at the tip of the series, macOS, toolchain 1.98.1)
 

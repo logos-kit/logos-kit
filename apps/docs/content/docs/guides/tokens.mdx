@@ -1,25 +1,89 @@
 ---
 title: 'Tokens'
-description: 'Fungible tokens on LEZ: balances, transfers, and creating a test token.'
+description: 'Tokens on LEZ: where they live, how the wallet finds and ranks them, and how an app lists and sends them.'
 ---
 
 LEZ tokens live in the built-in token program. A token is identified by its
-**definition account**.
+**definition account** (its *Token ID*). Names aren't unique, and LEZ stores no
+symbol, decimals or logo, so never identify a token by its name.
+
+## Where tokens live
+
+An account holds one token in its own *token slot*. Every other token sits in
+the account's **token account** for that token: an associated token account
+(ATA) that only the account's key can spend from. Logos Kit sends every public
+token payment to the recipient's token account, which LEZ creates on arrival
+without the recipient's signature, so any account can hold any number of
+tokens. (If the recipient already holds the token in its own slot, the payment
+goes there.)
+
+## How the wallet finds and ranks them
+
+The wallet reads the blocks since you created the wallet, so a token someone
+sends you shows up by itself. Each token gets one **trust tier**:
+
+| Tier | Means | Shown |
+|---|---|---|
+| Verified | On the [Logos Kit token list](https://github.com/logos-kit/logos-kit/tree/main/registry/tokens) for the network | In the list, with its logo and a check mark |
+| Added | You added it by its Token ID | In the list, with an "Added" chip |
+| Unknown | It arrived; nobody vouched for it | Folded under "Hidden · Unknown", not in your total, never its own image |
+| Spam | Its name looks like a scam: a link, airdrop bait, hidden characters, very long, or a lookalike of a verified token or LGO | Folded, with the reason |
+| Hidden | You hid it | Folded; nothing is deleted |
+
+Showing an unknown or spam token adds it; it never becomes Verified. Unknown
+tokens never load their metadata or images: the token's creator runs that
+server and would learn your IP address.
+
+## In the app
+
+**Manage tokens** under the token list: search, show or hide, pin to the top,
+**Add a token** by its ID (with a preview, the decimals, and a hard warning if
+it imitates a verified token), and **Create a test token**. A token's page
+shows your balance, its activity, the Token ID and token account, its decimals
+and where they came from, its supply, and a trust panel.
+
+From the CLI:
+
+```sh
+logos-kit token list                  # verified and added (reads new blocks first)
+logos-kit token list --unknown        # what arrived that nobody vouched for
+logos-kit token list --spam           # with the reason
+logos-kit token add <token id> --decimals 2
+logos-kit token info <token id>
+logos-kit token hide <token id>       # unhide, pin, unpin, remove
+logos-kit token create --name "Logos Club Points" --supply 1000000 --holder <public account>
+```
+
+## List an account's tokens from an app
+
+```qml
+kit.api.getWalletTokens(account).then(function (r) {
+    // r.tokens: [{ definition, name, symbol, decimals, amount, tier }]
+    root.tokens = r.tokens.filter(function (t) { return t.tier !== "unknown" })
+})
+```
+
+The same grants as `getWalletBalance` apply. Spam and tokens the user hid are
+never listed. `tier` is `verified`, `added` or `unknown`; treat `unknown` the
+way the wallet does (no images, a warning). A token's `name` is whatever its
+creator typed: show it as plain text (QML `textFormat: Text.PlainText`), never
+as rich text or a link. `amount` is in base units: format
+it with `kit.sdk.formatUnits(t.amount, t.decimals)` when `decimals` is there,
+as whole units otherwise.
 
 ## Balance and transfer
 
 ```qml
-kit.api.getWalletBalance(account, definition).then(function (b) { root.tokens = b.amount })
+kit.api.getWalletBalance(account, definition).then(function (b) { root.balance = b.amount })
 
 kit.api.transfer(from, to, "250", definition).then(function (r) { root.follow(r.handle) })
 ```
 
 Public and private accounts both hold tokens; private token transfers prove
-like native ones. The approval sheet shows the token, the amount and the
-destination.
-
+like native ones. The approval sheet shows the token, the amount, the
+destination, and "Creates the recipient's token account" when that happens.
 A public token send is confirmed from the sender's token balance (it drops by
-exactly the amount; fees are paid in LGO, the native token).
+exactly the amount; fees are paid in LGO).
 
 ## Build the call yourself
 
@@ -28,17 +92,20 @@ var call = kit.sdk.tokenTransfer(from, to, definition, "250")   // kind defaults
 kit.api.sendCall(from, call)
 ```
 
-## Create a test token
+`tokenTransfer` sends into `to` as given. To match the wallet, send to the
+recipient's token account:
 
-From the CLI (the whole supply goes to `--holder`):
-
-```sh
-logos-kit token create --name KIT --supply 1000000 --holder <public account>
-logos-kit token list
+```qml
+var holder = kit.sdk.associatedTokenAccount(to, definition)
+kit.api.sendCall(from, kit.sdk.tokenTransfer(from, holder, definition, "250"))
 ```
 
-Amounts are raw integers, as strings: a token's base units (the CLI's
-`--amount` with `--token` takes a whole number of them). If your token defines
-decimals for display, `kit.sdk.formatUnits(amount, decimals)` formats them.
-The native token is different: its amounts are lepta, shown as LGO with
+The wallet does the same, except when `to` already holds the token in its
+own slot: then it pays `to` directly.
+
+## Amounts
+
+Amounts are integers, as strings: a token's base units. LEZ stores no
+decimals; the token list (or the user) supplies them. The native token is
+different: its amounts are lepta, shown as LGO with
 `kit.sdk.formatUnits(amount, 9)` (1 LGO = 10^9 lepta).

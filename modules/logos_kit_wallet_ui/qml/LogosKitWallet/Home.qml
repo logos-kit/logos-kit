@@ -16,6 +16,30 @@ Item {
     signal accounts()
     signal settings()
     signal openStatus(var status)
+    signal privateInfo()
+    signal openToken(string definition)
+    signal tokensMore()
+    signal tokensManage()
+
+    // Tokens (ux-tokens-nfts §2.1): pinned first, then Verified and Added by
+    // balance, then name; zero balances only when pinned. Unknown, spam and
+    // hidden tokens fold into one row.
+    readonly property var tokenRows: store.tokenRows(acct)
+    readonly property var mainTokens: {
+        var rows = tokenRows.filter(function (t) {
+            var listed = t.tier === "verified" || t.tier === "added" || t.pinned
+            return listed && t.tier !== "hidden" && t.tier !== "spam" && (t.amount !== "0" || t.pinned)
+        })
+        rows.sort(function (a, b) {
+            if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+            var c = Units.cmp(b.amount, a.amount)
+            if (c !== 0) return c
+            return (a.name || "").localeCompare(b.name || "")
+        })
+        return rows
+    }
+    readonly property int unknownCount: tokenRows.filter(function (t) { return t.tier === "unknown" }).length
+    readonly property int hiddenCount: tokenRows.filter(function (t) { return t.tier === "hidden" || t.tier === "spam" }).length
 
     readonly property var acct: store.current
     readonly property bool priv: !!acct && acct.kind === "private"
@@ -29,6 +53,17 @@ Item {
             out.push(s)
         }
         return out
+    }
+    // The faucet's payment is in the activity (found in a block).
+    readonly property bool fundingLanded: {
+        var r = store.funding && store.funding.result
+        if (!r || !r.txHash) return false
+        var k = String(r.txHash).replace(/^0x/, "").toLowerCase()
+        for (var i = 0; i < store.activity.length; i++) {
+            var h = store.activity[i].txHash
+            if (h && String(h).replace(/^0x/, "").toLowerCase() === k) return true
+        }
+        return false
     }
     // Private buckets, from the transactions in flight (native only).
     function inFlight(s) { return s.lifecycle !== "included" && s.lifecycle !== "dropped" && s.lifecycle !== "awaiting_approval" && !s.token }
@@ -158,6 +193,24 @@ Item {
                 ActionTile { objectName: "homeFunds"; glyph: "droplet"; text: "Test LGO"; enabled: !!home.store.state.faucet; opacity: enabled ? 1 : 0.4; onClicked: home.funds() }
             }
 
+            Txt {
+                objectName: "privateInfoLink"
+                visible: home.priv
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 12
+                text: "How private accounts work ›"
+                tone: "text2"
+                font.pixelSize: 13
+                font.underline: privLinkMouse.containsMouse
+                signal clicked()
+                onClicked: home.privateInfo()
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Link
+                Accessible.name: text
+                Keys.onReturnPressed: clicked()
+                MouseArea { id: privLinkMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
+            }
+
             // -- tokens ----------------------------------------------------------------
             SectionTitle { text: "Tokens"; Layout.topMargin: 32 }
             TokenRow {
@@ -172,17 +225,52 @@ Item {
                 loading: !home.synced
             }
             Repeater {
-                model: home.acct ? (home.acct.tokens || []) : []
+                model: home.mainTokens
                 TokenRow {
+                    objectName: "tokenRow_" + modelData.definition
                     Layout.leftMargin: -12
                     Layout.rightMargin: -12
                     name: modelData.name || Fmt.short(modelData.definition)
-                    symbol: modelData.name || ""
+                    symbol: modelData.symbol || ""
                     definition: modelData.definition
-                    sub: modelData.kind === "fungible" ? "Token · " + Fmt.short(modelData.definition) : "NFT"
-                    isPrivate: !!modelData.private
-                    amount: bal.hidden ? "••••" : Units.group(modelData.amount)
+                    iconSource: home.store.tokenLogo(modelData)
+                    verified: modelData.tier === "verified"
+                    chip: modelData.tier === "added" ? "Added" : ""
+                    sub: (modelData.symbol || Fmt.short(modelData.definition)) + (modelData.pinned ? " · pinned" : "")
+                    isPrivate: modelData.isPrivate
+                    amount: bal.hidden ? "••••" : home.store.tokenAmount(modelData)
+                    amountSub: bal.hidden ? "" : (modelData.decimals === undefined || modelData.decimals === null ? "decimals unknown" : (modelData.symbol || ""))
+                    onClicked: home.openToken(modelData.definition)
                 }
+            }
+            // Folded: tokens nobody vouched for, and the ones hidden.
+            Item {
+                objectName: "tokensMoreRow"
+                visible: home.unknownCount + home.hiddenCount > 0
+                Layout.fillWidth: true
+                implicitHeight: 48
+                signal clicked()
+                onClicked: home.tokensMore()
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 8
+                    Txt {
+                        Layout.fillWidth: true
+                        text: (home.hiddenCount > 0 ? "Hidden (" + home.hiddenCount + ")" : "Hidden") + " · Unknown (" + home.unknownCount + ")"
+                        tone: "text2"; font.pixelSize: 14
+                    }
+                    Glyph { name: "chevronRight"; color: Theme.text3; width: 16; height: 16 }
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
+            }
+            Txt {
+                objectName: "manageTokens"
+                Layout.topMargin: 4
+                text: "Manage tokens"
+                tone: "action"; font.pixelSize: 13; font.weight: Font.DemiBold
+                signal clicked()
+                onClicked: home.tokensManage()
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
             }
 
             // -- activity ---------------------------------------------------------------
@@ -195,7 +283,8 @@ Item {
                 // The latest faucet request (a job, not a transaction).
                 ActivityRow {
                     objectName: "fundingRow"
-                    visible: home.store.funding !== null
+                    // Until the payment shows up as its own activity row.
+                    visible: home.store.funding !== null && !home.fundingLanded
                     readonly property var f: home.store.funding || ({})
                     readonly property var r: f.result || ({})
                     kind: "faucet"
@@ -212,7 +301,7 @@ Item {
                 }
                 Repeater {
                     model: home.visibleActivity
-                    TxRow { tx: modelData; onClicked: home.openStatus(modelData) }
+                    TxRow { tx: modelData; store: home.store; onClicked: home.openStatus(modelData) }
                 }
             }
             EmptyState {

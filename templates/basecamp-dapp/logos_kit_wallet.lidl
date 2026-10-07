@@ -12,6 +12,7 @@ module logos_kit_wallet {
   method lez_getAccounts(params: tstr) -> any description "LWS-0: accounts shared with this app."
   method lez_getCapabilities(params: tstr) -> any description "LWS-0: what this wallet supports."
   method lez_getBalance(params: tstr) -> any description "LWS-0: balance of a shared account."
+  method lez_getTokens(params: tstr) -> any description "LWS-0: tokens on a shared account, with their trust tier."
   method lez_readAccount(params: tstr) -> any description "LWS-0: a public account's data for one program (chain state)."
   method lez_chainId(params: tstr) -> any description "LWS-0: the network the wallet is on ({chain})."
   method lez_openExplorer(params: tstr) -> any description "LWS-0: open the zone's explorer at a transaction or account (the wallet builds the URL)."

@@ -16,7 +16,7 @@ LK="$ROOT/target/debug/logos-kit"
 export LOGOS_KIT_HOME="$(mktemp -d)"
 RESTORED="$(mktemp -d)"
 export LOGOS_KIT_PASSWORD=e2e-password LOGOS_KIT_ZONE=lez-local SUPPRESS_VERBOSE_PRINTS=1
-trap 'rm -rf "$LOGOS_KIT_HOME" "$RESTORED"' EXIT
+trap 'rm -rf "$LOGOS_KIT_HOME" "$RESTORED" "${STRANGER:-}"' EXIT
 # LEZ debug genesis account (vendor/lez/Justfile `wallet-import-test-accounts`),
 # used here as the faucet's funded key (the e2e GenesisSupply backend).
 export LK_GENESIS_KEY=7f273098f25b71e6c005a9519f2678da8d1c7f01f6a27778e2d9948abdf901fb
@@ -82,16 +82,52 @@ print(' '.join(a['accountId'] for a in json.load(sys.stdin) if a['kind']=='priva
 done
 check "B received privately" "$B_SUM" 700
 
-# Tokens in an associated token account are sent through the ATA program.
+# Public token sends land in the recipient's token account (ATA) for that
+# token, created on arrival; tokens there are sent on through the ATA program.
 PUB4=$("$LK" account new --json | field "['accountId']")
 "$LK" faucet "$PUB4" --key-env LK_GENESIS_KEY --drop 1000000000 --yes --json >/dev/null
 ATA4=$("$LK" token ata "$PUB4" "$DEF" --json | field "['ata']")
-"$LK" send --from "$PUB" --to "$ATA4" --token "$DEF" --amount 7 --yes --json >/dev/null
+"$LK" send --from "$PUB" --to "$PUB4" --token "$DEF" --amount 7 --yes --json >/dev/null
+IN_ATA=$("$LK" token list --json | tail -1 | python3 -c "import sys,json; print(sum(int(h['amount']) for h in json.load(sys.stdin) if h['account']=='$PUB4' and h['via']=='ata' and h['holder']=='$ATA4'))")
+check "lands in the recipient's ATA" "$IN_ATA" 7
 "$LK" send --from "$PUB4" --to "$PUB2" --token "$DEF" --amount 3 --yes --json >/dev/null
 check "ATA token send" "$("$LK" balance "$PUB2" --token "$DEF" --json | field "['balance']")" 103
 
 N=$("$LK" token list --json | tail -1 | python3 -c "import sys,json; print(len([h for h in json.load(sys.stdin) if h['definition']=='$DEF']))")
 check "token list holdings" "$N" 6
+
+# Stage T: tokens nobody told the wallet about. A stranger (another wallet)
+# creates two tokens and sends them to PUB; they land in PUB's token
+# accounts. The wallet finds them by reading blocks: one Unknown, one Spam
+# (its name is airdrop bait). Then add by ID, hide, and one account holding
+# three different tokens.
+STRANGER="$(mktemp -d)"
+SLK() { LOGOS_KIT_HOME="$STRANGER" "$LK" "$@"; }
+SLK init --json >/dev/null 2>&1
+S1=$(SLK account new --json | field "['accountId']")
+SLK faucet "$S1" --key-env LK_GENESIS_KEY --drop 1000000000 --yes --json >/dev/null
+SDEF=$(SLK token create --name "Payroll Coin" --supply 5000 --holder "$S1" --yes --json | tail -1 | python3 -c "import sys,json; print(json.load(sys.stdin)['definition'])")
+S2=$(SLK account new --json | field "['accountId']")
+SLK faucet "$S2" --key-env LK_GENESIS_KEY --drop 1000000000 --yes --json >/dev/null
+BAIT=$(SLK token create --name "Claim free gift" --supply 9999 --holder "$S2" --yes --json | tail -1 | python3 -c "import sys,json; print(json.load(sys.stdin)['definition'])")
+SLK send --from "$S1" --to "$PUB" --token "$SDEF" --amount 42 --yes --json >/dev/null
+SLK send --from "$S2" --to "$PUB" --token "$BAIT" --amount 1 --yes --json >/dev/null
+tier_of() { "$LK" token list --all --json | tail -1 | python3 -c "import sys,json; t=[h['tier'] for h in json.load(sys.stdin) if h['definition']=='$1']; print(t[0] if t else 'missing')"; }
+check "a stranger's token shows as Unknown" "$(tier_of "$SDEF")" unknown
+check "airdrop bait shows as Spam" "$(tier_of "$BAIT")" spam
+REASON=$("$LK" token list --spam --json | tail -1 | python3 -c "import sys,json; print([h.get('spamReason') for h in json.load(sys.stdin) if h['definition']=='$BAIT'][0])")
+check "spam reason" "$REASON" "Name looks like an airdrop offer"
+DEFAULT_N=$("$LK" token list --json | tail -1 | python3 -c "import sys,json; print(len([h for h in json.load(sys.stdin) if h['definition'] in ('$SDEF','$BAIT')]))")
+check "Unknown and Spam stay out of the default list" "$DEFAULT_N" 0
+"$LK" token add "$SDEF" --decimals 2 --yes --json >/dev/null
+check "added by ID" "$(tier_of "$SDEF")" added
+"$LK" token hide "$SDEF"
+check "hidden" "$(tier_of "$SDEF")" hidden
+"$LK" token unhide "$SDEF"
+check "shown again (still added, never verified)" "$(tier_of "$SDEF")" added
+KINDS=$("$LK" token list --all --json | tail -1 | python3 -c "import sys,json; print(len({h['definition'] for h in json.load(sys.stdin) if h['account']=='$PUB'}))")
+check "one account holds three different tokens" "$KINDS" 3
+rm -rf "$STRANGER"
 
 STATUS=$("$LK" program token --json | field "['status']")
 [[ "$STATUS" == verified_local ]] || { echo "FAIL token program status $STATUS" >&2; exit 1; }

@@ -1,6 +1,6 @@
 # @logos-kit/theme
 
-The Logos Kit design tokens: the **Tray** theme in light and dark, used by the wallet, its Basecamp apps and the docs. One source of truth, exported for CSS and for QML.
+The Logos Kit design tokens: the **Ledger** theme in light and dark (monochrome, colour only for status), used by the wallet, its Basecamp apps and the docs. One source of truth, exported for CSS and for QML.
 
 ```sh
 npm install @logos-kit/theme
