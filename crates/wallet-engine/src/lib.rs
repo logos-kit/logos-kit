@@ -14,6 +14,7 @@ pub mod faucet;
 pub mod ffi;
 pub mod incoming;
 pub mod message;
+pub mod names;
 pub mod policy;
 pub mod proving;
 pub mod service;
@@ -29,7 +30,7 @@ pub mod verify;
 pub use lee::AccountId;
 
 /// LEZ revision this engine is built against (see docs/dev/pins.md).
-pub const LEZ_REV: &str = "db66590ab821a4e142c211017a3866d007f6fa77";
+pub const LEZ_REV: &str = "1a003bfbfb89fcf987f62975cd08a401169e1b8c";
 
 #[cfg(test)]
 mod tests {
